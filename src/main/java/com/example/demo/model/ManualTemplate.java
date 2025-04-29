@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.ArrayList;
 
 public class ManualTemplate {
+    private String userId;
     private String templateTitle;
     private int totalVideoLength;
     private String targetAudience;
@@ -16,6 +17,14 @@ public class ManualTemplate {
 
     public ManualTemplate() {
         this.scenes = new ArrayList<>();
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 
     public String getId() {

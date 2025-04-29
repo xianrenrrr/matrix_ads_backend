@@ -39,7 +39,7 @@ public class TemplateDaoImpl implements TemplateDao {
 
     @Override
     public String createTemplate(ManualTemplate template) throws ExecutionException, InterruptedException {
-        DocumentReference docRef = db.collection("templates").document();
+        DocumentReference docRef = db.collection("video_template").document();
         template.setId(docRef.getId()); // Assign generated ID to the template
         ApiFuture<WriteResult> result = docRef.set(template);
         result.get(); // Wait for write to complete
@@ -48,7 +48,7 @@ public class TemplateDaoImpl implements TemplateDao {
 
     @Override
     public ManualTemplate getTemplate(String id) throws ExecutionException, InterruptedException {
-        DocumentReference docRef = db.collection("templates").document(id);
+        DocumentReference docRef = db.collection("video_template").document(id);
         ApiFuture<DocumentSnapshot> future = docRef.get();
         DocumentSnapshot document = future.get();
         if (document.exists()) {

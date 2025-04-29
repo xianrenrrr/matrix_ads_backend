@@ -9,6 +9,11 @@ public interface TemplateDao {
 
     void connectToFirestore();
 
+    /**
+     * Saves a new template to the video_template table (Firestore collection: video_template).
+     * @param template the template to save
+     * @return the generated template ID
+     */
     String createTemplate(ManualTemplate template) throws ExecutionException, InterruptedException;
 
     ManualTemplate getTemplate(String templateId) throws ExecutionException, InterruptedException;
