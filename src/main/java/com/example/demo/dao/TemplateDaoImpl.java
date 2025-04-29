@@ -42,7 +42,7 @@ public class TemplateDaoImpl implements TemplateDao {
         DocumentReference docRef = db.collection("video_template").document();
         template.setId(docRef.getId()); // Assign generated ID to the template
         ApiFuture<WriteResult> result = docRef.set(template);
-        result.get(); // Wait for write to complete
+        result.get(); // Wait for write to complete                                                                                                
         return template.getId();
     }
 
