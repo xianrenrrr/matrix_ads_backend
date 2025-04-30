@@ -124,3 +124,52 @@ Server should run automatically when starting a workspace. To run manually, run:
 ```sh
 mvn spring-boot:run
 ```
+
+---
+
+## Backend Development Summary (as of 2025-04-30)
+
+### Matrix AI Ads Video Builder Backend Progress
+
+**Developed on:** 2025-04-28
+
+**Key Features Implemented:**
+- **POST /templates endpoint:** Allows creation of new video templates by accepting a structured JSON payload that matches the frontend `manualTemplate` data model.
+- **ManualTemplate & Scene Models:** Java classes closely mirror the frontend structure, including support for scene-by-scene setup and the 3x3 grid overlay (with block numbers as `List<Integer>` and labels as `List<String>`).
+- **Firestore Integration:** Templates are stored in the `video_template` collection in Firestore. Collections and documents are created automatically on first insert; no manual DB setup required.
+- **User Authentication:** Added `/auth/signup` and `/auth/login` endpoints. Signup creates a user with a unique ID and role (either `content_creator` or `content_manager`).
+- **User Roles:** Each user has a role assigned at signup, which can be either `content_creator` or `content_manager`.
+- **Basic In-Memory User Storage:** (for now, users are stored in-memory; persistence can be upgraded later).
+- **Unit Testing:** Basic test for template creation endpoint verifies end-to-end functionality using Spring Boot's MockMvc.
+
+**Current Limitations:**
+- Only template creation (POST) is implemented; retrieval, update, and delete endpoints are not yet available.
+- User authentication is basic and uses in-memory storage (no persistent DB yet).
+- No AI integration yet, but the codebase is structured to support future enhancements.
+
+**Next Steps (recommended):**
+- Implement GET/PUT/DELETE endpoints for templates.
+- Add persistent user storage and improve authentication/validation.
+- Connect frontend to backend for real data persistence.
+- Prepare for AI-assisted template creation in future iterations.
+
+---
+
+### Authentication API (added 2025-04-30)
+
+#### Signup
+- **POST /auth/signup**
+- Request body: `{ "username": "string", "password": "string", "role": "content_creator" | "content_manager" }`
+- Response: User object with unique `id` and `role` (password omitted)
+- Fails if username already exists
+
+#### Login
+- **POST /auth/login**
+- Request body: `{ "username": "string", "password": "string" }`
+- Response: User object with `id`, `username`, and `role` (password omitted)
+- Fails if credentials are invalid
+
+#### Roles
+- Users must be assigned a role at signup: `content_creator` or `content_manager`
+
+*This summary is intended for future developers and AI assistants to quickly understand the backend's current state as of 2025-04-30.*
