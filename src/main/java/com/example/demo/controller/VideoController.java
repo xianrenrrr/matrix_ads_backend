@@ -16,6 +16,16 @@ import java.util.concurrent.ExecutionException;
 @RestController
 @RequestMapping("/videos")
 public class VideoController {
+    private boolean aiController = false;
+
+    private ManualTemplate generateAITemplate(Video video, String userId, String title) {
+        // Placeholder method for AI template generation
+        ManualTemplate aiTemplate = new ManualTemplate();
+        aiTemplate.setUserId(userId);
+        aiTemplate.setTemplateTitle(title != null ? title + " AI Template" : "AI Generated Template");
+        aiTemplate.setVideoId(video.getId());
+        return aiTemplate;
+    }
     @Autowired
     private VideoDao videoDao;
 
@@ -45,27 +55,40 @@ public class VideoController {
             Video savedVideo = videoDao.saveVideo(video);
 
             // Create a default template if no templateId is provided
-            if (templateId == null) {
-                ManualTemplate defaultTemplate = new ManualTemplate();
-                defaultTemplate.setUserId(userId);
-                defaultTemplate.setTemplateTitle(title != null ? title + " Template" : "Default Template");
-                defaultTemplate.setVideoId(savedVideo.getId());
-                String savedTemplateId = templateDao.createTemplate(defaultTemplate);
+            // Determine template creation strategy
+            try {
+                if (templateId == null) {
+                    if (aiController) {
+                        // Use AI to auto-create a template
+                        ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, userId, title);
+                        String savedTemplateId = templateDao.createTemplate(aiGeneratedTemplate);
+                        savedVideo.setTemplateId(savedTemplateId);
+                        videoDao.updateVideo(savedVideo);
+                    } else {
+                        // Create a default template
+                        ManualTemplate defaultTemplate = new ManualTemplate();
+                        defaultTemplate.setUserId(userId);
+                        defaultTemplate.setTemplateTitle(title != null ? title + " Template" : "Default Template");
+                        defaultTemplate.setVideoId(savedVideo.getId());
+                        String savedTemplateId = templateDao.createTemplate(defaultTemplate);
+                        savedVideo.setTemplateId(savedTemplateId);
+                        videoDao.updateVideo(savedVideo);
+                    }
+                } else {
+                    // If templateId is provided, link the existing template
+                    savedVideo.setTemplateId(templateId);
+                    videoDao.updateVideo(savedVideo);
 
-                // Update video with template ID
-                savedVideo.setTemplateId(savedTemplateId);
-                videoDao.updateVideo(savedVideo);
-            } else {
-                // If templateId is provided, link the existing template
-                savedVideo.setTemplateId(templateId);
-                videoDao.updateVideo(savedVideo);
-
-                // Update the template with video ID
-                ManualTemplate existingTemplate = templateDao.getTemplate(templateId);
-                if (existingTemplate != null) {
-                    existingTemplate.setVideoId(savedVideo.getId());
-                    templateDao.updateTemplate(templateId, existingTemplate);
+                    // Update the template with video ID
+                    ManualTemplate existingTemplate = templateDao.getTemplate(templateId);
+                    if (existingTemplate != null) {
+                        existingTemplate.setVideoId(savedVideo.getId());
+                        templateDao.updateTemplate(templateId, existingTemplate);
+                    }
                 }
+            } catch (Exception e) {
+                System.err.println("Error creating template: " + e.getMessage());
+                throw new RuntimeException("Failed to create or update template", e);
             }
 
             // Log
