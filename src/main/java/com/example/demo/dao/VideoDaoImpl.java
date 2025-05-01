@@ -7,7 +7,8 @@ import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
-import java.time.Instant;
+
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -22,7 +23,7 @@ public class VideoDaoImpl implements VideoDao {
     public Video saveVideo(Video video) throws ExecutionException, InterruptedException {
         String videoId = UUID.randomUUID().toString();
         video.setId(videoId);
-        video.setCreatedAt(Instant.now());
+        
         DocumentReference docRef = db.collection("videos").document(videoId);
         ApiFuture<WriteResult> result = docRef.set(video);
         result.get(); // Wait for write to complete
@@ -65,7 +66,7 @@ public class VideoDaoImpl implements VideoDao {
         // First save the video
         String videoId = UUID.randomUUID().toString();
         video.setId(videoId);
-        video.setCreatedAt(Instant.now());
+        
         video.setTemplateId(templateId);
         
         DocumentReference docRef = db.collection("videos").document(videoId);

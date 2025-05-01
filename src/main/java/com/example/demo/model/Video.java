@@ -1,6 +1,6 @@
 package com.example.demo.model;
 
-import java.time.Instant;
+
 
 public class Video {
     private String id;
@@ -9,7 +9,7 @@ public class Video {
     private String description;
     private String url; // URL or path to the video file
     private String thumbnailUrl;
-    private Instant createdAt;
+
     private String templateId;
 
     public Video() {}
@@ -17,14 +17,14 @@ public class Video {
     public String getTemplateId() { return templateId; }
     public void setTemplateId(String templateId) { this.templateId = templateId; }
 
-    public Video(String id, String userId, String title, String description, String url, String thumbnailUrl, Instant createdAt, String templateId) {
+    public Video(String id, String userId, String title, String description, String url, String thumbnailUrl, String templateId) {
         this.id = id;
         this.userId = userId;
         this.title = title;
         this.description = description;
         this.url = url;
         this.thumbnailUrl = thumbnailUrl;
-        this.createdAt = createdAt;
+
         this.templateId = null;
     }
 
@@ -41,6 +41,5 @@ public class Video {
     public void setUrl(String url) { this.url = url; }
     public String getThumbnailUrl() { return thumbnailUrl; }
     public void setThumbnailUrl(String thumbnailUrl) { this.thumbnailUrl = thumbnailUrl; }
-    public Instant getCreatedAt() { return createdAt; }
-    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+
 }
