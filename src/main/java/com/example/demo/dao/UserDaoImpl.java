@@ -2,37 +2,16 @@ package com.example.demo.dao;
 
 import com.example.demo.model.User;
 import com.google.api.core.ApiFuture;
-import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.firestore.*;
-import com.google.firebase.FirebaseApp;
-import com.google.firebase.FirebaseOptions;
-import com.google.firebase.cloud.FirestoreClient;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
-
-import javax.annotation.PostConstruct;
-import java.io.FileInputStream;
-import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 
 @Repository
 public class UserDaoImpl implements UserDao {
+    @Autowired
     private Firestore db;
 
-    @PostConstruct
-    public void connectToFirestore() {
-        try {
-            if (FirebaseApp.getApps().isEmpty()) {
-                FileInputStream serviceAccount = new FileInputStream("./serviceAccountKey.json");
-                FirebaseOptions options = FirebaseOptions.builder()
-                        .setCredentials(GoogleCredentials.fromStream(serviceAccount))
-                        .build();
-                FirebaseApp.initializeApp(options);
-            }
-            db = FirestoreClient.getFirestore();
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to connect to Firestore", e);
-        }
-    }
 
     @Override
     public User findByUsername(String username) {

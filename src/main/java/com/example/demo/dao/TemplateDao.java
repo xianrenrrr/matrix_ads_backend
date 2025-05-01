@@ -7,7 +7,6 @@ import com.example.demo.model.ManualTemplate;
 
 public interface TemplateDao {
 
-    void connectToFirestore();
 
     /**
      * Saves a new template to the video_template table (Firestore collection: video_template).
