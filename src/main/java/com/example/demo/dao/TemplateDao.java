@@ -18,6 +18,7 @@ public interface TemplateDao {
 
     ManualTemplate getTemplate(String templateId) throws ExecutionException, InterruptedException;
 
+    List<ManualTemplate> getTemplatesByUserId(String userId) throws ExecutionException, InterruptedException;
     List<ManualTemplate> getAllTemplates() throws ExecutionException, InterruptedException;
 
     boolean updateTemplate(String templateId, ManualTemplate manualTemplate) throws ExecutionException, InterruptedException;

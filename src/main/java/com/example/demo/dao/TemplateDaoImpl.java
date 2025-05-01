@@ -58,6 +58,17 @@ public class TemplateDaoImpl implements TemplateDao {
         }
     }
 
+    public List<ManualTemplate> getTemplatesByUserId(String userId) throws ExecutionException, InterruptedException {
+        ApiFuture<QuerySnapshot> future = db.collection("video_template").whereEqualTo("userId", userId).get();
+        List<QueryDocumentSnapshot> documents = future.get().getDocuments();
+        List<ManualTemplate> templates = new ArrayList<>();
+        for (QueryDocumentSnapshot document : documents) {
+            ManualTemplate template = document.toObject(ManualTemplate.class);
+            templates.add(template);
+        }
+        return templates;
+    }
+
     @Override
     public List<ManualTemplate> getAllTemplates() throws ExecutionException, InterruptedException {
         ApiFuture<QuerySnapshot> future = db.collection("templates").get();
