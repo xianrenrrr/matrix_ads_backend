@@ -1,5 +1,19 @@
 # Java API Service Starter
 
+---
+
+## Changelog
+
+### 2025-05-01
+- Added video upload endpoint (`/videos/upload`) that stores user videos in Firebase Storage under `videos/{userId}/{videoId}/{originalFilename}`.
+- Automatically extracts a thumbnail (screenshot from the first second) using FFmpeg and uploads it as `videos/{userId}/{videoId}/thumbnail.jpg`.
+- Both video and thumbnail URLs are saved in Firestore.
+- **Requirements:**
+  - FFmpeg must be installed and available in the production environment (for thumbnail extraction).
+  - Google Cloud Storage Java SDK dependency is required for Firebase Storage integration.
+
+---
+
 This is a minimal Java API service starter based on [Google Cloud Run Quickstart](https://cloud.google.com/run/docs/quickstarts/build-and-deploy/deploy-java-service).
 
 ## Getting Started
