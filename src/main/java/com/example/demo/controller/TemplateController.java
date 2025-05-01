@@ -3,6 +3,7 @@ package com.example.demo.controller;
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.model.ManualTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,8 +13,25 @@ import java.util.concurrent.ExecutionException;
 @RestController
 @RequestMapping("/templates")
 public class TemplateController {
+    private final TemplateDao templateDao;
+
     @Autowired
-    private TemplateDao templateDao;
+    public TemplateController(TemplateDao templateDao) {
+        this.templateDao = templateDao;
+    }
+
+    @PostMapping
+    public ResponseEntity<ManualTemplate> createTemplate(@RequestBody com.example.demo.model.CreateTemplateRequest request) {
+        String userId = request.getUserId();
+        ManualTemplate manualTemplate = request.getManualTemplate();
+        manualTemplate.setUserId(userId);
+        try {
+            templateDao.createTemplate(manualTemplate);
+        } catch (Exception e) {
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        return new ResponseEntity<>(manualTemplate, HttpStatus.CREATED);
+    }
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<TemplateSummary>> getTemplatesByUserId(@PathVariable String userId) {
