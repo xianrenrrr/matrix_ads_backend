@@ -8,9 +8,11 @@
 - Added video upload endpoint (`/videos/upload`) that stores user videos in Firebase Storage under `videos/{userId}/{videoId}/{originalFilename}`.
 - Automatically extracts a thumbnail (screenshot from the first second) using FFmpeg and uploads it as `videos/{userId}/{videoId}/thumbnail.jpg`.
 - Both video and thumbnail URLs are saved in Firestore.
+- After each video upload, the backend now automatically creates a placeholder template in Firestore using the same `userId` and `videoId` as the template's `id`, with the title `AI model out of usage`. This is a placeholder for future AI-driven template generation.
 - **Requirements:**
   - FFmpeg must be installed and available in the production environment (for thumbnail extraction).
   - Google Cloud Storage Java SDK dependency is required for Firebase Storage integration.
+- **Note:** UUIDs are used for video/template ids, so duplicates are not possible unless ids are set manually.
 
 ---
 
