@@ -3,6 +3,7 @@ package com.example.demo.model;
 public class CreateTemplateRequest {
     private String userId;
     private ManualTemplate manualTemplate;
+    private String videoId;
 
     public CreateTemplateRequest() {}
 
@@ -20,5 +21,13 @@ public class CreateTemplateRequest {
 
     public void setManualTemplate(ManualTemplate manualTemplate) {
         this.manualTemplate = manualTemplate;
+    }
+
+    public String getVideoId() {
+        return videoId;
+    }
+
+    public void setVideoId(String videoId) {
+        this.videoId = videoId;
     }
 }

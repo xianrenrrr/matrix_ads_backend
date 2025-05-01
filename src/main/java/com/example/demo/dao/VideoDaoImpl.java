@@ -1,6 +1,7 @@
 package com.example.demo.dao;
 
 import com.example.demo.model.Video;
+import com.example.demo.model.ManualTemplate;
 import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,5 +51,40 @@ public class VideoDaoImpl implements VideoDao {
         } else {
             return null;
         }
+    }
+
+    @Override
+    public void updateVideo(Video video) throws ExecutionException, InterruptedException {
+        DocumentReference docRef = db.collection("videos").document(video.getId());
+        ApiFuture<WriteResult> result = docRef.set(video);
+        result.get(); // Wait for write to complete
+    }
+
+    @Override
+    public Video saveVideoWithTemplate(Video video, String templateId) throws ExecutionException, InterruptedException {
+        // First save the video
+        String videoId = UUID.randomUUID().toString();
+        video.setId(videoId);
+        video.setCreatedAt(Instant.now());
+        video.setTemplateId(templateId);
+        
+        DocumentReference docRef = db.collection("videos").document(videoId);
+        ApiFuture<WriteResult> result = docRef.set(video);
+        result.get(); // Wait for write to complete
+        
+        // If template exists, update it with video ID
+        if (templateId != null && !templateId.isEmpty()) {
+            DocumentReference templateRef = db.collection("video_template").document(templateId);
+            ApiFuture<DocumentSnapshot> templateFuture = templateRef.get();
+            DocumentSnapshot templateDocument = templateFuture.get();
+            
+            if (templateDocument.exists()) {
+                ManualTemplate template = templateDocument.toObject(ManualTemplate.class);
+                template.setVideoId(videoId);
+                templateRef.set(template).get();
+            }
+        }
+        
+        return video;
     }
 }

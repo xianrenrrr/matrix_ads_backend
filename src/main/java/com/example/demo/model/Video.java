@@ -10,10 +10,14 @@ public class Video {
     private String url; // URL or path to the video file
     private String thumbnailUrl;
     private Instant createdAt;
+    private String templateId;
 
     public Video() {}
 
-    public Video(String id, String userId, String title, String description, String url, String thumbnailUrl, Instant createdAt) {
+    public String getTemplateId() { return templateId; }
+    public void setTemplateId(String templateId) { this.templateId = templateId; }
+
+    public Video(String id, String userId, String title, String description, String url, String thumbnailUrl, Instant createdAt, String templateId) {
         this.id = id;
         this.userId = userId;
         this.title = title;
@@ -21,6 +25,7 @@ public class Video {
         this.url = url;
         this.thumbnailUrl = thumbnailUrl;
         this.createdAt = createdAt;
+        this.templateId = null;
     }
 
     // Getters and setters

@@ -14,6 +14,7 @@ public class ManualTemplate {
     private String lightingRequirements;
     private String soundRequirements;
     private String id;
+    private String videoId;
 
     public ManualTemplate() {
         this.scenes = new ArrayList<>();
@@ -34,6 +35,14 @@ public class ManualTemplate {
     // Setter
     public void setId(String id) {
         this.id = id;
+    }
+
+    public String getVideoId() {
+        return videoId;
+    }
+
+    public void setVideoId(String videoId) {
+        this.videoId = videoId;
     }
 
     // Getters

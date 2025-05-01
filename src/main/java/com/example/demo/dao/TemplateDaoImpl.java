@@ -1,6 +1,7 @@
 package com.example.demo.dao;
 
 import com.example.demo.model.ManualTemplate;
+import com.example.demo.model.Video;
 import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,22 @@ public class TemplateDaoImpl implements TemplateDao {
     public String createTemplate(ManualTemplate template) throws ExecutionException, InterruptedException {
         DocumentReference docRef = db.collection("video_template").document();
         template.setId(docRef.getId()); // Assign generated ID to the template
+        
+        // If videoId is provided, ensure it's saved in the template
+        if (template.getVideoId() != null && !template.getVideoId().isEmpty()) {
+            // Verify the video exists
+            DocumentReference videoRef = db.collection("videos").document(template.getVideoId());
+            ApiFuture<DocumentSnapshot> videoFuture = videoRef.get();
+            DocumentSnapshot videoDocument = videoFuture.get();
+            
+            if (videoDocument.exists()) {
+                // Update video with template ID
+                Video video = videoDocument.toObject(Video.class);
+                video.setTemplateId(template.getId());
+                videoRef.set(video).get();
+            }
+        }
+        
         ApiFuture<WriteResult> result = docRef.set(template);
         result.get(); // Wait for write to complete                                                                                                
         return template.getId();
