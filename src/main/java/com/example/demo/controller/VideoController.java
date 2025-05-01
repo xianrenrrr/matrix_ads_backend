@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.VideoDao;
 import com.example.demo.model.Video;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -16,6 +16,9 @@ import java.util.concurrent.ExecutionException;
 public class VideoController {
     @Autowired
     private VideoDao videoDao;
+
+    @Autowired
+    private TemplateDao templateDao; // Add this field
 
     @Autowired
     private com.example.demo.service.FirebaseStorageService firebaseStorageService;

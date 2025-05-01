@@ -1,4 +1,7 @@
+## DAO Implementation Rules
 
+1. Whenever an API is created or modified, add or update its documentation in `api.md`.
+2. Whenever you make a change to the codebase, log the change under today's date in `README.md` under the changelog section.
 
 ## DAO Implementation Rule: Firestore Injection
 

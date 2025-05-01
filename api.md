@@ -51,3 +51,28 @@
 ### Get Template Details
 - **GET** `/templates/{templateId}`
 - **Response:** Template object with details for the specified template.
+
+### Upload Video
+
+**Endpoint:** `POST /videos/upload`
+
+**Description:**
+Uploads a video file for a user. The video is stored in Firebase Storage, and a thumbnail is automatically extracted and uploaded. Metadata is saved in Firestore.
+
+**Request Parameters:**
+- `file` (form-data, required): Video file to upload (type: MultipartFile)
+- `userId` (string, required): The ID of the user uploading the video
+- `title` (string, optional): Title of the video
+- `description` (string, optional): Description of the video
+
+**Response:**
+- `200 OK`: Returns the uploaded video object with its metadata and URLs
+- `500 Internal Server Error`: If an error occurs during upload
+
+**Example Request (cURL):**
+```bash
+curl -X POST http://<host>/videos/upload \
+  -F "file=@/path/to/video.mp4" \
+  -F "userId=USER123" \
+  -F "title=Sample Video" \
+  -F "description=Test upload"

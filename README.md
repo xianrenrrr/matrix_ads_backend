@@ -5,6 +5,11 @@
 ## Changelog
 
 ### 2025-05-01
+- Fixed unused import warning for `java.io.IOException` in `VideoController.java` by removing and re-adding as required by the code logic.
+- Updated `api.md` with documentation for the `uploadVideo` API endpoint.
+- Updated `Rules.md` to clarify process for API documentation and changelog updates.
+
+### 2025-05-01
 - Added video upload endpoint (`/videos/upload`) that stores user videos in Firebase Storage under `videos/{userId}/{videoId}/{originalFilename}`.
 - Automatically extracts a thumbnail (screenshot from the first second) using FFmpeg and uploads it as `videos/{userId}/{videoId}/thumbnail.jpg`.
 - Both video and thumbnail URLs are saved in Firestore.
@@ -172,23 +177,3 @@ mvn spring-boot:run
 - Connect frontend to backend for real data persistence.
 - Prepare for AI-assisted template creation in future iterations.
 
----
-
-### Authentication API (added 2025-04-30)
-
-#### Signup
-- **POST /auth/signup**
-- Request body: `{ "username": "string", "password": "string", "role": "content_creator" | "content_manager" }`
-- Response: User object with unique `id` and `role` (password omitted)
-- Fails if username already exists
-
-#### Login
-- **POST /auth/login**
-- Request body: `{ "username": "string", "password": "string" }`
-- Response: User object with `id`, `username`, and `role` (password omitted)
-- Fails if credentials are invalid
-
-#### Roles
-- Users must be assigned a role at signup: `content_creator` or `content_manager`
-
-*This summary is intended for future developers and AI assistants to quickly understand the backend's current state as of 2025-04-30.*
