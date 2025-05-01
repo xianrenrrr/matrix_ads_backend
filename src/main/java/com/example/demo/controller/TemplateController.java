@@ -16,13 +16,30 @@ public class TemplateController {
     private TemplateDao templateDao;
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<List<ManualTemplate>> getTemplatesByUserId(@PathVariable String userId) {
+    public ResponseEntity<List<TemplateSummary>> getTemplatesByUserId(@PathVariable String userId) {
         try {
             List<ManualTemplate> templates = templateDao.getTemplatesByUserId(userId);
-            return ResponseEntity.ok(templates);
+            List<TemplateSummary> summaries = templates.stream()
+                .map(t -> new TemplateSummary(t.getId(), t.getTemplateTitle()))
+                .toList();
+            return ResponseEntity.ok(summaries);
         } catch (InterruptedException | ExecutionException e) {
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    // DTO for summary
+    public static class TemplateSummary {
+        private String id;
+        private String templateTitle;
+        public TemplateSummary(String id, String templateTitle) {
+            this.id = id;
+            this.templateTitle = templateTitle;
+        }
+        public String getId() { return id; }
+        public String getTemplateTitle() { return templateTitle; }
+        public void setId(String id) { this.id = id; }
+        public void setTemplateTitle(String templateTitle) { this.templateTitle = templateTitle; }
     }
 
     @GetMapping("/{templateId}")

@@ -40,7 +40,13 @@
 
 ### Get All Templates for a User
 - **GET** `/templates/user/{userId}`
-- **Response:** Array of template objects for the user.
+- **Response:** Array of objects, each containing only the template `id` and `templateTitle` fields. Example:
+  ```json
+  [
+    { "id": "template1", "templateTitle": "My First Template" },
+    { "id": "template2", "templateTitle": "Promo Video" }
+  ]
+  ```
 
 ### Get Template Details
 - **GET** `/templates/{templateId}`
