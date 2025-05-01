@@ -2,12 +2,15 @@ package com.example.demo.service;
 
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
-import com.google.cloud.storage.StorageOptions;
+
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.channels.Channels;
+import java.nio.channels.WritableByteChannel;
 import com.google.firebase.cloud.StorageClient;
 
 @Service
@@ -16,8 +19,8 @@ public class FirebaseStorageService {
     private final String bucketName;
 
     public FirebaseStorageService() {
-        this.storage = StorageOptions.getDefaultInstance().getService();
-        this.bucketName = storage.getOptions().getProjectId() + ".appspot.com";
+        this.storage = StorageClient.getInstance().bucket("matrix_ads_video").getStorage();
+        this.bucketName = "matrix_ads_video";
     }
 
     public static class UploadResult {
@@ -72,10 +75,17 @@ public class FirebaseStorageService {
     return new UploadResult(videoUrl, thumbnailUrl);
 }
 
-// Utility method for streaming upload
-public void uploadVideo(InputStream inputStream, String fileName, String contentType) throws IOException {
-    StorageClient.getInstance().bucket().create("videos/" + fileName, inputStream, contentType);
-}
-}
+    public void uploadVideo(InputStream inputStream, String fileName, String contentType) throws IOException {
+        String objectName = "videos/" + fileName;
 
+        BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, objectName)
+            .setContentType(contentType)
+            .build();
+
+        try (WritableByteChannel channel = storage.writer(blobInfo);
+            OutputStream outputStream = Channels.newOutputStream(channel)) {
+            inputStream.transferTo(outputStream);
+        }
+    }
+}
 
