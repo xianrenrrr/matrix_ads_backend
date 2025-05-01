@@ -69,6 +69,8 @@ Uploads a video file for a user. The video is stored in Firebase Storage, and a 
 - `200 OK`: Returns the uploaded video object with its metadata and URLs
 - `500 Internal Server Error`: If an error occurs during upload
 
+**Note:** The maximum allowed upload size is 200MB. If you try to upload a larger file, you will receive a 500 Internal Server Error with a MaxUploadSizeExceededException.
+
 **Example Request (cURL):**
 ```bash
 curl -X POST http://<host>/videos/upload \
