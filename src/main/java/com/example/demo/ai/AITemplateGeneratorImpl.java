@@ -11,9 +11,11 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class AITemplateGeneratorImpl implements AITemplateGenerator {
-
+    private static final Logger logger = LoggerFactory.getLogger(AITemplateGeneratorImpl.class);
     /**
      * Generate a template based on the video metadata
      * @param video The video for which to generate a template
@@ -21,72 +23,72 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
      */
     @Override
     public ManualTemplate generateTemplate(Video video) {
-        try {
-            // Initialize Video Intelligence client
-            try (VideoIntelligenceServiceClient client = VideoIntelligenceServiceClient.create()) {
-                // Read video file from Firebase Storage URL
-                byte[] videoBytes = Files.readAllBytes(Paths.get(new URL(video.getUrl()).toURI()));
-                ByteString inputVideo = ByteString.copyFrom(videoBytes);
+        logger.info("Starting template generation for video ID: {}", video.getId());
 
-                // Configure video intelligence request
-                AnnotateVideoRequest request = AnnotateVideoRequest.newBuilder()
-                    .setInputContent(inputVideo)
-                    .addFeatures(Feature.SHOT_CHANGE_DETECTION)
-                    .addFeatures(Feature.LABEL_DETECTION)
-                    .addFeatures(Feature.PERSON_DETECTION)
-                    .build();
+        try (VideoIntelligenceServiceClient client = VideoIntelligenceServiceClient.create()) {
+            logger.debug("Initialized VideoIntelligenceServiceClient");
 
-                // Submit request and wait for results
-                AnnotateVideoResponse response = client.annotateVideoAsync(request).get();
+            byte[] videoBytes = Files.readAllBytes(Paths.get(new URL(video.getUrl()).toURI()));
+            logger.debug("Loaded video bytes from URL: {}", video.getUrl());
 
-                // Process video intelligence results
-                ManualTemplate template = new ManualTemplate();
-                template.setVideoId(video.getId());
-                template.setUserId(video.getUserId());
-                template.setTemplateTitle(video.getTitle() + " AI Template");
+            ByteString inputVideo = ByteString.copyFrom(videoBytes);
 
-                List<Scene> scenes = new ArrayList<>();
-                
-                // Extract scenes based on shot changes and labels
-                for (VideoAnnotationResults annotationResult : response.getAnnotationResultsList()) {
-                    for (VideoSegment shot : annotationResult.getShotAnnotationsList()) {
-                        Scene scene = new Scene();
-                        scene.setSceneTitle("Scene at " + shot.getStartTimeOffset());
+            AnnotateVideoRequest request = AnnotateVideoRequest.newBuilder()
+                .setInputContent(inputVideo)
+                .addFeatures(Feature.SHOT_CHANGE_DETECTION)
+                .addFeatures(Feature.LABEL_DETECTION)
+                .addFeatures(Feature.PERSON_DETECTION)
+                .build();
+            logger.debug("Constructed AnnotateVideoRequest");
 
-                        // Check for person presence in this shot
-                        boolean personPresent = annotationResult.getPersonDetectionAnnotationsList().stream()
-                            .flatMap(person -> person.getTracksList().stream())
-                            .anyMatch(track ->
-                                track.getSegment().getStartTimeOffset().getSeconds() <= shot.getStartTimeOffset().getSeconds() &&
-                                track.getSegment().getEndTimeOffset().getSeconds() >= shot.getEndTimeOffset().getSeconds()
-                            );
-                        scene.setPresenceOfPerson(personPresent);
+            AnnotateVideoResponse response = client.annotateVideoAsync(request).get();
+            logger.info("Received annotation response for video ID: {}", video.getId());
 
-                        // Add labels for this shot
-                        List<String> sceneLabels = annotationResult.getSegmentLabelAnnotationsList().stream()
-                            .filter(label -> label.getSegmentsList().stream().anyMatch(segment ->
-                                segment.getSegment().getStartTimeOffset().getSeconds() <= shot.getStartTimeOffset().getSeconds() &&
-                                segment.getSegment().getEndTimeOffset().getSeconds() >= shot.getEndTimeOffset().getSeconds()
-                            ))
-                            .map(label -> label.getEntity().getDescription())
-                            .toList();
+            ManualTemplate template = new ManualTemplate();
+            template.setVideoId(video.getId());
+            template.setUserId(video.getUserId());
+            template.setTemplateTitle(video.getTitle() + " AI Template");
 
-                        scene.setScriptLine(String.join(", ", sceneLabels));
-                        scenes.add(scene);
-                    }
+            List<Scene> scenes = new ArrayList<>();
+
+            for (VideoAnnotationResults annotationResult : response.getAnnotationResultsList()) {
+                for (VideoSegment shot : annotationResult.getShotAnnotationsList()) {
+                    Scene scene = new Scene();
+                    scene.setSceneTitle("Scene at " + shot.getStartTimeOffset());
+
+                    boolean personPresent = annotationResult.getPersonDetectionAnnotationsList().stream()
+                        .flatMap(person -> person.getTracksList().stream())
+                        .anyMatch(track ->
+                            track.getSegment().getStartTimeOffset().getSeconds() <= shot.getStartTimeOffset().getSeconds() &&
+                            track.getSegment().getEndTimeOffset().getSeconds() >= shot.getEndTimeOffset().getSeconds()
+                        );
+                    scene.setPresenceOfPerson(personPresent);
+
+                    List<String> sceneLabels = annotationResult.getSegmentLabelAnnotationsList().stream()
+                        .filter(label -> label.getSegmentsList().stream().anyMatch(segment ->
+                            segment.getSegment().getStartTimeOffset().getSeconds() <= shot.getStartTimeOffset().getSeconds() &&
+                            segment.getSegment().getEndTimeOffset().getSeconds() >= shot.getEndTimeOffset().getSeconds()
+                        ))
+                        .map(label -> label.getEntity().getDescription())
+                        .toList();
+
+                    scene.setScriptLine(String.join(", ", sceneLabels));
+                    scenes.add(scene);
                 }
-
-                template.setScenes(scenes);
-                return template;
             }
+
+            template.setScenes(scenes);
+            logger.info("Generated {} scenes for video ID: {}", scenes.size(), video.getId());
+            return template;
+
         } catch (Exception e) {
-            // Log error and return a basic template
-            System.err.println("Error generating AI template: " + e.getMessage());
-            ManualTemplate basicTemplate = new ManualTemplate();
-            basicTemplate.setVideoId(video.getId());
-            basicTemplate.setUserId(video.getUserId());
-            basicTemplate.setTemplateTitle(video.getTitle() + " Basic Template");
-            return basicTemplate;
+            logger.error("Error generating AI template for video ID {}: {}", video.getId(), e.getMessage(), e);
+
+            ManualTemplate fallbackTemplate = new ManualTemplate();
+            fallbackTemplate.setVideoId(video.getId());
+            fallbackTemplate.setUserId(video.getUserId());
+            fallbackTemplate.setTemplateTitle(video.getTitle() + " Basic Template");
+            return fallbackTemplate;
         }
     }
 }
