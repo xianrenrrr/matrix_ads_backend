@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import com.example.demo.ai.AITemplateGenerator;
 
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -16,15 +17,12 @@ import java.util.concurrent.ExecutionException;
 @RestController
 @RequestMapping("/videos")
 public class VideoController {
-    private boolean aiController = false;
+    @Autowired
+    private AITemplateGenerator aiTemplateGenerator;
 
     private ManualTemplate generateAITemplate(Video video, String userId, String title) {
-        // Placeholder method for AI template generation
-        ManualTemplate aiTemplate = new ManualTemplate();
-        aiTemplate.setUserId(userId);
-        aiTemplate.setTemplateTitle(title != null ? title + " AI Template" : "AI Generated Template");
-        aiTemplate.setVideoId(video.getId());
-        return aiTemplate;
+        // Use AI template generator to create template
+        return aiTemplateGenerator.generateTemplate(video);
     }
     @Autowired
     private VideoDao videoDao;
@@ -58,22 +56,11 @@ public class VideoController {
             // Determine template creation strategy
             try {
                 if (templateId == null) {
-                    if (aiController) {
-                        // Use AI to auto-create a template
-                        ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, userId, title);
-                        String savedTemplateId = templateDao.createTemplate(aiGeneratedTemplate);
-                        savedVideo.setTemplateId(savedTemplateId);
-                        videoDao.updateVideo(savedVideo);
-                    } else {
-                        // Create a default template
-                        ManualTemplate defaultTemplate = new ManualTemplate();
-                        defaultTemplate.setUserId(userId);
-                        defaultTemplate.setTemplateTitle(title != null ? title + " Template" : "Default Template");
-                        defaultTemplate.setVideoId(savedVideo.getId());
-                        String savedTemplateId = templateDao.createTemplate(defaultTemplate);
-                        savedVideo.setTemplateId(savedTemplateId);
-                        videoDao.updateVideo(savedVideo);
-                    }
+                    // Always attempt to generate an AI template
+                    ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, userId, title);
+                    String savedTemplateId = templateDao.createTemplate(aiGeneratedTemplate);
+                    savedVideo.setTemplateId(savedTemplateId);
+                    videoDao.updateVideo(savedVideo);
                 } else {
                     // If templateId is provided, link the existing template
                     savedVideo.setTemplateId(templateId);
