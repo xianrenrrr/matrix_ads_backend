@@ -35,13 +35,16 @@ public class FirebaseStorageService {
     public UploadResult uploadVideoWithThumbnail(MultipartFile file, String userId, String videoId) throws IOException, InterruptedException {
     // Stream upload video to Firebase Storage directly from MultipartFile InputStream
     String objectName = String.format("videos/%s/%s/%s", userId, videoId, file.getOriginalFilename());
-    try (InputStream is = file.getInputStream()) {
-        storage.create(
-            BlobInfo.newBuilder(bucketName, objectName)
-                .setContentType(file.getContentType())
-                .build(),
-            is
-        );
+    BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, objectName)
+    .setContentType(file.getContentType())
+        .build();
+    try (InputStream is = file.getInputStream();
+        WritableByteChannel writer = storage.writer(blobInfo)) {
+        byte[] buffer = new byte[1024];
+        int limit;
+        while ((limit = is.read(buffer)) >= 0) {
+            writer.write(java.nio.ByteBuffer.wrap(buffer, 0, limit));
+        }
     }
     String videoUrl = String.format("https://storage.googleapis.com/%s/%s", bucketName, objectName);
     // Save video to temp file for FFmpeg thumbnail extraction
