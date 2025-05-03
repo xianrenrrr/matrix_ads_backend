@@ -178,3 +178,4 @@ mvn spring-boot:run
 - Connect frontend to backend for real data persistence.
 - Prepare for AI-assisted template creation in future iterations.
 
+todo: bug video wioth same name
