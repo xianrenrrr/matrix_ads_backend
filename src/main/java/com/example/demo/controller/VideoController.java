@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import com.example.demo.ai.AITemplateGenerator;
+import com.example.demo.ai.DefaultAITemplateGenerator;
 
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -19,9 +20,15 @@ import java.util.concurrent.ExecutionException;
 public class VideoController {
     @Autowired
     private AITemplateGenerator aiTemplateGenerator;
-
-    private ManualTemplate generateAITemplate(Video video, String userId, String title) {
+    @Autowired
+    private DefaultAITemplateGenerator defaultAITemplateGenerator;
+    private boolean useDefaultAITemplateGenerator = false;
+    private ManualTemplate generateAITemplate(Video video) {
         // Use AI template generator to create template
+        System.out.println("Generating AI template for video ID: " + video.getId());
+        if (useDefaultAITemplateGenerator) {
+            return defaultAITemplateGenerator.generateTemplate(video);
+        }
         return aiTemplateGenerator.generateTemplate(video);
     }
     @Autowired
@@ -51,13 +58,16 @@ public class VideoController {
             video.setUrl(result.videoUrl);
             video.setThumbnailUrl(result.thumbnailUrl);
             Video savedVideo = videoDao.saveVideo(video);
-
             // Create a default template if no templateId is provided
             // Determine template creation strategy
             try {
                 if (templateId == null) {
+                    System.out.printf("No templateId provided, generating AI template for video ID: {}", savedVideo.getId());
                     // Always attempt to generate an AI template
-                    ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, userId, title);
+                    ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo);
+                    aiGeneratedTemplate.setUserId(userId);
+                    aiGeneratedTemplate.setVideoId(savedVideo.getId());
+                    aiGeneratedTemplate.setTemplateTitle(title);
                     String savedTemplateId = templateDao.createTemplate(aiGeneratedTemplate);
                     savedVideo.setTemplateId(savedTemplateId);
                     videoDao.updateVideo(savedVideo);

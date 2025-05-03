@@ -3,33 +3,39 @@ package com.example.demo.ai;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Scene;
 import com.example.demo.model.Video;
+import com.google.cloud.storage.Blob;
+import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.StorageOptions;
 import com.google.cloud.videointelligence.v1.*;
 import com.google.protobuf.ByteString;
 
-import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
+@Service
 public class AITemplateGeneratorImpl implements AITemplateGenerator {
-    private static final Logger logger = LoggerFactory.getLogger(AITemplateGeneratorImpl.class);
-    /**
-     * Generate a template based on the video metadata
-     * @param video The video for which to generate a template
-     * @return A generated ManualTemplate
-     */
+
     @Override
     public ManualTemplate generateTemplate(Video video) {
-        logger.info("Starting template generation for video ID: {}", video.getId());
+        System.out.printf("Starting template generation for video ID: %s%n", video.getId());
 
         try (VideoIntelligenceServiceClient client = VideoIntelligenceServiceClient.create()) {
-            logger.debug("Initialized VideoIntelligenceServiceClient");
+            System.out.println("Initialized VideoIntelligenceServiceClient");
 
-            byte[] videoBytes = Files.readAllBytes(Paths.get(new URL(video.getUrl()).toURI()));
-            logger.debug("Loaded video bytes from URL: {}", video.getUrl());
+            String bucketName = "matrix_ads_video"; // ✅ your bucket name
+            String objectName = video.getUrl().replace("https://storage.googleapis.com/" + bucketName + "/", "");
+
+            Storage storage = StorageOptions.getDefaultInstance().getService();
+            Blob blob = storage.get(bucketName, objectName);
+
+            if (blob == null || !blob.exists()) {
+                throw new IOException("Object not found in Cloud Storage: " + objectName);
+            }
+
+            byte[] videoBytes = blob.getContent();            
+            System.out.printf("Loaded video bytes from URL: %s%n", video.getUrl());
 
             ByteString inputVideo = ByteString.copyFrom(videoBytes);
 
@@ -39,11 +45,11 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
                 .addFeatures(Feature.LABEL_DETECTION)
                 .addFeatures(Feature.PERSON_DETECTION)
                 .build();
-            logger.debug("Constructed AnnotateVideoRequest");
+            System.out.println("Constructed AnnotateVideoRequest");
 
             AnnotateVideoResponse response = client.annotateVideoAsync(request).get();
-            logger.info("Received annotation response for video ID: {}", video.getId());
-
+            System.out.printf("Received annotation response for video ID: %s%n", video.getId());
+            System.out.println("Response: " + response);
             ManualTemplate template = new ManualTemplate();
             template.setVideoId(video.getId());
             template.setUserId(video.getUserId());
@@ -78,11 +84,12 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
             }
 
             template.setScenes(scenes);
-            logger.info("Generated {} scenes for video ID: {}", scenes.size(), video.getId());
+            System.out.printf("Generated %d scenes for video ID: %s%n", scenes.size(), video.getId());
             return template;
 
         } catch (Exception e) {
-            logger.error("Error generating AI template for video ID {}: {}", video.getId(), e.getMessage(), e);
+            System.out.printf("Error generating AI template for video ID %s: %s%n", video.getId(), e.getMessage());
+            e.printStackTrace();
 
             ManualTemplate fallbackTemplate = new ManualTemplate();
             fallbackTemplate.setVideoId(video.getId());
