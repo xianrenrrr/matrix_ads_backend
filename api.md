@@ -88,3 +88,26 @@ curl -X POST http://<host>/videos/upload \
   -F "userId=USER123" \
   -F "title=Sample Video" \
   -F "description=Test upload"
+```
+
+---
+
+### Subscribe to a Template (Content Creator)
+- **POST** `/users/{userId}/subscribe?templateId=...`
+- **Description:** Adds the specified template ID to the user's `subscribed_template` field. Field is created if it does not exist. Duplicate IDs are prevented.
+- **Path Parameter:**
+  - `userId` (string, required): The ID of the content creator user
+- **Query Parameter:**
+  - `templateId` (string, required): The ID of the template to subscribe to
+- **Responses:**
+  - `200 OK`: Subscribed to template successfully
+  - `500 Internal Server Error`: Failed to subscribe
+
+### Get All Subscribed Templates (Content Creator)
+- **GET** `/users/{userId}/subscribed-templates`
+- **Description:** Returns all templates referenced in the user's `subscribed_template` field. If a template is deleted, it is removed from the field and not returned.
+- **Path Parameter:**
+  - `userId` (string, required): The ID of the content creator user
+- **Response:**
+  - Array of template objects (same structure as returned by `/templates/{templateId}`)
+  - If a template was deleted, it is automatically removed from the user's `subscribed_template` field.
