@@ -88,6 +88,7 @@ public class TemplateDaoImpl implements TemplateDao {
         DocumentReference userRef = db.collection("users").document(userId);
         DocumentSnapshot userSnap = userRef.get().get();
         List<ManualTemplate> templates = new ArrayList<>();
+        boolean userFieldUpdated = false;
         if (userSnap.exists() && userSnap.contains("video_template")) {
             Object raw = userSnap.get("video_template");
             List<String> templateIds = new ArrayList<>();
@@ -98,13 +99,21 @@ public class TemplateDaoImpl implements TemplateDao {
                     }
                 }
             }
+            List<String> validTemplateIds = new ArrayList<>();
             for (String templateId : templateIds) {
                 DocumentReference templateRef = db.collection("video_template").document(templateId);
                 DocumentSnapshot templateSnap = templateRef.get().get();
                 if (templateSnap.exists()) {
                     ManualTemplate template = templateSnap.toObject(ManualTemplate.class);
                     templates.add(template);
+                    validTemplateIds.add(templateId);
+                } else {
+                    userFieldUpdated = true;
                 }
+            }
+            // If any template ids were missing, update the user's video_template field
+            if (userFieldUpdated) {
+                userRef.update("video_template", validTemplateIds);
             }
         }
         return templates;
