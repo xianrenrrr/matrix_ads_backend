@@ -20,6 +20,10 @@ public class UserController {
     public ResponseEntity<String> subscribeTemplate(@PathVariable String userId, @RequestParam String templateId) {
         try {
             DocumentReference userRef = db.collection("users").document(userId);
+            // Use a transaction to check and update
+            String alreadySubscribedMsg = "Already subscribed to this template.";
+            String successMsg = "Subscribed to template successfully.";
+            final boolean[] alreadySubscribed = {false};
             db.runTransaction(transaction -> {
                 DocumentSnapshot userSnap = transaction.get(userRef).get();
                 List<String> subscribedTemplates = new ArrayList<>();
@@ -33,13 +37,18 @@ public class UserController {
                         }
                     }
                 }
-                if (!subscribedTemplates.contains(templateId)) {
+                if (subscribedTemplates.contains(templateId)) {
+                    alreadySubscribed[0] = true;
+                } else {
                     subscribedTemplates.add(templateId);
+                    transaction.update(userRef, "subscribed_template", subscribedTemplates);
                 }
-                transaction.update(userRef, "subscribed_template", subscribedTemplates);
                 return null;
             }).get();
-            return ResponseEntity.ok("Subscribed to template successfully.");
+            if (alreadySubscribed[0]) {
+                return ResponseEntity.badRequest().body(alreadySubscribedMsg);
+            }
+            return ResponseEntity.ok(successMsg);
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body("Failed to subscribe: " + e.getMessage());
         }
