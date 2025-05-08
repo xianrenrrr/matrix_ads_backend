@@ -95,7 +95,7 @@ public class TemplateDaoImpl implements TemplateDao {
             throw new IllegalArgumentException("Template ID must not be null or empty for delete.");
         }
         try {
-            db.collection("templates").document(id).delete().get(); // Wait until delete completes
+            db.collection("video_template").document(id).delete().get(); // Wait until delete completes
             return true; // Successful deletion
         } catch (Exception e) {
             e.printStackTrace();
