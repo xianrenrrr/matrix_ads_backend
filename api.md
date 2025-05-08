@@ -52,6 +52,16 @@
 - **GET** `/templates/{templateId}`
 - **Response:** Template object with details for the specified template.
 
+### Delete Template
+- **DELETE** `/templates/{templateId}`
+- **Description:** Deletes the template with the specified ID.
+- **Path Parameter:**
+  - `templateId` (string, required): The ID of the template to delete.
+- **Responses:**
+  - `204 No Content`: Template was deleted successfully.
+  - `404 Not Found`: Template with the specified ID does not exist.
+  - `500 Internal Server Error`: An error occurred during deletion.
+
 ### Upload Video
 
 **Endpoint:** `POST /videos/upload`

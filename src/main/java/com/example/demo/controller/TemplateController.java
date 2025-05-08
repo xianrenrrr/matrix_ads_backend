@@ -73,4 +73,18 @@ public class TemplateController {
             return ResponseEntity.internalServerError().build();
         }
     }
+
+    @DeleteMapping("/{templateId}")
+    public ResponseEntity<Void> deleteTemplate(@PathVariable String templateId) {
+        try {
+            boolean deleted = templateDao.deleteTemplate(templateId);
+            if (deleted) {
+                return ResponseEntity.noContent().build();
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
 }
