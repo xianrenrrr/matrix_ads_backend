@@ -1,7 +1,6 @@
 package com.example.demo.controller;
 
 import com.example.demo.model.ManualTemplate;
-import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
