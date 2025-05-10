@@ -111,3 +111,38 @@ curl -X POST http://<host>/videos/upload \
 - **Response:**
   - Array of template objects (same structure as returned by `/templates/{templateId}`)
   - If a template was deleted, it is automatically removed from the user's `subscribed_template` field.
+
+---
+
+### Upload Content Creator Video for Template
+- **POST** `/content-creator/videos/upload`
+- **Description:** Uploads a content creator's video for a specific template. Deletes any previous submission for this user/template, uploads the new video, saves metadata, and returns the result. Placeholder for future AI similarity/feedback.
+- **Request (multipart/form-data):**
+  - `file` (required): The video file to upload
+  - `templateId` (required): ID of the template
+  - `userId` (required): ID of the content creator
+- **Response:**
+  - `message`: "Video uploaded and processed."
+  - `videoId`: The new video ID (UUID)
+  - `videoUrl`: Public download link
+  - `similarityScore`: null (placeholder for future AI)
+  - `feedback`: [] (placeholder for future AI)
+  - `publishStatus`: "pending"
+- **Example Request (cURL):**
+```bash
+curl -X POST http://<host>/content-creator/videos/upload \
+  -F "file=@/path/to/video.mp4" \
+  -F "templateId=template123" \
+  -F "userId=creator456"
+```
+- **Example Response:**
+```json
+{
+  "message": "Video uploaded and processed.",
+  "videoId": "7e1e9b4a-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "videoUrl": "https://storage.googleapis.com/bucket/content-creator-videos/creator456/template123/7e1e9b4a-xxxx-xxxx-xxxx-xxxxxxxxxxxx.mp4",
+  "similarityScore": null,
+  "feedback": [],
+  "publishStatus": "pending"
+}
+```
