@@ -8,28 +8,32 @@
   ```json
   {
     "username": "string",
+    "email": "string",
     "password": "string",
     "role": "content_creator" | "content_manager"
   }
   ```
 - **Response:**
-  - User object (with unique `id` and `role`, password omitted)
+  - User object (with unique `id`, `username`, `email`, and `role`, password omitted)
 - **Errors:**
   - 400 if username already exists
+  - 400 if email already exists
 
 ### Login
 - **POST** `/auth/login`
 - **Request Body:**
   ```json
   {
-    "username": "string",
+    "username": "string", // or
+    "email": "string",    // one of username or email is required
     "password": "string"
   }
   ```
 - **Response:**
-  - User object (with `id`, `username`, `role`, password omitted)
+  - User object (with `id`, `username`, `email`, `role`, password omitted)
 - **Errors:**
   - 400 if credentials are invalid
+  - 400 if neither username nor email is provided
 <dependency>
     <groupId>com.google.firebase</groupId>
     <artifactId>firebase-admin</artifactId>
@@ -94,11 +98,7 @@ curl -X POST http://<host>/videos/upload \
 
 ### Subscribe to a Template (Content Creator)
 - **POST** `/users/{userId}/subscribe?templateId=...`
-- **Description:** Adds the specified template ID to the user's `subscribed_template` field. Field is created if it does not exist. Duplicate IDs are prevented.
-- **Path Parameter:**
-  - `userId` (string, required): The ID of the content creator user
-- **Query Parameter:**
-  - `templateId` (string, required): The ID of the template to subscribe to
+- **Description:** Adds the specified template ID to the user's `subscribed_template` field. Field is created if it does not exist. Duplicate IDs are l
 - **Responses:**
   - `200 OK`: Subscribed to template successfully
   - `500 Internal Server Error`: Failed to subscribe

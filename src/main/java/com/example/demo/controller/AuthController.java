@@ -14,9 +14,12 @@ public class AuthController {
 
     @PostMapping("/signup")
     public User signup(@RequestBody User user) {
-        // Check if user already exists
+        // Check if username or email already exists
         if (userDao.findByUsername(user.getUsername()) != null) {
             throw new RuntimeException("Username already exists");
+        }
+        if (userDao.findByEmail(user.getEmail()) != null) {
+            throw new RuntimeException("Email already exists");
         }
         user.setId(UUID.randomUUID().toString());
         userDao.save(user);
@@ -26,9 +29,16 @@ public class AuthController {
 
     @PostMapping("/login")
     public User login(@RequestBody User loginRequest) {
-        User user = userDao.findByUsername(loginRequest.getUsername());
+        User user = null;
+        // Allow login by either username or email
+        if (loginRequest.getUsername() != null && !loginRequest.getUsername().isEmpty()) {
+            user = userDao.findByUsername(loginRequest.getUsername());
+        }
+        if (user == null && loginRequest.getEmail() != null && !loginRequest.getEmail().isEmpty()) {
+            user = userDao.findByEmail(loginRequest.getEmail());
+        }
         if (user == null || !user.getPassword().equals(loginRequest.getPassword())) {
-            throw new RuntimeException("Invalid username or password");
+            throw new RuntimeException("Invalid username/email or password");
         }
         user.setPassword(null); // Don't return password
         return user;
