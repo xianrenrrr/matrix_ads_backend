@@ -17,9 +17,16 @@ public class UserController {
     // Subscribe to a template (Content Creator)
     @PostMapping("/{userId}/subscribe")
     public ResponseEntity<String> subscribeTemplate(@PathVariable String userId, @RequestParam String templateId) {
+        System.out.println("[subscribeTemplate] Called with userId=" + userId + ", templateId=" + templateId);
         try {
+            // Check if template exists
+            DocumentReference templateRef = db.collection("video_template").document(templateId);
+            DocumentSnapshot templateSnap = templateRef.get().get();
+            if (!templateSnap.exists()) {
+                System.out.println("[subscribeTemplate] Template with templateId=" + templateId + " does not exist. Subscription aborted.");
+                return ResponseEntity.badRequest().body("Template does not exist.");
+            }
             DocumentReference userRef = db.collection("users").document(userId);
-            // Use a transaction to check and update
             String alreadySubscribedMsg = "Already subscribed to this template.";
             String successMsg = "Subscribed to template successfully.";
             final boolean[] alreadySubscribed = {false};
@@ -35,20 +42,28 @@ public class UserController {
                             }
                         }
                     }
+                    System.out.println("[subscribeTemplate] User exists. Current subscribed_template: " + subscribedTemplates);
+                } else {
+                    System.out.println("[subscribeTemplate] User does not have 'subscribed_template' field or does not exist.");
                 }
                 if (subscribedTemplates.contains(templateId)) {
+                    System.out.println("[subscribeTemplate] User already subscribed to templateId: " + templateId);
                     alreadySubscribed[0] = true;
                 } else {
                     subscribedTemplates.add(templateId);
                     transaction.update(userRef, "subscribed_template", subscribedTemplates);
+                    System.out.println("[subscribeTemplate] Added templateId " + templateId + " to user's subscriptions.");
                 }
                 return null;
             }).get();
             if (alreadySubscribed[0]) {
+                System.out.println("[subscribeTemplate] Returning: " + alreadySubscribedMsg);
                 return ResponseEntity.badRequest().body(alreadySubscribedMsg);
             }
+            System.out.println("[subscribeTemplate] Returning: " + successMsg);
             return ResponseEntity.ok(successMsg);
         } catch (Exception e) {
+            System.out.println("[subscribeTemplate] ERROR: " + e.getMessage());
             return ResponseEntity.internalServerError().body("Failed to subscribe: " + e.getMessage());
         }
     }
