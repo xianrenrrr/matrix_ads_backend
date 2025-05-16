@@ -4,6 +4,26 @@
 
 ### Signup
 - **POST** `/auth/signup`
+
+---
+
+## Content Manager Endpoints
+
+### Templates
+- **POST** `/content-manager/templates`: Create a new template
+- **GET** `/content-manager/templates/user/{userId}`: List templates for a user
+- **GET** `/content-manager/templates/{templateId}`: Get template details
+- **DELETE** `/content-manager/templates/{templateId}`: Delete a template
+
+### Videos
+- **POST** `/content-manager/videos/upload`: Upload a video (manager)
+- **GET** `/content-manager/videos/user/{userId}`: List videos for a user
+- **GET** `/content-manager/videos/{videoId}`: Get video details
+
+---
+
+## Content Creator Endpoints
+
 - **Request Body:**
   ```json
   {
@@ -71,14 +91,22 @@
 
 ---
 
-### Get All Templates for a User
-- **GET** `/templates/user/{userId}`
-- **Response:** Array of objects, each containing only the template `id` and `templateTitle` fields. Example:
-  ```json
-  [
-    { "id": "template1", "templateTitle": "My First Template" },
-    { "id": "template2", "templateTitle": "Promo Video" }
-  ]
+### User Subscriptions (Content Creator)
+- **POST** `/content-creator/users/{userId}/subscribe`: Subscribe a user to a template
+  - **Path Parameter:**
+    - `userId` (string, required): The ID of the content creator user
+  - **Query Parameter:**
+    - `templateId` (string, required): The ID of the template to subscribe to
+  - **Response:**
+    - 200 OK if successful, 400 if already subscribed or template does not exist
+
+- **GET** `/content-creator/users/{userId}/subscribed-templates`: Get all templates a user is subscribed to
+  - **Path Parameter:**
+    - `userId` (string, required): The ID of the content creator user
+  - **Response:**
+    - Array of template objects (same structure as returned by `/content-manager/templates/{templateId}`)
+    - If a template was deleted, it is automatically removed from the user's `subscribed_template` field.
+
   ```
 
 ### Get Template Details

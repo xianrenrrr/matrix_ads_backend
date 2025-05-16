@@ -1,4 +1,4 @@
-package com.example.demo.controller;
+package com.example.demo.controller.contentcreator;
 
 import com.google.cloud.firestore.*;
 import com.google.firebase.cloud.StorageClient;

@@ -1,4 +1,4 @@
-package com.example.demo.controller;
+package com.example.demo.controller.contentmanager;
 
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.model.ManualTemplate;
@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 @RestController
-@RequestMapping("/templates")
+@RequestMapping("/content-manager/templates")
 public class ContentManager {
     private final TemplateDao templateDao;
 

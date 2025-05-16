@@ -1,4 +1,4 @@
-package com.example.demo.controller;
+package com.example.demo.controller.contentmanager;
 
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.VideoDao;
@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 @RestController
-@RequestMapping("/videos")
+@RequestMapping("/content-manager/videos")
 public class VideoController {
     @Autowired
     private AITemplateGenerator aiTemplateGenerator;

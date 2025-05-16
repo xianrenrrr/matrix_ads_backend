@@ -1,4 +1,4 @@
-package com.example.demo.controller;
+package com.example.demo.controller.contentcreator;
 
 import com.example.demo.model.ManualTemplate;
 import com.google.cloud.firestore.*;
@@ -9,7 +9,7 @@ import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 @RestController
-@RequestMapping("/users")
+@RequestMapping("/content-creator/users")
 public class UserController {
     @Autowired
     private Firestore db;
