@@ -80,4 +80,35 @@ public class ContentCreatorVideoController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to upload/process video: " + e.getMessage());
         }
     }
+
+    @GetMapping("/submission")
+    public ResponseEntity<?> getContentCreatorVideoSubmission(
+            @RequestParam("templateId") String templateId,
+            @RequestParam("userId") String userId
+    ) {
+        if (!StringUtils.hasText(templateId) || !StringUtils.hasText(userId)) {
+            return ResponseEntity.badRequest().body("Missing required parameters.");
+        }
+        try {
+            CollectionReference submittedVideosCol = db.collection("video_template").document(templateId)
+                .collection("submittedVideos");
+            DocumentReference userVideoDocRef = submittedVideosCol.document(userId);
+            DocumentSnapshot userVideoSnap = userVideoDocRef.get().get();
+            if (userVideoSnap.exists() && userVideoSnap.contains("videoId")) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("videoId", userVideoSnap.getString("videoId"));
+                response.put("videoUrl", userVideoSnap.getString("videoUrl"));
+                response.put("similarityScore", userVideoSnap.contains("similarityScore") ? userVideoSnap.get("similarityScore") : null);
+                response.put("feedback", userVideoSnap.contains("feedback") ? userVideoSnap.get("feedback") : new ArrayList<>());
+                response.put("publishStatus", userVideoSnap.contains("publishStatus") ? userVideoSnap.get("publishStatus") : "pending");
+                return ResponseEntity.ok(response);
+            } else {
+                Map<String, Object> response = new HashMap<>();
+                response.put("videoId", null);
+                return ResponseEntity.ok(response);
+            }
+        } catch (InterruptedException | ExecutionException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to fetch submission: " + e.getMessage());
+        }
+    }
 }

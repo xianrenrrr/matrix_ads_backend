@@ -34,6 +34,35 @@
 - **Errors:**
   - 400 if credentials are invalid
   - 400 if neither username nor email is provided
+
+---
+
+## Content Creator Video Submission Check
+
+### Check if a Content Creator Has Submitted a Video for a Template
+- **GET** `/content-creator/videos/submission?templateId={templateId}&userId={userId}`
+- **Query Parameters:**
+  - `templateId` (string, required): The template ID
+  - `userId` (string, required): The content creator’s user ID
+- **Response (if a submission exists):**
+  ```json
+  {
+    "videoId": "uuid-string",
+    "videoUrl": "https://public-url/video.mp4",
+    "similarityScore": null,
+    "feedback": [],
+    "publishStatus": "pending" // or "approved", "rejected", etc.
+  }
+  ```
+- **Response (if no submission exists):**
+  ```json
+  {
+    "videoId": null
+  }
+  ```
+- **Errors:**
+  - 400 if required parameters are missing
+  - 500 if server error
 <dependency>
     <groupId>com.google.firebase</groupId>
     <artifactId>firebase-admin</artifactId>

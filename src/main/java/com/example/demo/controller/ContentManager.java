@@ -12,11 +12,11 @@ import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/templates")
-public class TemplateController {
+public class ContentManager {
     private final TemplateDao templateDao;
 
     @Autowired
-    public TemplateController(TemplateDao templateDao) {
+    public ContentManager(TemplateDao templateDao) {
         this.templateDao = templateDao;
     }
 
