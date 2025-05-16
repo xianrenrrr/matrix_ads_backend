@@ -9,13 +9,13 @@ import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 @RestController
-@RequestMapping("/content-creator/users")
+@RequestMapping("/content-creator")
 public class UserController {
     @Autowired
     private Firestore db;
 
     // Subscribe to a template (Content Creator)
-    @PostMapping("/{userId}/subscribe")
+    @PostMapping("/users/{userId}/subscribe")
     public ResponseEntity<String> subscribeTemplate(@PathVariable String userId, @RequestParam String templateId) {
         System.out.println("[subscribeTemplate] Called with userId=" + userId + ", templateId=" + templateId);
         try {
@@ -69,7 +69,7 @@ public class UserController {
     }
 
     // Get subscribed templates (Content Creator)
-    @GetMapping("/{userId}/subscribed-templates")
+    @GetMapping("/users/{userId}/subscribed-templates")
     public ResponseEntity<List<ManualTemplate>> getSubscribedTemplates(@PathVariable String userId) throws ExecutionException, InterruptedException {
         DocumentReference userRef = db.collection("users").document(userId);
         DocumentSnapshot userSnap = userRef.get().get();
@@ -104,4 +104,23 @@ public class UserController {
         }
         return ResponseEntity.ok(templates);
     }
+
+        // Inject TemplateDao for template access
+        @Autowired
+        private com.example.demo.dao.TemplateDao templateDao;
+    
+        // Get template details (Content Creator)
+        @GetMapping("/templates/{templateId}")
+        public ResponseEntity<ManualTemplate> getTemplateByIdForContentCreator(@PathVariable String templateId) {
+            try {
+                ManualTemplate template = templateDao.getTemplate(templateId);
+                if (template != null) {
+                    return ResponseEntity.ok(template);
+                } else {
+                    return ResponseEntity.notFound().build();
+                }
+            } catch (Exception e) {
+                return ResponseEntity.internalServerError().build();
+            }
+        }
 }
