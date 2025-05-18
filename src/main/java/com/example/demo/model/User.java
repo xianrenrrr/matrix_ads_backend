@@ -20,7 +20,7 @@ public class User {
         this.email = email;
         this.password = password;
         this.role = role;
-        this.subscribedTemplates = new java.util.HashMap<>();
+        this.subscribed_Templates = new java.util.HashMap<>();
         this.notifications = new java.util.HashMap<>();
     }
 
