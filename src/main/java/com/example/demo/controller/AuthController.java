@@ -22,8 +22,12 @@ public class AuthController {
             throw new RuntimeException("Email already exists");
         }
         user.setId(UUID.randomUUID().toString());
-        // Initialize new fields for db.md compatibility
-        user.setSubscribedTemplates(new java.util.HashMap<>()); // Map<String, Boolean>
+        // Initialize fields based on role for db.md compatibility
+        if ("content_creator".equals(user.getRole())) {
+            user.setSubscribed_Templates(new java.util.HashMap<>()); // Map<String, Boolean>
+        } else if ("content_manager".equals(user.getRole())) {
+            user.setCreated_template(new java.util.HashMap<>()); // Map<String, Boolean>
+        }
         user.setNotifications(new java.util.HashMap<>()); // Map<String, Notification>
         userDao.save(user);
         user.setPassword(null); // Don't return password

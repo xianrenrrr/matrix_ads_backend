@@ -8,7 +8,8 @@ public class User {
     private String role; // "content_creator" or "content_manager"
 
     // New fields for db.md compatibility
-    private java.util.Map<String, Boolean> subscribedTemplates;
+    private java.util.Map<String, Boolean> subscribed_Templates;
+    private java.util.Map<String, Boolean> created_template;
     private java.util.Map<String, Notification> notifications;
 
     public User() {}
@@ -43,8 +44,11 @@ public class User {
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
 
-    public java.util.Map<String, Boolean> getSubscribedTemplates() { return subscribedTemplates; }
-    public void setSubscribedTemplates(java.util.Map<String, Boolean> subscribedTemplates) { this.subscribedTemplates = subscribedTemplates; }
+    public java.util.Map<String, Boolean> getSubscribed_Templates() { return subscribed_Templates; }
+    public void setSubscribed_Templates(java.util.Map<String, Boolean> subscribed_Templates) { this.subscribed_Templates = subscribed_Templates; }
+
+    public java.util.Map<String, Boolean> getCreated_template() { return created_template; }
+    public void setCreated_template(java.util.Map<String, Boolean> created_template) { this.created_template = created_template; }
 
     public java.util.Map<String, Notification> getNotifications() { return notifications; }
     public void setNotifications(java.util.Map<String, Notification> notifications) { this.notifications = notifications; }
