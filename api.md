@@ -1,104 +1,141 @@
 # Matrix Ads Backend API
 
-## Authentication
+---
 
-### Signup
+## 1. Authentication
+
+### [auth] Signup
 - **POST** `/auth/signup`
+  - **Request Body:**
+    ```json
+    {
+      "username": "string",
+      "email": "string",
+      "password": "string",
+      "role": "content_creator" | "content_manager"
+    }
+    ```
+  - **Response:** User object (`id`, `username`, `email`, `role`)
+  - **Errors:** 400 if username or email already exists
+
+### [auth] Login
+- **POST** `/auth/login`
+  - **Request Body:**
+    ```json
+    {
+      "username": "string", // or
+      "email": "string",    // one of username or email is required
+      "password": "string"
+    }
+    ```
+  - **Response:** User object (`id`, `username`, `email`, `role`)
+  - **Errors:** 400 if credentials are invalid or neither username/email provided
 
 ---
 
-## Content Manager Endpoints
+## 2. Content Manager Endpoints
 
-### Templates
+### [content_manager] Templates
 - **POST** `/content-manager/templates`: Create a new template
 - **GET** `/content-manager/templates/user/{userId}`: List templates for a user
 - **GET** `/content-manager/templates/{templateId}`: Get template details
 - **DELETE** `/content-manager/templates/{templateId}`: Delete a template
 
-### Videos
+### [content_manager] Videos
 - **POST** `/content-manager/videos/upload`: Upload a video (manager)
 - **GET** `/content-manager/videos/user/{userId}`: List videos for a user
 - **GET** `/content-manager/videos/{videoId}`: Get video details
 
+### [shared] Delete Template
+- **DELETE** `/content-manager/templates/{templateId}`
+  - **Path Parameter:** `templateId` (required)
+  - **Responses:**
+    - `204 No Content`: Deleted successfully
+    - `404 Not Found`: Not found
+    - `500 Internal Server Error`: Error during deletion
+
+### [shared] Upload Video (Manager)
+- **POST** `/content-manager/videos/upload`
+  - **Description:** Uploads a video file for a user (manager). The video is stored in Firebase Storage, a thumbnail is extracted and uploaded, and metadata is saved in Firestore.
+  - **Request Parameters:**
+    - `file` (form-data, required)
+    - `userId` (string, required)
+    - `title` (string, optional)
+    - `description` (string, optional)
+  - **Response:** 200 OK (video object), 500 Internal Server Error
+  - **Note:** Max upload size is 200MB; larger files return 500 error with MaxUploadSizeExceededException.
+
+### [shared] Get Template Details
+- **GET** `/content-manager/templates/{templateId}`
+  - **Response:** Template object with details for the specified template.
 ---
 
-## Content Creator Endpoints
+## 3. Content Creator Endpoints
 
-- **Request Body:**
-  ```json
-  {
-    "username": "string",
-    "email": "string",
-    "password": "string",
-    "role": "content_creator" | "content_manager"
-  }
-  ```
-- **Response:**
-  - User object (with unique `id`, `username`, `email`, and `role`, password omitted)
-- **Errors:**
-  - 400 if username already exists
-  - 400 if email already exists
-
-### Login
-- **POST** `/auth/login`
-- **Request Body:**
-  ```json
-  {
-    "username": "string", // or
-    "email": "string",    // one of username or email is required
-    "password": "string"
-  }
-  ```
-- **Response:**
-  - User object (with `id`, `username`, `email`, `role`, password omitted)
-- **Errors:**
-  - 400 if credentials are invalid
-  - 400 if neither username nor email is provided
-
----
-
-## Content Creator Video Submission Check
-
-### Check if a Content Creator Has Submitted a Video for a Template
-- **GET** `/content-creator/videos/submission?templateId={templateId}&userId={userId}`
-- **Query Parameters:**
-  - `templateId` (string, required): The template ID
-  - `userId` (string, required): The content creator’s user ID
-- **Response (if a submission exists):**
-  ```json
-  {
-    "videoId": "uuid-string",
-    "videoUrl": "https://public-url/video.mp4",
-    "similarityScore": null,
-    "feedback": [],
-    "publishStatus": "pending" // or "approved", "rejected", etc.
-  }
-  ```
-- **Response (if no submission exists):**
-  ```json
-  {
-    "videoId": null
-  }
-  ```
-- **Errors:**
-  - 400 if required parameters are missing
-  - 500 if server error
-<dependency>
-    <groupId>com.google.firebase</groupId>
-    <artifactId>firebase-admin</artifactId>
-    <version>9.2.0</version>
-</dependency>
-
----
-
-### User Subscriptions (Content Creator)
-- **POST** `/content-creator/users/{userId}/subscribe`: Subscribe a user to a template
-  - **Path Parameter:**
-    - `userId` (string, required): The ID of the content creator user
-  - **Query Parameter:**
-    - `templateId` (string, required): The ID of the template to subscribe to
+### [content_creator] Upload Video for Template
+- **POST** `/content-creator/videos/upload`
+  - **Description:** Uploads a content creator's video for a specific template. Deletes any previous submission for this user/template, uploads the new video, saves metadata, and returns the result. (Future: AI similarity/feedback)
+  - **Request (multipart/form-data):**
+    - `file` (required): The video file to upload
+    - `templateId` (required): ID of the template
+    - `userId` (required): ID of the content creator
   - **Response:**
-    - 200 OK if successful, 400 if already subscribed or template does not exist
+    ```json
+    {
+      "message": "Video uploaded and processed.",
+      "videoId": "uuid-string",
+      "videoUrl": "https://...",
+      "similarityScore": null,
+      "feedback": [],
+      "publishStatus": "pending"
+    }
+    ```
+
+### [content_creator] Check Video Submission for Template
+- **GET** `/content-creator/videos/submission?templateId={templateId}&userId={userId}`
+  - **Query Parameters:** `templateId`, `userId` (both required)
+  - **Response:**
+    - If submission exists: `{ videoId, videoUrl, similarityScore, feedback, publishStatus }`
+    - If no submission: `{ videoId: null }`
+  - **Errors:** 400 if required params missing, 500 if server error
+
+### [content_creator] Subscribe to a Template
+- **POST** `/content-creator/users/{userId}/subscribe?templateId=...`
+  - **Path Parameter:** `userId` (required)
+  - **Query Parameter:** `templateId` (required)
+  - **Response:** 200 OK if successful, 400 if already subscribed or template does not exist
+
+### [content_creator] Get All Subscribed Templates
+- **GET** `/content-creator/users/{userId}/subscribed-templates`
+  - **Path Parameter:** `userId` (required)
+  - **Response:** Array of template objects (same as `/content-manager/templates/{templateId}`)
+  - If a template was deleted, it is removed from the user's `subscribed_template` field.
+
+### [shared] Get Template Details
+- **GET** `/content-manager/templates/{templateId}`
+  - **Response:** Template object with details for the specified template.
+
+---
+
+## 5. Dependencies
+
+- Uses Firebase Admin SDK:
+  ```xml
+  <dependency>
+      <groupId>com.google.firebase</groupId>
+      <artifactId>firebase-admin</artifactId>
+      <version>9.2.0</version>
+  </dependency>
+  ```
+
+---
+
+**Legend:**
+- `[auth]`: Authentication endpoints
+- `[content_manager]`: Content Manager endpoints
+- `[content_creator]`: Content Creator endpoints
+- `[shared]`: Endpoints used by both roles or for shared resources
+
 
 - **GET** `/content-creator/users/{userId}/subscribed-templates`: Get all templates a user is subscribed to
   - **Path Parameter:**
@@ -108,10 +145,6 @@
     - If a template was deleted, it is automatically removed from the user's `subscribed_template` field.
 
   ```
-
-### Get Template Details
-- **GET** `/templates/{templateId}`
-- **Response:** Template object with details for the specified template.
 
 ### Delete Template
 - **DELETE** `/templates/{templateId}`
