@@ -24,7 +24,8 @@ public class VideoDaoImpl implements VideoDao {
         String videoId = UUID.randomUUID().toString();
         video.setId(videoId);
         
-        DocumentReference docRef = db.collection("videos").document(videoId);
+        // Store in 'exampleVideos' collection instead of 'videos'
+        DocumentReference docRef = db.collection("exampleVideos").document(videoId);
         ApiFuture<WriteResult> result = docRef.set(video);
         result.get(); // Wait for write to complete
         return video;
