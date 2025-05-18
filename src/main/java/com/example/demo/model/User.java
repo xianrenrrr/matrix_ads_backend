@@ -21,6 +21,7 @@ public class User {
         this.password = password;
         this.role = role;
         this.subscribed_Templates = new java.util.HashMap<>();
+        this.created_template = new java.util.HashMap<>();
         this.notifications = new java.util.HashMap<>();
     }
 
