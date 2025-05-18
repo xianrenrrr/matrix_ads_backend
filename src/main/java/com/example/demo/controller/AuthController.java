@@ -18,8 +18,8 @@ public class AuthController {
         if (userDao.findByUsername(user.getUsername()) != null) {
             throw new RuntimeException("Username already exists");
         }
-        if (userDao.findByEmail(user.getEmail()) != null) {
-            throw new RuntimeException("Email already exists");
+        if (userDao.findByEmailAndRole(user.getEmail(), user.getRole()) != null) {
+            throw new RuntimeException("Email already exists for this role");
         }
         user.setId(UUID.randomUUID().toString());
         // Initialize fields based on role for db.md compatibility

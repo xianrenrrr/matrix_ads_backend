@@ -44,6 +44,21 @@ public class UserDaoImpl implements UserDao {
     }
 
     @Override
+    public User findByEmailAndRole(String email, String role) {
+        try {
+            CollectionReference usersRef = db.collection("users");
+            Query query = usersRef.whereEqualTo("email", email).whereEqualTo("role", role).limit(1);
+            ApiFuture<QuerySnapshot> querySnapshot = query.get();
+            for (DocumentSnapshot document : querySnapshot.get().getDocuments()) {
+                return document.toObject(User.class);
+            }
+            return null;
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Failed to fetch user by email and role", e);
+        }
+    }
+
+    @Override
     public void save(User user) {
         try {
             DocumentReference docRef = db.collection("users").document(user.getId());
