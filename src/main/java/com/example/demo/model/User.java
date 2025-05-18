@@ -48,8 +48,8 @@ public class User {
     public java.util.Map<String, Boolean> getSubscribed_Templates() { return subscribed_Templates; }
     public void setSubscribed_Templates(java.util.Map<String, Boolean> subscribed_Templates) { this.subscribed_Templates = subscribed_Templates; }
 
-    public java.util.Map<String, Boolean> getcreated_Templates() { return created_Templates; }
-    public void setcreated_Templates(java.util.Map<String, Boolean> created_Templates) { this.created_Templates = created_Templates; }
+    public java.util.Map<String, Boolean> getCreated_Templates() { return created_Templates; }
+    public void setCreated_Templates(java.util.Map<String, Boolean> created_Templates) { this.created_Templates = created_Templates; }
 
     public java.util.Map<String, Notification> getNotifications() { return notifications; }
     public void setNotifications(java.util.Map<String, Notification> notifications) { this.notifications = notifications; }

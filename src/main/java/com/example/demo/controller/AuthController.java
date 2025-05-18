@@ -26,7 +26,7 @@ public class AuthController {
         if ("content_creator".equals(user.getRole())) {
             user.setSubscribed_Templates(new java.util.HashMap<>()); // Map<String, Boolean>
         } else if ("content_manager".equals(user.getRole())) {
-            user.setCreated_template(new java.util.HashMap<>()); // Map<String, Boolean>
+            user.setCreated_Templates(new java.util.HashMap<>()); // Map<String, Boolean>
         }
         user.setNotifications(new java.util.HashMap<>()); // Map<String, Notification>
         userDao.save(user);
