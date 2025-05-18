@@ -9,7 +9,7 @@ public class User {
 
     // New fields for db.md compatibility
     private java.util.Map<String, Boolean> subscribed_Templates;
-    private java.util.Map<String, Boolean> created_template;
+    private java.util.Map<String, Boolean> created_Templates;
     private java.util.Map<String, Notification> notifications;
 
     public User() {}
@@ -21,7 +21,7 @@ public class User {
         this.password = password;
         this.role = role;
         this.subscribed_Templates = new java.util.HashMap<>();
-        this.created_template = new java.util.HashMap<>();
+        this.created_Templates = new java.util.HashMap<>();
         this.notifications = new java.util.HashMap<>();
     }
 
@@ -48,8 +48,8 @@ public class User {
     public java.util.Map<String, Boolean> getSubscribed_Templates() { return subscribed_Templates; }
     public void setSubscribed_Templates(java.util.Map<String, Boolean> subscribed_Templates) { this.subscribed_Templates = subscribed_Templates; }
 
-    public java.util.Map<String, Boolean> getCreated_template() { return created_template; }
-    public void setCreated_template(java.util.Map<String, Boolean> created_template) { this.created_template = created_template; }
+    public java.util.Map<String, Boolean> getcreated_Templates() { return created_Templates; }
+    public void setcreated_Templates(java.util.Map<String, Boolean> created_Templates) { this.created_Templates = created_Templates; }
 
     public java.util.Map<String, Notification> getNotifications() { return notifications; }
     public void setNotifications(java.util.Map<String, Notification> notifications) { this.notifications = notifications; }
