@@ -7,6 +7,10 @@ public class User {
     private String password;
     private String role; // "content_creator" or "content_manager"
 
+    // New fields for db.md compatibility
+    private java.util.Map<String, Boolean> subscribedTemplates;
+    private java.util.Map<String, Notification> notifications;
+
     public User() {}
 
     public User(String id, String username, String email, String password, String role) {
@@ -15,6 +19,8 @@ public class User {
         this.email = email;
         this.password = password;
         this.role = role;
+        this.subscribedTemplates = new java.util.HashMap<>();
+        this.notifications = new java.util.HashMap<>();
     }
 
     // Optional: backward compatibility constructor
@@ -36,5 +42,11 @@ public class User {
 
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
+
+    public java.util.Map<String, Boolean> getSubscribedTemplates() { return subscribedTemplates; }
+    public void setSubscribedTemplates(java.util.Map<String, Boolean> subscribedTemplates) { this.subscribedTemplates = subscribedTemplates; }
+
+    public java.util.Map<String, Notification> getNotifications() { return notifications; }
+    public void setNotifications(java.util.Map<String, Notification> notifications) { this.notifications = notifications; }
 }
 

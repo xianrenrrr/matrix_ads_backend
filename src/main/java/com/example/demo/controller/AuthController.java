@@ -22,6 +22,9 @@ public class AuthController {
             throw new RuntimeException("Email already exists");
         }
         user.setId(UUID.randomUUID().toString());
+        // Initialize new fields for db.md compatibility
+        user.setSubscribedTemplates(new java.util.HashMap<>()); // Map<String, Boolean>
+        user.setNotifications(new java.util.HashMap<>()); // Map<String, Notification>
         userDao.save(user);
         user.setPassword(null); // Don't return password
         return user;
