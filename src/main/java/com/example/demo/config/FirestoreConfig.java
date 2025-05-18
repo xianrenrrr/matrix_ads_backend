@@ -17,7 +17,7 @@ public class FirestoreConfig {
     public Firestore getFirestore() throws IOException {
         if (FirebaseApp.getApps().isEmpty()) {
             FileInputStream serviceAccount =
-                new FileInputStream("/Users/2001l/Desktop/project/matrix_ads_backend/serviceAccountKey.json");
+                new FileInputStream("/Users/2001l/Desktop/project/matrix_ads/matrix_ads_backend/serviceAccountKey.json");
 
             FirebaseOptions options = FirebaseOptions.builder()
                 .setCredentials(GoogleCredentials.fromStream(serviceAccount))
