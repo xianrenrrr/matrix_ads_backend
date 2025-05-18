@@ -1,6 +1,7 @@
 package com.example.demo.controller.contentmanager;
 
 import com.example.demo.dao.TemplateDao;
+import com.example.demo.dao.UserDao;
 import com.example.demo.model.ManualTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -14,10 +15,12 @@ import java.util.concurrent.ExecutionException;
 @RequestMapping("/content-manager/templates")
 public class ContentManager {
     private final TemplateDao templateDao;
+    private final UserDao userDao;
 
     @Autowired
-    public ContentManager(TemplateDao templateDao) {
+    public ContentManager(TemplateDao templateDao, UserDao userDao) {
         this.templateDao = templateDao;
+        this.userDao = userDao;
     }
 
     @PostMapping
@@ -87,4 +90,38 @@ public class ContentManager {
             return ResponseEntity.internalServerError().build();
         }
     }
+
+    // Add a template to created_Templates
+    @PostMapping("/users/{userId}/created-template/{templateId}")
+    public ResponseEntity<Void> addCreatedTemplate(@PathVariable String userId, @PathVariable String templateId) {
+        try {
+            userDao.addCreatedTemplate(userId, templateId);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // Remove a template from created_Templates
+    @DeleteMapping("/users/{userId}/created-template/{templateId}")
+    public ResponseEntity<Void> removeCreatedTemplate(@PathVariable String userId, @PathVariable String templateId) {
+        try {
+            userDao.removeCreatedTemplate(userId, templateId);
+            return ResponseEntity.noContent().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // Get all templates in created_Templates
+    @GetMapping("/users/{userId}/created-template")
+    public ResponseEntity<java.util.Map<String, Boolean>> getCreatedTemplates(@PathVariable String userId) {
+        try {
+            java.util.Map<String, Boolean> createdTemplates = userDao.getCreatedTemplates(userId);
+            return ResponseEntity.ok(createdTemplates);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
 }
+
