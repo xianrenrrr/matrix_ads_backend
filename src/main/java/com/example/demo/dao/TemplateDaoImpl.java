@@ -60,10 +60,8 @@ public class TemplateDaoImpl implements TemplateDao {
                     }
                 }
                 // If the user never had the field, templateIds will be empty and a new field will be created.
-                if (!templateIds.contains(template.getId())) {
-                    templateIds.add(template.getId());
-                }
-                transaction.update(userRef, "created_Templates", templateIds);
+                // Use update with dot notation to add only the new templateId as a key to the map, preserving existing entries
+                transaction.update(userRef, "created_Templates." + template.getId(), true);
                 return null;
             }).get();
         }
