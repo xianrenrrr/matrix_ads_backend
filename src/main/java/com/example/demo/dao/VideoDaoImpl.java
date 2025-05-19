@@ -76,7 +76,7 @@ public class VideoDaoImpl implements VideoDao {
         
         // If template exists, update it with video ID
         if (templateId != null && !templateId.isEmpty()) {
-            DocumentReference templateRef = db.collection("video_template").document(templateId);
+            DocumentReference templateRef = db.collection("templates").document(templateId);
             ApiFuture<DocumentSnapshot> templateFuture = templateRef.get();
             DocumentSnapshot templateDocument = templateFuture.get();
             

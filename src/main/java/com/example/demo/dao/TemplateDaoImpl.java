@@ -20,7 +20,7 @@ public class TemplateDaoImpl implements TemplateDao {
 
     @Override
     public String createTemplate(ManualTemplate template) throws ExecutionException, InterruptedException {
-        DocumentReference docRef = db.collection("video_template").document();
+        DocumentReference docRef = db.collection("templates").document();
         template.setId(docRef.getId()); // Assign generated ID to the template
 
         // If videoId is provided, ensure it's saved in the template
@@ -42,7 +42,7 @@ public class TemplateDaoImpl implements TemplateDao {
         ApiFuture<WriteResult> result = docRef.set(template);
         result.get(); // Wait for write to complete
 
-        // --- Update user's video_template field ---
+        // --- Update user's templates field ---
         if (template.getUserId() != null && !template.getUserId().isEmpty()) {
             String userId = template.getUserId();
             DocumentReference userRef = db.collection("users").document(userId);
@@ -67,14 +67,14 @@ public class TemplateDaoImpl implements TemplateDao {
                 return null;
             }).get();
         }
-        // --- End update user's video_template field ---
+        // --- End update user's templates field ---
 
         return template.getId();
     }
 
     @Override
     public ManualTemplate getTemplate(String id) throws ExecutionException, InterruptedException {
-        DocumentReference docRef = db.collection("video_template").document(id);
+        DocumentReference docRef = db.collection("templates").document(id);
         ApiFuture<DocumentSnapshot> future = docRef.get();
         DocumentSnapshot document = future.get();
         if (document.exists()) {
@@ -85,7 +85,7 @@ public class TemplateDaoImpl implements TemplateDao {
     }
 
     public List<ManualTemplate> getTemplatesByUserId(String userId) throws ExecutionException, InterruptedException {
-        // Fetch the user's video_template list from users collection
+        // Fetch the user's templates list from users collection
         DocumentReference userRef = db.collection("users").document(userId);
         DocumentSnapshot userSnap = userRef.get().get();
         List<ManualTemplate> templates = new ArrayList<>();
@@ -97,11 +97,11 @@ public class TemplateDaoImpl implements TemplateDao {
                     templateIds.add((String) key);
                 }
             }
-            // Batch fetch templates from video_template collection using whereIn (10 at a time)
+            // Batch fetch templates from templates collection using whereIn (10 at a time)
             List<ManualTemplate> templatesBatch = new ArrayList<>();
             for (int i = 0; i < templateIds.size(); i += 10) {
                 List<String> batchIds = templateIds.subList(i, Math.min(i + 10, templateIds.size()));
-                Query query = db.collection("video_template").whereIn(FieldPath.documentId(), batchIds);
+                Query query = db.collection("templates").whereIn(FieldPath.documentId(), batchIds);
                 List<QueryDocumentSnapshot> docs = query.get().get().getDocuments();
                 for (QueryDocumentSnapshot doc : docs) {
                     ManualTemplate template = doc.toObject(ManualTemplate.class);
@@ -144,7 +144,7 @@ public class TemplateDaoImpl implements TemplateDao {
             throw new IllegalArgumentException("Template ID must not be null or empty for delete.");
         }
         try {
-            db.collection("video_template").document(id).delete().get(); // Wait until delete completes
+            db.collection("templates").document(id).delete().get(); // Wait until delete completes
             return true; // Successful deletion
         } catch (Exception e) {
             e.printStackTrace();

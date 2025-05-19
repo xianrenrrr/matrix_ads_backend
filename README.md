@@ -161,7 +161,7 @@ mvn spring-boot:run
 - **GET /videos/{videoId}:** Returns detailed information about a specific video.
 - **POST /templates endpoint:** Allows creation of new video templates by accepting a structured JSON payload that matches the frontend `manualTemplate` data model.
 - **ManualTemplate & Scene Models:** Java classes closely mirror the frontend structure, including support for scene-by-scene setup and the 3x3 grid overlay (with block numbers as `List<Integer>` and labels as `List<String>`).
-- **Firestore Integration:** Templates are stored in the `video_template` collection in Firestore. Collections and documents are created automatically on first insert; no manual DB setup required.
+- **Firestore Integration:** Templates are stored in the `templates` collection in Firestore. Collections and documents are created automatically on first insert; no manual DB setup required.
 - **User Authentication:** Added `/auth/signup` and `/auth/login` endpoints. Signup creates a user with a unique ID and role (either `content_creator` or `content_manager`).
 - **User Roles:** Each user has a role assigned at signup, which can be either `content_creator` or `content_manager`.
 - **Basic In-Memory User Storage:** (for now, users are stored in-memory; persistence can be upgraded later).

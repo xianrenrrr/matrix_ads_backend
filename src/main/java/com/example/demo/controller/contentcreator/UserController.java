@@ -20,7 +20,7 @@ public class UserController {
         System.out.println("[subscribeTemplate] Called with userId=" + userId + ", templateId=" + templateId);
         try {
             // Check if template exists
-            DocumentReference templateRef = db.collection("video_template").document(templateId);
+            DocumentReference templateRef = db.collection("templates").document(templateId);
             DocumentSnapshot templateSnap = templateRef.get().get();
             if (!templateSnap.exists()) {
                 System.out.println("[subscribeTemplate] Template with templateId=" + templateId + " does not exist. Subscription aborted.");
@@ -87,7 +87,7 @@ public class UserController {
             }
             List<String> validTemplateIds = new ArrayList<>();
             for (String templateId : templateIds) {
-                DocumentReference templateRef = db.collection("video_template").document(templateId);
+                DocumentReference templateRef = db.collection("templates").document(templateId);
                 DocumentSnapshot templateSnap = templateRef.get().get();
                 if (templateSnap.exists()) {
                     ManualTemplate template = templateSnap.toObject(ManualTemplate.class);
