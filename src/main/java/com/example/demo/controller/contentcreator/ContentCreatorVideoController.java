@@ -50,6 +50,10 @@ public class ContentCreatorVideoController {
             videoMeta.put("submittedAt", FieldValue.serverTimestamp());
             db.collection("submittedVideos").document(newVideoId).set(videoMeta);
 
+            // Update the template's submittedVideos field (map of userId: videoId)
+            DocumentReference templateDoc = db.collection("templates").document(templateId);
+            templateDoc.update("submittedVideos." + userId, newVideoId);
+
             // Optionally update user's subscribedTemplates
             DocumentReference userDoc = db.collection("users").document(userId);
             userDoc.update("subscribedTemplates." + templateId, true);
