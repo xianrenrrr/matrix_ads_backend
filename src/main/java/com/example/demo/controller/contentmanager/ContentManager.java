@@ -29,7 +29,8 @@ public class ContentManager {
         ManualTemplate manualTemplate = request.getManualTemplate();
         manualTemplate.setUserId(userId);
         try {
-            templateDao.createTemplate(manualTemplate);
+            String templateId = templateDao.createTemplate(manualTemplate);
+            userDao.addCreatedTemplate(userId, templateId); // Add templateId to created_template field in user doc
         } catch (Exception e) {
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
@@ -40,6 +41,7 @@ public class ContentManager {
     public ResponseEntity<List<TemplateSummary>> getTemplatesByUserId(@PathVariable String userId) {
         try {
             List<ManualTemplate> templates = templateDao.getTemplatesByUserId(userId);
+            System.out.println("Templates: " + templates);
             List<TemplateSummary> summaries = templates.stream()
                 .map(t -> new TemplateSummary(t.getId(), t.getTemplateTitle()))
                 .toList();
@@ -78,10 +80,11 @@ public class ContentManager {
     }
 
     @DeleteMapping("/{templateId}")
-    public ResponseEntity<Void> deleteTemplate(@PathVariable String templateId) {
+    public ResponseEntity<Void> deleteTemplate(@PathVariable String templateId, @RequestParam String userId) {
         try {
             boolean deleted = templateDao.deleteTemplate(templateId);
             if (deleted) {
+                userDao.removeCreatedTemplate(userId, templateId); // Remove templateId from created_template field in user doc
                 return ResponseEntity.noContent().build();
             } else {
                 return ResponseEntity.notFound().build();

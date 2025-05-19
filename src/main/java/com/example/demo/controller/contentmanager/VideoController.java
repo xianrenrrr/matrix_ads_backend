@@ -85,6 +85,7 @@ public class VideoController {
                         existingTemplate.setVideoId(savedVideo.getId());
                         templateDao.updateTemplate(templateId, existingTemplate);
                     }
+                    // No need to update user or template subcollections; created_template is managed in ContentManager.
                 }
             } catch (Exception e) {
                 System.err.println("Error creating template: " + e.getMessage());

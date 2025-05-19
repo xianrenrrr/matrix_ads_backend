@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 @Repository
@@ -48,8 +49,8 @@ public class TemplateDaoImpl implements TemplateDao {
             db.runTransaction(transaction -> {
                 DocumentSnapshot userSnap = transaction.get(userRef).get();
                 List<String> templateIds = new ArrayList<>();
-                if (userSnap.exists() && userSnap.contains("video_template")) {
-                    Object raw = userSnap.get("video_template");
+                if (userSnap.exists() && userSnap.contains("created_Templates")) {
+                    Object raw = userSnap.get("created_Templates");
                     if (raw instanceof List<?>) {
                         for (Object obj : (List<?>) raw) {
                             if (obj instanceof String) {
@@ -62,7 +63,7 @@ public class TemplateDaoImpl implements TemplateDao {
                 if (!templateIds.contains(template.getId())) {
                     templateIds.add(template.getId());
                 }
-                transaction.update(userRef, "video_template", templateIds);
+                transaction.update(userRef, "created_Templates", templateIds);
                 return null;
             }).get();
         }
@@ -88,34 +89,28 @@ public class TemplateDaoImpl implements TemplateDao {
         DocumentReference userRef = db.collection("users").document(userId);
         DocumentSnapshot userSnap = userRef.get().get();
         List<ManualTemplate> templates = new ArrayList<>();
-        boolean userFieldUpdated = false;
-        if (userSnap.exists() && userSnap.contains("video_template")) {
-            Object raw = userSnap.get("video_template");
+        if (userSnap.exists() && userSnap.contains("created_Templates")) {
+            Object raw = userSnap.get("created_Templates");
             List<String> templateIds = new ArrayList<>();
-            if (raw instanceof List<?>) {
-                for (Object obj : (List<?>) raw) {
-                    if (obj instanceof String) {
-                        templateIds.add((String) obj);
-                    }
+            if (raw instanceof Map<?, ?>) {
+                for (Object key : ((Map<?, ?>) raw).keySet()) {
+                    templateIds.add((String) key);
                 }
             }
-            List<String> validTemplateIds = new ArrayList<>();
-            for (String templateId : templateIds) {
-                DocumentReference templateRef = db.collection("video_template").document(templateId);
-                DocumentSnapshot templateSnap = templateRef.get().get();
-                if (templateSnap.exists()) {
-                    ManualTemplate template = templateSnap.toObject(ManualTemplate.class);
-                    templates.add(template);
-                    validTemplateIds.add(templateId);
-                } else {
-                    userFieldUpdated = true;
+            // Batch fetch templates from video_template collection using whereIn (10 at a time)
+            List<ManualTemplate> templatesBatch = new ArrayList<>();
+            for (int i = 0; i < templateIds.size(); i += 10) {
+                List<String> batchIds = templateIds.subList(i, Math.min(i + 10, templateIds.size()));
+                Query query = db.collection("video_template").whereIn(FieldPath.documentId(), batchIds);
+                List<QueryDocumentSnapshot> docs = query.get().get().getDocuments();
+                for (QueryDocumentSnapshot doc : docs) {
+                    ManualTemplate template = doc.toObject(ManualTemplate.class);
+                    templatesBatch.add(template);
                 }
             }
-            // If any template ids were missing, update the user's video_template field
-            if (userFieldUpdated) {
-                userRef.update("video_template", validTemplateIds);
-            }
+            templates.addAll(templatesBatch);
         }
+        System.out.println("Templates: " + templates);
         return templates;
     }
 

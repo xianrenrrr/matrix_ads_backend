@@ -1,5 +1,6 @@
 package com.example.demo.controller.contentcreator;
 
+import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import com.google.firebase.cloud.StorageClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,44 +30,29 @@ public class ContentCreatorVideoController {
             return ResponseEntity.badRequest().body("Missing required parameters.");
         }
         try {
-            // 1. Delete old video (if any)
-            CollectionReference submittedVideosCol = db.collection("video_template").document(templateId)
-                .collection("submittedVideos");
-            DocumentReference userVideoDocRef = submittedVideosCol.document(userId);
-            DocumentSnapshot userVideoSnap = userVideoDocRef.get().get();
-            String oldVideoId = null;
-            String oldVideoUrl = null;
-            if (userVideoSnap.exists() && userVideoSnap.contains("videoId")) {
-                oldVideoId = userVideoSnap.getString("videoId");
-                oldVideoUrl = userVideoSnap.getString("videoUrl");
-            }
-            if (oldVideoId != null && oldVideoUrl != null) {
-                // Delete Firestore doc
-                userVideoDocRef.delete();
-                // Delete GCS file
-                String bucketName = StorageClient.getInstance().bucket().getName();
-                String objectName = String.format("content-creator-videos/%s/%s/%s.mp4", userId, templateId, oldVideoId);
-                StorageClient.getInstance().bucket().getStorage().delete(bucketName, objectName);
-            }
-
-            // 2. Upload new video to GCS
+            // Upload new video to GCS
             String newVideoId = UUID.randomUUID().toString();
             String newObjectName = String.format("content-creator-videos/%s/%s/%s.mp4", userId, templateId, newVideoId);
             StorageClient.getInstance().bucket().create(newObjectName, file.getInputStream(), file.getContentType());
             String videoUrl = String.format("https://storage.googleapis.com/%s/%s", StorageClient.getInstance().bucket().getName(), newObjectName);
 
-            // 3. Store metadata in Firestore
+            // Store metadata in submittedVideos/{videoId}
             Map<String, Object> videoMeta = new HashMap<>();
             videoMeta.put("videoId", newVideoId);
+            videoMeta.put("templateId", templateId);
+            videoMeta.put("uploadedBy", userId);
             videoMeta.put("videoUrl", videoUrl);
-            videoMeta.put("createdAt", FieldValue.serverTimestamp());
-            videoMeta.put("published", false);
+            videoMeta.put("thumbnailUrl", null); // Add thumbnail logic if needed
             videoMeta.put("similarityScore", null);
             videoMeta.put("feedback", new ArrayList<>());
-            userVideoDocRef.set(videoMeta);
+            videoMeta.put("publishStatus", "pending");
+            videoMeta.put("requestedApproval", true);
+            videoMeta.put("submittedAt", FieldValue.serverTimestamp());
+            db.collection("submittedVideos").document(newVideoId).set(videoMeta);
 
-            // 4. [Placeholder for AI Check]
-            // TODO: Implement similarity check and feedback in future
+            // Optionally update user's subscribedTemplates
+            DocumentReference userDoc = db.collection("users").document(userId);
+            userDoc.update("subscribedTemplates." + templateId, true);
 
             Map<String, Object> response = new HashMap<>();
             response.put("message", "Video uploaded and processed.");
@@ -76,7 +62,7 @@ public class ContentCreatorVideoController {
             response.put("feedback", new ArrayList<>());
             response.put("publishStatus", "pending");
             return ResponseEntity.ok(response);
-        } catch (IOException | InterruptedException | ExecutionException e) {
+        } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to upload/process video: " + e.getMessage());
         }
     }
@@ -90,17 +76,19 @@ public class ContentCreatorVideoController {
             return ResponseEntity.badRequest().body("Missing required parameters.");
         }
         try {
-            CollectionReference submittedVideosCol = db.collection("video_template").document(templateId)
-                .collection("submittedVideos");
-            DocumentReference userVideoDocRef = submittedVideosCol.document(userId);
-            DocumentSnapshot userVideoSnap = userVideoDocRef.get().get();
-            if (userVideoSnap.exists() && userVideoSnap.contains("videoId")) {
+            // Query submittedVideos for a doc where templateId and uploadedBy match
+            CollectionReference submittedVideosCol = db.collection("submittedVideos");
+            Query query = submittedVideosCol.whereEqualTo("templateId", templateId).whereEqualTo("uploadedBy", userId).limit(1);
+            ApiFuture<QuerySnapshot> querySnapshot = query.get();
+            List<QueryDocumentSnapshot> documents = querySnapshot.get().getDocuments();
+            if (!documents.isEmpty()) {
+                DocumentSnapshot doc = documents.get(0);
                 Map<String, Object> response = new HashMap<>();
-                response.put("videoId", userVideoSnap.getString("videoId"));
-                response.put("videoUrl", userVideoSnap.getString("videoUrl"));
-                response.put("similarityScore", userVideoSnap.contains("similarityScore") ? userVideoSnap.get("similarityScore") : null);
-                response.put("feedback", userVideoSnap.contains("feedback") ? userVideoSnap.get("feedback") : new ArrayList<>());
-                response.put("publishStatus", userVideoSnap.contains("publishStatus") ? userVideoSnap.get("publishStatus") : "pending");
+                response.put("videoId", doc.getString("videoId"));
+                response.put("videoUrl", doc.getString("videoUrl"));
+                response.put("similarityScore", doc.contains("similarityScore") ? doc.get("similarityScore") : null);
+                response.put("feedback", doc.contains("feedback") ? doc.get("feedback") : new ArrayList<>());
+                response.put("publishStatus", doc.contains("publishStatus") ? doc.get("publishStatus") : "pending");
                 return ResponseEntity.ok(response);
             } else {
                 Map<String, Object> response = new HashMap<>();
