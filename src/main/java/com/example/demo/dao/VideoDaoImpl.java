@@ -33,7 +33,7 @@ public class VideoDaoImpl implements VideoDao {
 
     @Override
     public List<Video> getVideosByUserId(String userId) throws ExecutionException, InterruptedException {
-        ApiFuture<QuerySnapshot> future = db.collection("videos").whereEqualTo("userId", userId).get();
+        ApiFuture<QuerySnapshot> future = db.collection("exampleVideos").whereEqualTo("userId", userId).get();
         List<QueryDocumentSnapshot> documents = future.get().getDocuments();
         List<Video> videos = new ArrayList<>();
         for (QueryDocumentSnapshot document : documents) {
@@ -45,7 +45,7 @@ public class VideoDaoImpl implements VideoDao {
 
     @Override
     public Video getVideoById(String videoId) throws ExecutionException, InterruptedException {
-        DocumentReference docRef = db.collection("videos").document(videoId);
+        DocumentReference docRef = db.collection("exampleVideos").document(videoId);
         ApiFuture<DocumentSnapshot> future = docRef.get();
         DocumentSnapshot document = future.get();
         if (document.exists()) {
@@ -57,7 +57,7 @@ public class VideoDaoImpl implements VideoDao {
 
     @Override
     public void updateVideo(Video video) throws ExecutionException, InterruptedException {
-        DocumentReference docRef = db.collection("videos").document(video.getId());
+        DocumentReference docRef = db.collection("exampleVideos").document(video.getId());
         ApiFuture<WriteResult> result = docRef.set(video);
         result.get(); // Wait for write to complete
     }
@@ -70,7 +70,7 @@ public class VideoDaoImpl implements VideoDao {
         
         video.setTemplateId(templateId);
         
-        DocumentReference docRef = db.collection("videos").document(videoId);
+        DocumentReference docRef = db.collection("exampleVideos").document(videoId);
         ApiFuture<WriteResult> result = docRef.set(video);
         result.get(); // Wait for write to complete
         

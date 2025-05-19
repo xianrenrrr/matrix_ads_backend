@@ -48,10 +48,13 @@ public class VideoController {
                                              @RequestParam(value = "templateId", required = false) String templateId) {
         try {
             // Upload to Firebase Storage and extract thumbnail
-            com.example.demo.service.FirebaseStorageService.UploadResult result = firebaseStorageService.uploadVideoWithThumbnail(file, userId, null);
+            // Generate videoId first
+            String videoId = java.util.UUID.randomUUID().toString();
+            com.example.demo.service.FirebaseStorageService.UploadResult result = firebaseStorageService.uploadVideoWithThumbnail(file, userId, videoId);
 
             // Create video
             Video video = new Video();
+            video.setId(videoId);
             video.setUserId(userId);
             video.setTitle(title);
             video.setDescription(description);
@@ -62,8 +65,8 @@ public class VideoController {
             // Determine template creation strategy
             try {
                 if (templateId == null) {
-                    System.out.printf("No templateId provided, generating AI template for video ID: {}", savedVideo.getId());
-                    // Always attempt to generate an AI template
+                    // No templateId provided, generate a new template using AI and associate it to the video
+                    System.out.printf("No templateId provided, generating AI template for video ID: %s\n", savedVideo.getId());
                     ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo);
                     aiGeneratedTemplate.setUserId(userId);
                     aiGeneratedTemplate.setVideoId(savedVideo.getId());
