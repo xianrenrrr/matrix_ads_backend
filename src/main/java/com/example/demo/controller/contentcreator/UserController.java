@@ -1,6 +1,7 @@
 package com.example.demo.controller.contentcreator;
 
 import com.example.demo.model.ManualTemplate;
+import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -103,6 +104,19 @@ public class UserController {
             }
         }
         return ResponseEntity.ok(templates);
+    }
+
+    // Get all submissions for a content creator user
+    @GetMapping("/users/{userId}/submissions")
+    public ResponseEntity<List<Map<String, Object>>> getMySubmissions(@PathVariable String userId) throws ExecutionException, InterruptedException {
+        CollectionReference submittedVideosRef = db.collection("submittedVideos");
+        Query query = submittedVideosRef.whereEqualTo("uploadedBy", userId);
+        List<Map<String, Object>> submissions = new ArrayList<>();
+        ApiFuture<QuerySnapshot> querySnapshot = query.get();
+        for (DocumentSnapshot doc : querySnapshot.get().getDocuments()) {
+            submissions.add(doc.getData());
+        }
+        return ResponseEntity.ok(submissions);
     }
 
         // Inject TemplateDao for template access
