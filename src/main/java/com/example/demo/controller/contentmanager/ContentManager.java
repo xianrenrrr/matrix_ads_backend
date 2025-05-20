@@ -3,17 +3,46 @@ package com.example.demo.controller.contentmanager;
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.UserDao;
 import com.example.demo.model.ManualTemplate;
+import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/content-manager/templates")
 public class ContentManager {
+    @Autowired
+    private com.google.cloud.firestore.Firestore db;
+
+    // --- Submissions grouped by status ---
+    @GetMapping("/submissions")
+    public ResponseEntity<Map<String, List<Map<String, Object>>>> getAllSubmissions() throws Exception {
+        com.google.cloud.firestore.CollectionReference submissionsRef = db.collection("submittedVideos");
+        com.google.api.core.ApiFuture<com.google.cloud.firestore.QuerySnapshot> querySnapshot = submissionsRef.get();
+        List<Map<String, Object>> pending = new ArrayList<>();
+        List<Map<String, Object>> approved = new ArrayList<>();
+        List<Map<String, Object>> rejected = new ArrayList<>();
+        for (com.google.cloud.firestore.DocumentSnapshot doc : querySnapshot.get().getDocuments()) {
+            Map<String, Object> data = doc.getData();
+            if (data == null) continue;
+            String status = (String) data.getOrDefault("publishStatus", "pending");
+            if ("approved".equalsIgnoreCase(status)) {
+                approved.add(data);
+            } else if ("rejected".equalsIgnoreCase(status)) {
+                rejected.add(data);
+            } else {
+                pending.add(data);
+            }
+        }
+        Map<String, List<Map<String, Object>>> result = new HashMap<>();
+        result.put("pending", pending);
+        result.put("approved", approved);
+        result.put("rejected", rejected);
+        return ResponseEntity.ok(result);
+    }
     private final TemplateDao templateDao;
     private final UserDao userDao;
 
