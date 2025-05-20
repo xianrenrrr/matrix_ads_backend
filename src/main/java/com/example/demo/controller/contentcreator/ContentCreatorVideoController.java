@@ -25,7 +25,7 @@ public class ContentCreatorVideoController {
             @RequestParam("file") MultipartFile file,
             @RequestParam("templateId") String templateId,
             @RequestParam("userId") String userId
-    ) {
+    ) throws ExecutionException, InterruptedException {
         if (file == null || file.isEmpty() || !StringUtils.hasText(templateId) || !StringUtils.hasText(userId)) {
             return ResponseEntity.badRequest().body("Missing required parameters.");
         }
@@ -57,6 +57,25 @@ public class ContentCreatorVideoController {
             // Optionally update user's subscribedTemplates
             DocumentReference userDoc = db.collection("users").document(userId);
             userDoc.update("subscribedTemplates." + templateId, true);
+
+            // --- Add notification to content manager (template owner) ---
+            // Fetch template to get owner
+            DocumentSnapshot templateSnap = templateDoc.get().get();
+            if (templateSnap.exists() && templateSnap.contains("userId")) {
+                String ownerId = templateSnap.getString("userId");
+                if (ownerId != null && !ownerId.isEmpty()) {
+                    DocumentReference ownerDoc = db.collection("users").document(ownerId);
+                    String notifId = UUID.randomUUID().toString();
+                    Map<String, Object> notif = new HashMap<>();
+                    notif.put("type", "new_submission");
+                    notif.put("message", "New video submission received for your template by user: " + userId);
+                    notif.put("templateId", templateId);
+                    notif.put("submittedBy", userId);
+                    notif.put("timestamp", System.currentTimeMillis());
+                    notif.put("read", false);
+                    ownerDoc.update("notifications." + notifId, notif);
+                }
+            }
 
             Map<String, Object> response = new HashMap<>();
             response.put("message", "Video uploaded and processed.");

@@ -17,6 +17,7 @@ public class ContentManager {
     @Autowired
     private com.google.cloud.firestore.Firestore db;
 
+
     // --- Submissions grouped by status ---
     @GetMapping("/submissions")
     public ResponseEntity<Map<String, List<Map<String, Object>>>> getAllSubmissions() throws Exception {

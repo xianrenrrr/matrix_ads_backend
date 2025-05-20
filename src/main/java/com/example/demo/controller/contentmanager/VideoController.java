@@ -35,10 +35,53 @@ public class VideoController {
     private VideoDao videoDao;
 
     @Autowired
-    private TemplateDao templateDao; // Add this field
+    private TemplateDao templateDao; 
 
     @Autowired
     private com.example.demo.service.FirebaseStorageService firebaseStorageService;
+
+    @Autowired
+    private com.google.cloud.firestore.Firestore db;
+
+    @PostMapping("/{videoId}/approve")
+    public ResponseEntity<String> approveVideo(@PathVariable String videoId) throws Exception {
+        com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
+        com.google.cloud.firestore.DocumentSnapshot videoSnap = videoRef.get().get();
+        if (!videoSnap.exists()) return ResponseEntity.notFound().build();
+        String creatorId = (String) videoSnap.get("uploadedBy");
+        videoRef.update("publishStatus", "approved");
+        // Send notification to creator
+        com.google.cloud.firestore.DocumentReference userRef = db.collection("users").document(creatorId);
+        String notifId = java.util.UUID.randomUUID().toString();
+        java.util.Map<String, Object> notif = new java.util.HashMap<>();
+        notif.put("type", "video_approved");
+        notif.put("message", "Your video was approved by the manager.");
+        notif.put("timestamp", System.currentTimeMillis());
+        notif.put("read", false);
+        userRef.update("notifications." + notifId, notif);
+        return ResponseEntity.ok("Video approved and creator notified.");
+    }
+
+    @PostMapping("/{videoId}/reject")
+    public ResponseEntity<String> rejectVideo(@PathVariable String videoId, @RequestBody java.util.Map<String, String> body) throws Exception {
+        com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
+        com.google.cloud.firestore.DocumentSnapshot videoSnap = videoRef.get().get();
+        if (!videoSnap.exists()) return ResponseEntity.notFound().build();
+        String creatorId = (String) videoSnap.get("uploadedBy");
+        String reason = body.getOrDefault("reason", "No reason provided");
+        String suggestion = body.getOrDefault("suggestion", "");
+        videoRef.update("publishStatus", "rejected", "reason", reason, "suggestion", suggestion);
+        // Send notification to creator
+        com.google.cloud.firestore.DocumentReference userRef = db.collection("users").document(creatorId);
+        String notifId = java.util.UUID.randomUUID().toString();
+        java.util.Map<String, Object> notif = new java.util.HashMap<>();
+        notif.put("type", "video_rejected");
+        notif.put("message", "Your video was rejected. Reason: " + reason + (suggestion.isEmpty() ? "" : ". Suggestion: " + suggestion));
+        notif.put("timestamp", System.currentTimeMillis());
+        notif.put("read", false);
+        userRef.update("notifications." + notifId, notif);
+        return ResponseEntity.ok("Video rejected and creator notified.");
+    }
 
     @PostMapping("/upload")
     public ResponseEntity<Video> uploadVideo(@RequestParam("file") MultipartFile file,
