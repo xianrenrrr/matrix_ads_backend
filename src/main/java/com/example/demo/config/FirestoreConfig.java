@@ -16,13 +16,16 @@ public class FirestoreConfig {
     @Bean
     public Firestore getFirestore() throws IOException {
         if (FirebaseApp.getApps().isEmpty()) {
-            FileInputStream serviceAccount =
-                new FileInputStream("/Users/2001l/Desktop/project/matrix_ads/matrix_ads_backend/serviceAccountKey.json");
-
+            String credentialsJson = System.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON");
+            if (credentialsJson == null) {
+                throw new IllegalStateException("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON env variable");
+            }
+            GoogleCredentials credentials = GoogleCredentials.fromStream(
+                new java.io.ByteArrayInputStream(credentialsJson.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+            );
             FirebaseOptions options = FirebaseOptions.builder()
-                .setCredentials(GoogleCredentials.fromStream(serviceAccount))
+                .setCredentials(credentials)
                 .build();
-
             FirebaseApp.initializeApp(options);
         }
         return FirestoreClient.getFirestore();

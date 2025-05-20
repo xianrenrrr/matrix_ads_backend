@@ -21,15 +21,19 @@ public class FirebaseConfig {
 
     @PostConstruct
     public void init() throws IOException {
-        try (FileInputStream serviceAccount = new FileInputStream(serviceAccountKeyPath)) {
-            FirebaseOptions options = FirebaseOptions.builder()
-                .setCredentials(GoogleCredentials.fromStream(serviceAccount))
-                .setStorageBucket(storageBucket)
-                .build();
-
-            if (FirebaseApp.getApps().isEmpty()) {
-                FirebaseApp.initializeApp(options);
-            }
+        String credentialsJson = System.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON");
+        if (credentialsJson == null) {
+            throw new IllegalStateException("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON env variable");
+        }
+        GoogleCredentials credentials = GoogleCredentials.fromStream(
+            new java.io.ByteArrayInputStream(credentialsJson.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+        );
+        FirebaseOptions options = FirebaseOptions.builder()
+            .setCredentials(credentials)
+            .setStorageBucket(storageBucket)
+            .build();
+        if (FirebaseApp.getApps().isEmpty()) {
+            FirebaseApp.initializeApp(options);
         }
     }
 }
