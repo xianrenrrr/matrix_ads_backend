@@ -1,4 +1,4 @@
-package com.example.demo.ai;
+package com.example.demo.ai.shared;
 
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;

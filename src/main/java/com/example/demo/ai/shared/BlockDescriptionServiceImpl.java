@@ -1,4 +1,4 @@
-package com.example.demo.ai;
+package com.example.demo.ai.shared;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;

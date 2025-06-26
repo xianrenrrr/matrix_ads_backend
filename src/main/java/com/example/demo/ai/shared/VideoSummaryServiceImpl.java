@@ -1,4 +1,4 @@
-package com.example.demo.ai;
+package com.example.demo.ai.shared;
 
 import com.example.demo.model.Video;
 import org.springframework.beans.factory.annotation.Value;

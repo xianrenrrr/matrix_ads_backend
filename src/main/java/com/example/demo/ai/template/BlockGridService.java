@@ -1,4 +1,4 @@
-package com.example.demo.ai;
+package com.example.demo.ai.template;
 
 import java.util.Map;
 

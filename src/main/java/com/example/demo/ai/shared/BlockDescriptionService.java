@@ -1,4 +1,4 @@
-package com.example.demo.ai;
+package com.example.demo.ai.shared;
 
 import java.util.Map;
 

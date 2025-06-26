@@ -1,4 +1,4 @@
-package com.example.demo.ai;
+package com.example.demo.ai.template;
 
 import com.example.demo.model.SceneSegment;
 import com.google.cloud.storage.Blob;
