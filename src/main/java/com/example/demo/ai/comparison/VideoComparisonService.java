@@ -1,29 +1,42 @@
 package com.example.demo.ai.comparison;
 
-import com.example.demo.model.Video;
+import com.example.demo.model.ManualTemplate;
+import java.util.List;
+import java.util.Map;
 
 /**
- * Task 2: Video Comparison Service
+ * Video Comparison Service
  * 
- * This service will handle AI-powered video comparison features:
- * - Compare two videos for similarity
- * - Analyze differences in content, style, and composition
- * - Generate comparison reports
- * 
- * Can utilize shared services:
- * - KeyframeExtractionService (for extracting frames to compare)
- * - BlockDescriptionService (for analyzing frame content)
- * - VideoSummaryService (for summarizing differences)
+ * This service handles AI-powered video comparison using semantic embeddings:
+ * - Compare template videos with user-submitted videos
+ * - Calculate similarity scores at block, scene, and overall levels
+ * - Generate detailed comparison reports
  */
 public interface VideoComparisonService {
     
     /**
-     * Compare two videos and return similarity score (0.0 - 1.0)
+     * Compare a user video against a reference template using processed scenes
+     * @param templateScenes List of template scenes with block descriptions
+     * @param userScenes List of user video scenes with block descriptions
+     * @return Comprehensive comparison result
      */
-    double compareVideos(Video video1, Video video2);
+    ComparisonResult compareVideoToTemplate(
+        List<Map<String, String>> templateScenes, 
+        List<Map<String, String>> userScenes
+    );
     
     /**
-     * Generate detailed comparison report
+     * Compare two processed templates directly
+     * @param template1 First template with scene descriptions
+     * @param template2 Second template with scene descriptions  
+     * @return Similarity score between templates
      */
-    String generateComparisonReport(Video video1, Video video2);
+    ComparisonResult compareTemplates(ManualTemplate template1, ManualTemplate template2);
+    
+    /**
+     * Generate a detailed comparison report in text format
+     * @param result Comparison result from compareVideoToTemplate
+     * @return Human-readable comparison report
+     */
+    String generateComparisonReport(ComparisonResult result);
 }
