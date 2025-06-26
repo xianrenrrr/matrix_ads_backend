@@ -31,4 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Security - API Keys and Secrets ###
 serviceAccountKey.json
+.env
+application-dev.properties
+application-local.properties
+*.env

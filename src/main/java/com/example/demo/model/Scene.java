@@ -1,6 +1,8 @@
 package com.example.demo.model;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 public class Scene {
     private int sceneNumber;
@@ -19,6 +21,13 @@ public class Scene {
     private String audioNotes;
     private String exampleFrame;
     private String otherNotes;
+    
+    // New AI-generated fields
+    private Duration startTime;
+    private Duration endTime;
+    private String keyframeUrl;
+    private Map<String, String> blockImageUrls;
+    private Map<String, String> blockDescriptions;
 
     public Scene() {
     }
@@ -149,5 +158,46 @@ public class Scene {
 
     public void setOtherNotes(String otherNotes) {
         this.otherNotes = otherNotes;
+    }
+    
+    // Getters and setters for new AI fields
+    public Duration getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(Duration startTime) {
+        this.startTime = startTime;
+    }
+
+    public Duration getEndTime() {
+        return endTime;
+    }
+
+    public void setEndTime(Duration endTime) {
+        this.endTime = endTime;
+    }
+
+    public String getKeyframeUrl() {
+        return keyframeUrl;
+    }
+
+    public void setKeyframeUrl(String keyframeUrl) {
+        this.keyframeUrl = keyframeUrl;
+    }
+
+    public Map<String, String> getBlockImageUrls() {
+        return blockImageUrls;
+    }
+
+    public void setBlockImageUrls(Map<String, String> blockImageUrls) {
+        this.blockImageUrls = blockImageUrls;
+    }
+
+    public Map<String, String> getBlockDescriptions() {
+        return blockDescriptions;
+    }
+
+    public void setBlockDescriptions(Map<String, String> blockDescriptions) {
+        this.blockDescriptions = blockDescriptions;
     }
 }
