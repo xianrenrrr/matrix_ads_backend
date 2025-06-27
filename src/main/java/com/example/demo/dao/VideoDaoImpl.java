@@ -16,8 +16,14 @@ import java.util.concurrent.ExecutionException;
 
 @Repository
 public class VideoDaoImpl implements VideoDao {
-    @Autowired
+    @Autowired(required = false)
     private Firestore db;
+    
+    private void checkFirestore() {
+        if (db == null) {
+            throw new IllegalStateException("Firestore is not available in development mode. Please configure Firebase credentials or use a different data source.");
+        }
+    }
 
     @Override
     public Video saveVideo(Video video) throws ExecutionException, InterruptedException {

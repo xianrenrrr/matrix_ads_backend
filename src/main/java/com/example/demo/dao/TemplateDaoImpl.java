@@ -14,12 +14,19 @@ import java.util.concurrent.ExecutionException;
 @Repository
 public class TemplateDaoImpl implements TemplateDao {
 
-    @Autowired
+    @Autowired(required = false)
     private Firestore db;
+    
+    private void checkFirestore() {
+        if (db == null) {
+            throw new IllegalStateException("Firestore is not available in development mode. Please configure Firebase credentials or use a different data source.");
+        }
+    }
 
 
     @Override
     public String createTemplate(ManualTemplate template) throws ExecutionException, InterruptedException {
+        checkFirestore();
         DocumentReference docRef = db.collection("templates").document();
         template.setId(docRef.getId()); // Assign generated ID to the template
 
@@ -72,6 +79,7 @@ public class TemplateDaoImpl implements TemplateDao {
 
     @Override
     public ManualTemplate getTemplate(String id) throws ExecutionException, InterruptedException {
+        checkFirestore();
         DocumentReference docRef = db.collection("templates").document(id);
         ApiFuture<DocumentSnapshot> future = docRef.get();
         DocumentSnapshot document = future.get();

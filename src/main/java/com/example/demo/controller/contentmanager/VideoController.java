@@ -9,8 +9,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import com.example.demo.ai.AITemplateGenerator;
-import com.example.demo.ai.DefaultAITemplateGenerator;
+import com.example.demo.ai.template.AITemplateGenerator;
+import com.example.demo.ai.template.DefaultAITemplateGenerator;
 
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -37,10 +37,10 @@ public class VideoController {
     @Autowired
     private TemplateDao templateDao; 
 
-    @Autowired
+    @Autowired(required = false)
     private com.example.demo.service.FirebaseStorageService firebaseStorageService;
 
-    @Autowired
+    @Autowired(required = false)
     private com.google.cloud.firestore.Firestore db;
 
     @PostMapping("/{videoId}/approve")

@@ -1,6 +1,7 @@
 package com.example.demo.model;
 
-
+import java.util.List;
+import java.util.Map;
 
 public class Video {
     private String id;
@@ -11,11 +12,15 @@ public class Video {
     private String thumbnailUrl;
 
     private String templateId;
+    private List<Map<String, Object>> aiGeneratedScenes;
 
     public Video() {}
 
     public String getTemplateId() { return templateId; }
     public void setTemplateId(String templateId) { this.templateId = templateId; }
+
+    public List<Map<String, Object>> getAiGeneratedScenes() { return aiGeneratedScenes; }
+    public void setAiGeneratedScenes(List<Map<String, Object>> aiGeneratedScenes) { this.aiGeneratedScenes = aiGeneratedScenes; }
 
     public Video(String id, String userId, String title, String description, String url, String thumbnailUrl, String templateId) {
         this.id = id;

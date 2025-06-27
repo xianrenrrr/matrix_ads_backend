@@ -3,6 +3,8 @@ package com.example.demo.service;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -14,13 +16,14 @@ import java.nio.channels.WritableByteChannel;
 import com.google.firebase.cloud.StorageClient;
 
 @Service
+@ConditionalOnProperty(name = "firebase.enabled", havingValue = "true")
 public class FirebaseStorageService {
     private final Storage storage;
     private final String bucketName;
 
-    public FirebaseStorageService() {
-        this.storage = StorageClient.getInstance().bucket("matrix_ads_video").getStorage();
-        this.bucketName = "matrix_ads_video";
+    public FirebaseStorageService(@Value("${firebase.storage.bucket}") String bucketName) {
+        this.storage = StorageClient.getInstance().bucket(bucketName).getStorage();
+        this.bucketName = bucketName;
     }
 
     public static class UploadResult {
