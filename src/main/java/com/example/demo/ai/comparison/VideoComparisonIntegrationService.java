@@ -36,18 +36,16 @@ public class VideoComparisonIntegrationService {
         try {
             System.out.printf("Retrieving template scenes for ID: %s%n", templateId);
             
-            // Get template from DAO (you'll need to implement getTemplateById in TemplateDao)
-            // ManualTemplate template = templateDao.getTemplateById(templateId);
+            ManualTemplate template = templateDao.getTemplate(templateId);
+            if (template == null) {
+                System.err.printf("Template not found: %s%n", templateId);
+                return new ArrayList<>();
+            }
             
-            // For now, we'll return an example - you need to implement the actual DAO method
-            System.out.printf("Template retrieval not yet implemented for ID: %s%n", templateId);
+            System.out.printf("Found template: %s%n", template.getTemplateTitle());
+            return extractScenesFromTemplate(template);
             
-            // TODO: Implement actual template retrieval
-            // return extractScenesFromTemplate(template);
-            
-            return createExampleTemplateScenes(); // Placeholder for testing
-            
-        } catch (Exception e) {
+        } catch (ExecutionException | InterruptedException e) {
             System.err.printf("Error retrieving template %s: %s%n", templateId, e.getMessage());
             return new ArrayList<>();
         }
@@ -69,18 +67,29 @@ public class VideoComparisonIntegrationService {
             
             System.out.printf("Found video: %s%n", video.getTitle());
             
-            // TODO: This assumes you have a way to get the processed scenes from Task 1
-            // You might need to:
-            // 1. Store the AI-generated template ID in the Video model
-            // 2. Retrieve the generated template using video.getTemplateId()
-            // 3. Extract scenes from that template
-            
-            if (video.getTemplateId() != null) {
+            // Check if video has an associated AI-generated template from Task 1
+            if (video.getTemplateId() != null && !video.getTemplateId().isEmpty()) {
+                System.out.printf("Video has associated template ID: %s%n", video.getTemplateId());
                 return getTemplateScenesById(video.getTemplateId());
             }
             
-            // Fallback: Return example scenes for testing
-            return createExampleUserScenes();
+            // If no template ID, look for AI-generated scenes stored directly on the video
+            // This would be populated by Task 1 AI Template Generator
+            if (video.getAiGeneratedScenes() != null && !video.getAiGeneratedScenes().isEmpty()) {
+                System.out.printf("Using AI-generated scenes stored on video%n");
+                List<Map<String, String>> scenes = new ArrayList<>();
+                for (Map<String, Object> sceneData : video.getAiGeneratedScenes()) {
+                    Map<String, String> scene = new HashMap<>();
+                    for (Map.Entry<String, Object> entry : sceneData.entrySet()) {
+                        scene.put(entry.getKey(), entry.getValue().toString());
+                    }
+                    scenes.add(scene);
+                }
+                return scenes;
+            }
+            
+            System.out.printf("No processed scenes found for video %s, returning empty list%n", videoId);
+            return new ArrayList<>();
             
         } catch (ExecutionException | InterruptedException e) {
             System.err.printf("Error retrieving video %s: %s%n", videoId, e.getMessage());
