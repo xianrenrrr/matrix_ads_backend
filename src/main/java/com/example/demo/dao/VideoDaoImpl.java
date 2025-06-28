@@ -51,14 +51,23 @@ public class VideoDaoImpl implements VideoDao {
 
     @Override
     public Video getVideoById(String videoId) throws ExecutionException, InterruptedException {
+        // First try exampleVideos collection
         DocumentReference docRef = db.collection("exampleVideos").document(videoId);
         ApiFuture<DocumentSnapshot> future = docRef.get();
         DocumentSnapshot document = future.get();
         if (document.exists()) {
             return document.toObject(Video.class);
-        } else {
-            return null;
         }
+        
+        // If not found, try submittedVideos collection
+        DocumentReference submittedDocRef = db.collection("submittedVideos").document(videoId);
+        ApiFuture<DocumentSnapshot> submittedFuture = submittedDocRef.get();
+        DocumentSnapshot submittedDocument = submittedFuture.get();
+        if (submittedDocument.exists()) {
+            return submittedDocument.toObject(Video.class);
+        }
+        
+        return null;
     }
 
     @Override

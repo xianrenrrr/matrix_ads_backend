@@ -26,7 +26,7 @@ public class VideoSimilarityController {
     @Autowired
     private EditSuggestionService editSuggestionService;
     
-    @Autowired(required = false)
+    @Autowired
     private VideoDao videoDao;
     
     @Autowired(required = false)
@@ -37,36 +37,54 @@ public class VideoSimilarityController {
      */
     @GetMapping("/analyze/{videoId}")
     public ResponseEntity<VideoAnalysisResponse> analyzeVideo(@PathVariable String videoId) {
+        System.out.println("Analyze endpoint called with videoId: " + videoId);
         try {
             if (videoDao == null) {
+                System.out.println("VideoDao is null, returning mock data");
                 return ResponseEntity.ok(createMockAnalysis(videoId));
             }
 
-            // Get video details
-            Video video = videoDao.getVideoById(videoId);
-            if (video == null) {
+            // Get submitted video details
+            System.out.println("Getting submitted video details for ID: " + videoId);
+            Video submittedVideo = videoDao.getVideoById(videoId);
+            if (submittedVideo == null) {
+                System.out.println("Submitted video not found, returning 404");
                 return ResponseEntity.notFound().build();
             }
+            System.out.println("Submitted video found with templateId: " + submittedVideo.getTemplateId());
 
-            // Get template details if available
+            // Get template details
             ManualTemplate template = null;
-            if (video.getTemplateId() != null && templateDao != null) {
-                template = templateDao.getTemplate(video.getTemplateId());
+            Video exampleVideo = null;
+            if (submittedVideo.getTemplateId() != null && templateDao != null) {
+                template = templateDao.getTemplate(submittedVideo.getTemplateId());
+                if (template != null && template.getVideoId() != null) {
+                    // Get the example video for this template
+                    exampleVideo = videoDao.getVideoById(template.getVideoId());
+                    System.out.println("Found example video: " + (exampleVideo != null ? exampleVideo.getId() : "null"));
+                }
             }
 
-            // Get similarity analysis
-            List<Map<String, String>> userScenes = videoComparisonService.getUserVideoScenesById(videoId);
-            List<Map<String, String>> templateScenes = template != null ? 
-                videoComparisonService.getTemplateScenesById(video.getTemplateId()) : null;
+            // Get similarity analysis comparing submitted video with example video
+            List<Map<String, String>> userScenes = null;
+            List<Map<String, String>> exampleScenes = null;
+            
+            if (exampleVideo != null) {
+                System.out.println("Comparing submitted video URL: " + submittedVideo.getUrl());
+                System.out.println("With example video URL: " + exampleVideo.getUrl());
+                
+                userScenes = videoComparisonService.getUserVideoScenesById(videoId);
+                exampleScenes = videoComparisonService.getUserVideoScenesById(exampleVideo.getId());
+            }
 
-            // Calculate overall similarity (mock for now)
-            double overallSimilarity = calculateOverallSimilarity(userScenes, templateScenes);
+            // Calculate overall similarity between submitted and example video
+            double overallSimilarity = calculateOverallSimilarity(userScenes, exampleScenes);
 
-            // Generate edit suggestions
+            // Generate edit suggestions based on comparison with example video
             List<String> suggestions = null;
-            if (templateScenes != null && !templateScenes.isEmpty()) {
+            if (exampleScenes != null && !exampleScenes.isEmpty() && userScenes != null && !userScenes.isEmpty()) {
                 EditSuggestionService.EditSuggestionRequest suggestionRequest = createSuggestionRequest(
-                    templateScenes.get(0), userScenes.get(0), overallSimilarity);
+                    exampleScenes.get(0), userScenes.get(0), overallSimilarity);
                 EditSuggestionService.EditSuggestionResponse suggestionResponse = 
                     editSuggestionService.generateSuggestions(suggestionRequest);
                 suggestions = suggestionResponse.getSuggestions();
@@ -77,7 +95,7 @@ public class VideoSimilarityController {
             response.overallSimilarity = overallSimilarity;
             response.templateTitle = template != null ? template.getTemplateTitle() : "Unknown Template";
             response.suggestions = suggestions != null ? suggestions : List.of("No suggestions available");
-            response.detailedAnalysis = createDetailedAnalysis(userScenes, templateScenes);
+            response.detailedAnalysis = createDetailedAnalysis(userScenes, exampleScenes);
 
             return ResponseEntity.ok(response);
 
