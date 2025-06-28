@@ -7,6 +7,10 @@ import com.example.demo.dao.VideoDao;
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.model.Video;
 import com.example.demo.model.ManualTemplate;
+import com.google.api.core.ApiFuture;
+import com.google.cloud.firestore.DocumentReference;
+import com.google.cloud.firestore.DocumentSnapshot;
+import com.google.cloud.firestore.Firestore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -31,6 +35,9 @@ public class VideoSimilarityController {
     
     @Autowired(required = false)
     private TemplateDao templateDao;
+    
+    @Autowired
+    private Firestore db;
 
     /**
      * Get similarity analysis and edit suggestions for a video submission
@@ -44,58 +51,55 @@ public class VideoSimilarityController {
                 return ResponseEntity.ok(createMockAnalysis(videoId));
             }
 
-            // Get submitted video details
-            System.out.println("Getting submitted video details for ID: " + videoId);
-            Video submittedVideo = videoDao.getVideoById(videoId);
-            if (submittedVideo == null) {
+            // Get submitted video from submittedVideos collection
+            System.out.println("Retrieving pre-computed analysis for video ID: " + videoId);
+            
+            // Query submittedVideos collection directly since that's where the analysis is stored
+            DocumentReference docRef = db.collection("submittedVideos").document(videoId);
+            ApiFuture<DocumentSnapshot> future = docRef.get();
+            DocumentSnapshot document = future.get();
+            
+            if (!document.exists()) {
                 System.out.println("Submitted video not found, returning 404");
                 return ResponseEntity.notFound().build();
             }
-            System.out.println("Submitted video found with templateId: " + submittedVideo.getTemplateId());
-
-            // Get template details
-            ManualTemplate template = null;
-            Video exampleVideo = null;
-            if (submittedVideo.getTemplateId() != null && templateDao != null) {
-                template = templateDao.getTemplate(submittedVideo.getTemplateId());
-                if (template != null && template.getVideoId() != null) {
-                    // Get the example video for this template
-                    exampleVideo = videoDao.getVideoById(template.getVideoId());
-                    System.out.println("Found example video: " + (exampleVideo != null ? exampleVideo.getId() : "null"));
+            
+            // Extract pre-computed data from feedback object
+            Map<String, Object> feedback = (Map<String, Object>) document.get("feedback");
+            String templateId = document.getString("templateId");
+            
+            double overallSimilarity = 0.0;
+            List<String> suggestions = List.of("No suggestions available");
+            String templateTitle = "Unknown Template";
+            
+            if (feedback != null) {
+                Object similarityObj = feedback.get("similarityScore");
+                if (similarityObj instanceof Number) {
+                    overallSimilarity = ((Number) similarityObj).doubleValue();
+                }
+                
+                Object suggestionsObj = feedback.get("suggestions");
+                if (suggestionsObj instanceof List) {
+                    suggestions = (List<String>) suggestionsObj;
                 }
             }
-
-            // Get similarity analysis comparing submitted video with example video
-            List<Map<String, String>> userScenes = null;
-            List<Map<String, String>> exampleScenes = null;
             
-            if (exampleVideo != null) {
-                System.out.println("Comparing submitted video URL: " + submittedVideo.getUrl());
-                System.out.println("With example video URL: " + exampleVideo.getUrl());
-                
-                userScenes = videoComparisonService.getUserVideoScenesById(videoId);
-                exampleScenes = videoComparisonService.getUserVideoScenesById(exampleVideo.getId());
+            // Get template title
+            if (templateId != null && templateDao != null) {
+                ManualTemplate template = templateDao.getTemplate(templateId);
+                if (template != null) {
+                    templateTitle = template.getTemplateTitle();
+                }
             }
-
-            // Calculate overall similarity between submitted and example video
-            double overallSimilarity = calculateOverallSimilarity(userScenes, exampleScenes);
-
-            // Generate edit suggestions based on comparison with example video
-            List<String> suggestions = null;
-            if (exampleScenes != null && !exampleScenes.isEmpty() && userScenes != null && !userScenes.isEmpty()) {
-                EditSuggestionService.EditSuggestionRequest suggestionRequest = createSuggestionRequest(
-                    exampleScenes.get(0), userScenes.get(0), overallSimilarity);
-                EditSuggestionService.EditSuggestionResponse suggestionResponse = 
-                    editSuggestionService.generateSuggestions(suggestionRequest);
-                suggestions = suggestionResponse.getSuggestions();
-            }
+            
+            System.out.println("Retrieved similarity: " + overallSimilarity + ", suggestions: " + suggestions.size());
 
             VideoAnalysisResponse response = new VideoAnalysisResponse();
             response.videoId = videoId;
             response.overallSimilarity = overallSimilarity;
-            response.templateTitle = template != null ? template.getTemplateTitle() : "Unknown Template";
-            response.suggestions = suggestions != null ? suggestions : List.of("No suggestions available");
-            response.detailedAnalysis = createDetailedAnalysis(userScenes, exampleScenes);
+            response.templateTitle = templateTitle;
+            response.suggestions = suggestions;
+            response.detailedAnalysis = createDetailedAnalysis(null, null); // Mock detailed analysis
 
             return ResponseEntity.ok(response);
 
