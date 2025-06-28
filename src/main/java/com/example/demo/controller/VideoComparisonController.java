@@ -17,7 +17,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/comparison")
-@CrossOrigin(origins = "*")
 public class VideoComparisonController {
 
     @Autowired

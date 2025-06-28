@@ -18,7 +18,6 @@ import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/api/video-similarity")
-@CrossOrigin(origins = "*")
 public class VideoSimilarityController {
 
     @Autowired
