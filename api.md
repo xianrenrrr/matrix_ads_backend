@@ -31,6 +31,57 @@
   - **Response:** User object (`id`, `username`, `email`, `role`)
   - **Errors:** 400 if credentials are invalid or neither username/email provided
 
+### [auth] Generate QR Code for Mini Program Login
+- **POST** `/auth/generate-qr`
+  - **Request Body:**
+    ```json
+    {
+      "userId": "string"
+    }
+    ```
+  - **Response:**
+    ```json
+    {
+      "success": true,
+      "tokenId": "string",
+      "qrData": {
+        "token": "string",
+        "userId": "string",
+        "platform": "miniprogram",
+        "expiresAt": "2024-01-01T10:00:00"
+      },
+      "expiresAt": "2024-01-01T10:00:00",
+      "expiresInMinutes": 5
+    }
+    ```
+  - **Errors:** 400 if user not found or not content creator
+
+### [auth] Verify QR Code Login
+- **POST** `/auth/qr-login`
+  - **Request Body:**
+    ```json
+    {
+      "token": "string",
+      "userId": "string",
+      "platform": "miniprogram"
+    }
+    ```
+  - **Response:**
+    ```json
+    {
+      "success": true,
+      "token": "jwt_token_string",
+      "user": {
+        "id": "string",
+        "username": "string",
+        "email": "string",
+        "role": "content_creator"
+      },
+      "message": "Login successful"
+    }
+    ```
+  - **Errors:** 400 if QR code expired, invalid, or already used
+
 ---
 
 ## 2. Content Manager Endpoints
