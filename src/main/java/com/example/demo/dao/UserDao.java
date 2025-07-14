@@ -6,6 +6,7 @@ public interface UserDao {
     User findByUsername(String username);
     User findByEmail(String email);
     User findByEmailAndRole(String email, String role);
+    User findById(String id);
     void save(User user);
 
     // Content Manager: manage created_Templates

@@ -59,6 +59,21 @@ public class UserDaoImpl implements UserDao {
     }
 
     @Override
+    public User findById(String id) {
+        try {
+            DocumentReference docRef = db.collection("users").document(id);
+            ApiFuture<DocumentSnapshot> documentSnapshot = docRef.get();
+            DocumentSnapshot document = documentSnapshot.get();
+            if (document.exists()) {
+                return document.toObject(User.class);
+            }
+            return null;
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Failed to fetch user by id", e);
+        }
+    }
+
+    @Override
     public void save(User user) {
         try {
             DocumentReference docRef = db.collection("users").document(user.getId());
