@@ -9,7 +9,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
-@CrossOrigin(origins = {"http://localhost:4040", "http://localhost:3000"})
+@CrossOrigin(origins = "*")
 public class QRLoginController {
     
     @Autowired
