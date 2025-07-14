@@ -9,9 +9,9 @@ public class CorsConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-            .allowedOriginPatterns("https://matrix-ads-frontend.onrender.com", "http://localhost:4040")
+            .allowedOriginPatterns("https://matrix-ads-frontend.onrender.com", "http://localhost:4040", "*")
             .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
             .allowedHeaders("*")
-            .allowCredentials(true);
+            .allowCredentials(false);
     }
 }
