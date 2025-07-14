@@ -8,6 +8,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/auth")
+@CrossOrigin(origins = "*")
 public class AuthController {
     @Autowired
     private UserDao userDao;
@@ -35,19 +36,57 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public User login(@RequestBody User loginRequest) {
-        User user = null;
-        // Allow login by either username or email
-        if (loginRequest.getUsername() != null && !loginRequest.getUsername().isEmpty()) {
-            user = userDao.findByUsername(loginRequest.getUsername());
+    public java.util.Map<String, Object> login(@RequestBody java.util.Map<String, String> loginRequest) {
+        try {
+            String usernameOrEmail = loginRequest.get("username");
+            String password = loginRequest.get("password");
+            
+            if (usernameOrEmail == null || usernameOrEmail.trim().isEmpty()) {
+                throw new RuntimeException("Username or email is required");
+            }
+            if (password == null || password.trim().isEmpty()) {
+                throw new RuntimeException("Password is required");
+            }
+            
+            User user = null;
+            // Try to find by username first, then by email
+            user = userDao.findByUsername(usernameOrEmail.trim());
+            if (user == null) {
+                user = userDao.findByEmail(usernameOrEmail.trim());
+            }
+            
+            if (user == null) {
+                throw new RuntimeException("User not found");
+            }
+            
+            if (!password.equals(user.getPassword())) {
+                throw new RuntimeException("Invalid password");
+            }
+            
+            // Generate access token
+            String token = "token_" + UUID.randomUUID().toString() + "_" + System.currentTimeMillis();
+            
+            // Create user response without password
+            java.util.Map<String, Object> userResponse = new java.util.HashMap<>();
+            userResponse.put("id", user.getId());
+            userResponse.put("username", user.getUsername());
+            userResponse.put("email", user.getEmail());
+            userResponse.put("role", user.getRole());
+            
+            // Return response matching mini program expectations
+            java.util.Map<String, Object> response = new java.util.HashMap<>();
+            response.put("success", true);
+            response.put("token", token);
+            response.put("user", userResponse);
+            response.put("message", "Login successful");
+            
+            return response;
+            
+        } catch (Exception e) {
+            java.util.Map<String, Object> errorResponse = new java.util.HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", e.getMessage());
+            return errorResponse;
         }
-        if (user == null && loginRequest.getEmail() != null && !loginRequest.getEmail().isEmpty()) {
-            user = userDao.findByEmail(loginRequest.getEmail());
-        }
-        if (user == null || !user.getPassword().equals(loginRequest.getPassword())) {
-            throw new RuntimeException("Invalid username/email or password");
-        }
-        user.setPassword(null); // Don't return password
-        return user;
     }
 }
