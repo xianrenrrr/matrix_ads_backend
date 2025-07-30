@@ -15,23 +15,23 @@ import java.util.Map;
 @Service
 public class BlockDescriptionServiceImpl implements BlockDescriptionService {
     
-    @Value("${openai.api.key:}")
-    private String openaiApiKey;
+    @Value("${deepseek.api.key:}")
+    private String deepseekApiKey;
     
-    private static final String OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+    private static final String DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Override
     public Map<String, String> describeBlocks(Map<String, String> blockImageUrls) {
-        System.out.printf("Describing %d image blocks using GPT-4o%n", blockImageUrls.size());
+        System.out.printf("Describing %d image blocks using DeepSeek-VL%n", blockImageUrls.size());
         
         Map<String, String> blockDescriptions = new HashMap<>();
         
-        if (openaiApiKey == null || openaiApiKey.trim().isEmpty()) {
-            System.err.println("OpenAI API key not configured. Using fallback descriptions.");
+        if (deepseekApiKey == null || deepseekApiKey.trim().isEmpty()) {
+            System.err.println("DeepSeek API key not configured. Using fallback descriptions.");
             // Provide fallback descriptions
             for (String blockKey : blockImageUrls.keySet()) {
-                blockDescriptions.put(blockKey, "Image content description not available (API key not configured)");
+                blockDescriptions.put(blockKey, "Image content description not available (DeepSeek API key not configured)");
             }
             return blockDescriptions;
         }
@@ -59,18 +59,19 @@ public class BlockDescriptionServiceImpl implements BlockDescriptionService {
     
     private String describeImage(String imageUrl) {
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + openaiApiKey);
+        headers.set("Authorization", "Bearer " + deepseekApiKey);
         headers.set("Content-Type", "application/json");
         
-        // Build request body for GPT-4o with vision
+        // Build request body for DeepSeek-VL with vision
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", "gpt-4o");
+        requestBody.put("model", "deepseek-vl");
         requestBody.put("max_tokens", 100);
+        requestBody.put("temperature", 0.3);
         
         Map<String, Object> message = new HashMap<>();
         message.put("role", "user");
         
-        // Content with text and image
+        // Content with text and image for DeepSeek format
         Map<String, Object> textContent = new HashMap<>();
         textContent.put("type", "text");
         textContent.put("text", "Describe the visual content of this image in one concise sentence. Focus on the main objects, people, or elements visible.");
@@ -88,7 +89,7 @@ public class BlockDescriptionServiceImpl implements BlockDescriptionService {
         
         try {
             ResponseEntity<Map> response = restTemplate.exchange(
-                OPENAI_API_URL, 
+                DEEPSEEK_API_URL, 
                 HttpMethod.POST, 
                 request, 
                 Map.class
@@ -99,15 +100,15 @@ public class BlockDescriptionServiceImpl implements BlockDescriptionService {
                 List<Map<String, Object>> choices = (List<Map<String, Object>>) responseBody.get("choices");
                 if (!choices.isEmpty()) {
                     Map<String, Object> firstChoice = choices.get(0);
-                    Map<String, Object> message1 = (Map<String, Object>) firstChoice.get("message");
-                    return (String) message1.get("content");
+                    Map<String, Object> messageResponse = (Map<String, Object>) firstChoice.get("message");
+                    return (String) messageResponse.get("content");
                 }
             }
             
             return "No description available";
             
         } catch (Exception e) {
-            System.err.printf("Error calling GPT-4o API for image %s: %s%n", imageUrl, e.getMessage());
+            System.err.printf("Error calling DeepSeek-VL API for image %s: %s%n", imageUrl, e.getMessage());
             throw new RuntimeException("Failed to describe image", e);
         }
     }
