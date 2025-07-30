@@ -48,232 +48,30 @@ Standard Commons Logging discovery in action with spring-jcl: please remove comm
  =========|_|==============|___/=/_/_/_/
 [32m :: Spring Boot :: [39m              [2m (v3.2.1)[0;39m
 
-[2m2025-07-11T18:11:19.973-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mcom.example.demo.DemoApplication        [0;39m [2m:[0;39m Starting DemoApplication using Java 24.0.1 with PID 7768 (/Users/liqiyang/Desktop/project/matrix_ads/matrix_ads_backend/target/classes started by liqiyang in /Users/liqiyang/Desktop/project/matrix_ads/matrix_ads_backend)
-[2m2025-07-11T18:11:19.974-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mcom.example.demo.DemoApplication        [0;39m [2m:[0;39m No active profile set, falling back to 1 default profile: "default"
-[2m2025-07-11T18:11:19.992-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36m.e.DevToolsPropertyDefaultsPostProcessor[0;39m [2m:[0;39m Devtools property defaults active! Set 'spring.devtools.add-properties' to 'false' to disable
-[2m2025-07-11T18:11:19.992-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36m.e.DevToolsPropertyDefaultsPostProcessor[0;39m [2m:[0;39m For additional web related logging consider setting the 'logging.level.web' property to 'DEBUG'
+[2m2025-07-21T11:13:06.610-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mcom.example.demo.DemoApplication        [0;39m [2m:[0;39m Starting DemoApplication using Java 24.0.1 with PID 80137 (/Users/liqiyang/Desktop/project/matrix_ads/matrix_ads_backend/target/classes started by liqiyang in /Users/liqiyang/Desktop/project/matrix_ads/matrix_ads_backend)
+[2m2025-07-21T11:13:06.612-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mcom.example.demo.DemoApplication        [0;39m [2m:[0;39m No active profile set, falling back to 1 default profile: "default"
+[2m2025-07-21T11:13:06.631-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36m.e.DevToolsPropertyDefaultsPostProcessor[0;39m [2m:[0;39m Devtools property defaults active! Set 'spring.devtools.add-properties' to 'false' to disable
+[2m2025-07-21T11:13:06.631-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36m.e.DevToolsPropertyDefaultsPostProcessor[0;39m [2m:[0;39m For additional web related logging consider setting the 'logging.level.web' property to 'DEBUG'
 WARNING: A restricted method in java.lang.System has been called
 WARNING: java.lang.System::load has been called by org.apache.tomcat.jni.Library in an unnamed module (file:/Users/liqiyang/.m2/repository/org/apache/tomcat/embed/tomcat-embed-core/10.1.17/tomcat-embed-core-10.1.17.jar)
 WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
 WARNING: Restricted methods will be blocked in a future release unless native access is enabled
 
-[2m2025-07-11T18:11:20.289-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mo.s.b.w.embedded.tomcat.TomcatWebServer [0;39m [2m:[0;39m Tomcat initialized with port 8080 (http)
-[2m2025-07-11T18:11:20.294-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mo.apache.catalina.core.StandardService  [0;39m [2m:[0;39m Starting service [Tomcat]
-[2m2025-07-11T18:11:20.294-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mo.apache.catalina.core.StandardEngine   [0;39m [2m:[0;39m Starting Servlet engine: [Apache Tomcat/10.1.17]
-[2m2025-07-11T18:11:20.305-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mo.a.c.c.C.[Tomcat].[localhost].[/]      [0;39m [2m:[0;39m Initializing Spring embedded WebApplicationContext
-[2m2025-07-11T18:11:20.305-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mw.s.c.ServletWebServerApplicationContext[0;39m [2m:[0;39m Root WebApplicationContext: initialization completed in 313 ms
+[2m2025-07-21T11:13:06.950-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mo.s.b.w.embedded.tomcat.TomcatWebServer [0;39m [2m:[0;39m Tomcat initialized with port 8080 (http)
+[2m2025-07-21T11:13:06.955-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mo.apache.catalina.core.StandardService  [0;39m [2m:[0;39m Starting service [Tomcat]
+[2m2025-07-21T11:13:06.955-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mo.apache.catalina.core.StandardEngine   [0;39m [2m:[0;39m Starting Servlet engine: [Apache Tomcat/10.1.17]
+[2m2025-07-21T11:13:06.966-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mo.a.c.c.C.[Tomcat].[localhost].[/]      [0;39m [2m:[0;39m Initializing Spring embedded WebApplicationContext
+[2m2025-07-21T11:13:06.966-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mw.s.c.ServletWebServerApplicationContext[0;39m [2m:[0;39m Root WebApplicationContext: initialization completed in 335 ms
 Standard Commons Logging discovery in action with spring-jcl: please remove commons-logging.jar from classpath in order to avoid potential conflicts
 WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
 WARNING: sun.misc.Unsafe::objectFieldOffset has been called by io.grpc.netty.shaded.io.netty.util.internal.PlatformDependent0$4 (file:/Users/liqiyang/.m2/repository/io/grpc/grpc-netty-shaded/1.62.2/grpc-netty-shaded-1.62.2.jar)
 WARNING: Please consider reporting this to the maintainers of class io.grpc.netty.shaded.io.netty.util.internal.PlatformDependent0$4
 WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
-[2m2025-07-11T18:11:20.834-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mo.s.b.d.a.OptionalLiveReloadServer      [0;39m [2m:[0;39m LiveReload server is running on port 35729
-[2m2025-07-11T18:11:20.840-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mo.s.b.w.embedded.tomcat.TomcatWebServer [0;39m [2m:[0;39m Tomcat started on port 8080 (http) with context path ''
-[2m2025-07-11T18:11:20.843-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mcom.example.demo.DemoApplication        [0;39m [2m:[0;39m Started DemoApplication in 0.976 seconds (process running for 1.11)
-[2m2025-07-11T18:14:55.284-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mo.a.c.c.C.[Tomcat].[localhost].[/]      [0;39m [2m:[0;39m Initializing Spring DispatcherServlet 'dispatcherServlet'
-[2m2025-07-11T18:14:55.284-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mo.s.web.servlet.DispatcherServlet       [0;39m [2m:[0;39m Initializing Servlet 'dispatcherServlet'
-[2m2025-07-11T18:14:55.285-04:00[0;39m [32m INFO[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mo.s.web.servlet.DispatcherServlet       [0;39m [2m:[0;39m Completed initialization in 1 ms
-[2m2025-07-11T18:14:56.413-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@34c99f46, com.example.demo.model.ManualTemplate@45cf286]
-Templates: [com.example.demo.model.ManualTemplate@34c99f46, com.example.demo.model.ManualTemplate@45cf286]
-[2m2025-07-11T18:14:56.666-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-4][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@6ebfc38f, com.example.demo.model.ManualTemplate@4025c884]
-Templates: [com.example.demo.model.ManualTemplate@6ebfc38f, com.example.demo.model.ManualTemplate@4025c884]
-[2m2025-07-11T18:14:58.551-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-5][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@127a63c9, com.example.demo.model.ManualTemplate@e740637]
-Templates: [com.example.demo.model.ManualTemplate@127a63c9, com.example.demo.model.ManualTemplate@e740637]
-[2m2025-07-11T18:14:58.779-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-6][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@bc227a6, com.example.demo.model.ManualTemplate@10c98f9c]
-Templates: [com.example.demo.model.ManualTemplate@bc227a6, com.example.demo.model.ManualTemplate@10c98f9c]
-[2m2025-07-11T18:15:02.751-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-9][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@25faf0a0, com.example.demo.model.ManualTemplate@3458dc23]
-Templates: [com.example.demo.model.ManualTemplate@25faf0a0, com.example.demo.model.ManualTemplate@3458dc23]
-[2m2025-07-11T18:15:03.013-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [io-8080-exec-10][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@5a5a799a, com.example.demo.model.ManualTemplate@1dc8a916]
-Templates: [com.example.demo.model.ManualTemplate@5a5a799a, com.example.demo.model.ManualTemplate@1dc8a916]
-Analyze endpoint called with videoId: 4ab78a12-1718-4c74-92ef-0104985d591d
-Retrieving pre-computed analysis for video ID: 4ab78a12-1718-4c74-92ef-0104985d591d
-[2m2025-07-11T18:23:04.801-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-4][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@501dbd0, com.example.demo.model.ManualTemplate@7a8f420]
-Templates: [com.example.demo.model.ManualTemplate@501dbd0, com.example.demo.model.ManualTemplate@7a8f420]
-[2m2025-07-11T18:23:05.058-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-1][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@13994a7e, com.example.demo.model.ManualTemplate@672a9bd0]
-Templates: [com.example.demo.model.ManualTemplate@13994a7e, com.example.demo.model.ManualTemplate@672a9bd0]
-[2m2025-07-11T18:39:46.103-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@41976c01, com.example.demo.model.ManualTemplate@17aae0be]
-Templates: [com.example.demo.model.ManualTemplate@41976c01, com.example.demo.model.ManualTemplate@17aae0be]
-[2m2025-07-11T18:39:46.342-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-6][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@57346e0e, com.example.demo.model.ManualTemplate@ae48c9]
-Templates: [com.example.demo.model.ManualTemplate@57346e0e, com.example.demo.model.ManualTemplate@ae48c9]
-[2m2025-07-11T18:39:47.426-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-8][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@1f816115, com.example.demo.model.ManualTemplate@44192bf1]
-Templates: [com.example.demo.model.ManualTemplate@1f816115, com.example.demo.model.ManualTemplate@44192bf1]
-[2m2025-07-11T18:39:47.664-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [io-8080-exec-10][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@5c763de7, com.example.demo.model.ManualTemplate@4dd6898e]
-Templates: [com.example.demo.model.ManualTemplate@5c763de7, com.example.demo.model.ManualTemplate@4dd6898e]
-[2m2025-07-11T18:49:05.943-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-1][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@42da4379, com.example.demo.model.ManualTemplate@1e887ddc]
-Templates: [com.example.demo.model.ManualTemplate@42da4379, com.example.demo.model.ManualTemplate@1e887ddc]
-[2m2025-07-11T18:49:06.252-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@121050e3, com.example.demo.model.ManualTemplate@324962ef]
-Templates: [com.example.demo.model.ManualTemplate@121050e3, com.example.demo.model.ManualTemplate@324962ef]
-[2m2025-07-11T18:49:07.321-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-6][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@25f22e33, com.example.demo.model.ManualTemplate@34d50ae7]
-Templates: [com.example.demo.model.ManualTemplate@25f22e33, com.example.demo.model.ManualTemplate@34d50ae7]
-[2m2025-07-11T18:49:07.552-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@2cca7915, com.example.demo.model.ManualTemplate@298ff174]
-Templates: [com.example.demo.model.ManualTemplate@2cca7915, com.example.demo.model.ManualTemplate@298ff174]
-[2m2025-07-11T18:49:54.357-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-3][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@29036fd2, com.example.demo.model.ManualTemplate@4f054c49]
-Templates: [com.example.demo.model.ManualTemplate@29036fd2, com.example.demo.model.ManualTemplate@4f054c49]
-[2m2025-07-11T18:49:54.586-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@6973300f, com.example.demo.model.ManualTemplate@4c90615c]
-Templates: [com.example.demo.model.ManualTemplate@6973300f, com.example.demo.model.ManualTemplate@4c90615c]
-[2m2025-07-11T18:49:55.888-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-6][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@3a4a641e, com.example.demo.model.ManualTemplate@1a40e4ea]
-Templates: [com.example.demo.model.ManualTemplate@3a4a641e, com.example.demo.model.ManualTemplate@1a40e4ea]
-[2m2025-07-11T18:49:56.215-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@70b1d37f, com.example.demo.model.ManualTemplate@294c5cb0]
-Templates: [com.example.demo.model.ManualTemplate@70b1d37f, com.example.demo.model.ManualTemplate@294c5cb0]
-[2m2025-07-11T18:57:49.447-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-4][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@82d0e7, com.example.demo.model.ManualTemplate@2ba74508]
-Templates: [com.example.demo.model.ManualTemplate@82d0e7, com.example.demo.model.ManualTemplate@2ba74508]
-[2m2025-07-11T18:57:49.686-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-3][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@1ba05319, com.example.demo.model.ManualTemplate@eb02d90]
-Templates: [com.example.demo.model.ManualTemplate@1ba05319, com.example.demo.model.ManualTemplate@eb02d90]
-[2m2025-07-11T18:57:50.709-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@b8b6206, com.example.demo.model.ManualTemplate@5a2e0813]
-Templates: [com.example.demo.model.ManualTemplate@b8b6206, com.example.demo.model.ManualTemplate@5a2e0813]
-[2m2025-07-11T18:57:50.938-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-6][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@5d55bf65, com.example.demo.model.ManualTemplate@f9576d3]
-Templates: [com.example.demo.model.ManualTemplate@5d55bf65, com.example.demo.model.ManualTemplate@f9576d3]
-[2m2025-07-11T18:57:58.338-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-1][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@5ad62f0e, com.example.demo.model.ManualTemplate@2974f71d]
-Templates: [com.example.demo.model.ManualTemplate@5ad62f0e, com.example.demo.model.ManualTemplate@2974f71d]
-[2m2025-07-11T18:57:58.570-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-3][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@41e9df90, com.example.demo.model.ManualTemplate@2253f795]
-Templates: [com.example.demo.model.ManualTemplate@41e9df90, com.example.demo.model.ManualTemplate@2253f795]
-[2m2025-07-11T18:58:02.148-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@2641acba, com.example.demo.model.ManualTemplate@75d336ad]
-Templates: [com.example.demo.model.ManualTemplate@2641acba, com.example.demo.model.ManualTemplate@75d336ad]
-[2m2025-07-11T18:58:02.402-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-6][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@342457e, com.example.demo.model.ManualTemplate@62c0468f]
-Templates: [com.example.demo.model.ManualTemplate@342457e, com.example.demo.model.ManualTemplate@62c0468f]
-[2m2025-07-11T18:58:07.848-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-5][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@339c3dde, com.example.demo.model.ManualTemplate@349a07ca]
-Templates: [com.example.demo.model.ManualTemplate@339c3dde, com.example.demo.model.ManualTemplate@349a07ca]
-[2m2025-07-11T18:58:08.114-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-3][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@124ac61f, com.example.demo.model.ManualTemplate@45dd539f]
-Templates: [com.example.demo.model.ManualTemplate@124ac61f, com.example.demo.model.ManualTemplate@45dd539f]
-[2m2025-07-11T19:00:18.093-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [io-8080-exec-10][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@13672295, com.example.demo.model.ManualTemplate@ef0b9bc]
-Templates: [com.example.demo.model.ManualTemplate@13672295, com.example.demo.model.ManualTemplate@ef0b9bc]
-[2m2025-07-11T19:00:18.326-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-4][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@213dfb70, com.example.demo.model.ManualTemplate@534d7ea4]
-Templates: [com.example.demo.model.ManualTemplate@213dfb70, com.example.demo.model.ManualTemplate@534d7ea4]
-[2m2025-07-11T19:00:18.829-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-1][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@46b1b64a, com.example.demo.model.ManualTemplate@a05c8bf]
-Templates: [com.example.demo.model.ManualTemplate@46b1b64a, com.example.demo.model.ManualTemplate@a05c8bf]
-[2m2025-07-11T19:00:19.058-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-5][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@11f136a6, com.example.demo.model.ManualTemplate@54cb779a]
-Templates: [com.example.demo.model.ManualTemplate@11f136a6, com.example.demo.model.ManualTemplate@54cb779a]
-[2m2025-07-11T19:00:29.213-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@198f6981, com.example.demo.model.ManualTemplate@18505d8d]
-Templates: [com.example.demo.model.ManualTemplate@198f6981, com.example.demo.model.ManualTemplate@18505d8d]
-[2m2025-07-11T19:00:29.509-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-4][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@76379739, com.example.demo.model.ManualTemplate@552f36a0]
-Templates: [com.example.demo.model.ManualTemplate@76379739, com.example.demo.model.ManualTemplate@552f36a0]
-[2m2025-07-11T19:02:32.577-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-9][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@7225954a, com.example.demo.model.ManualTemplate@18b57758]
-Templates: [com.example.demo.model.ManualTemplate@7225954a, com.example.demo.model.ManualTemplate@18b57758]
-[2m2025-07-11T19:02:32.812-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [io-8080-exec-10][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@599dd90f, com.example.demo.model.ManualTemplate@5bcb387d]
-Templates: [com.example.demo.model.ManualTemplate@599dd90f, com.example.demo.model.ManualTemplate@5bcb387d]
-[2m2025-07-11T19:09:43.958-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-3][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@6e7e04bf, com.example.demo.model.ManualTemplate@6966f6ba]
-Templates: [com.example.demo.model.ManualTemplate@6e7e04bf, com.example.demo.model.ManualTemplate@6966f6ba]
-[2m2025-07-11T19:09:44.205-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-6][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@13dc0ff5, com.example.demo.model.ManualTemplate@7227cc9e]
-Templates: [com.example.demo.model.ManualTemplate@13dc0ff5, com.example.demo.model.ManualTemplate@7227cc9e]
-[2m2025-07-11T19:09:52.140-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-3][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@36b8cb7a, com.example.demo.model.ManualTemplate@32d7f47f]
-Templates: [com.example.demo.model.ManualTemplate@36b8cb7a, com.example.demo.model.ManualTemplate@32d7f47f]
-[2m2025-07-11T19:09:52.371-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-6][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@2d498345, com.example.demo.model.ManualTemplate@382d6aa1]
-Templates: [com.example.demo.model.ManualTemplate@2d498345, com.example.demo.model.ManualTemplate@382d6aa1]
-[2m2025-07-11T19:09:53.278-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-8][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@3c6de814, com.example.demo.model.ManualTemplate@6ad2b36c]
-Templates: [com.example.demo.model.ManualTemplate@3c6de814, com.example.demo.model.ManualTemplate@6ad2b36c]
-[2m2025-07-11T19:09:53.510-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-9][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@1eedac25, com.example.demo.model.ManualTemplate@7e4706ff]
-Templates: [com.example.demo.model.ManualTemplate@1eedac25, com.example.demo.model.ManualTemplate@7e4706ff]
-[2m2025-07-11T19:10:18.198-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [io-8080-exec-10][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@302febb1, com.example.demo.model.ManualTemplate@27ca9868]
-Templates: [com.example.demo.model.ManualTemplate@302febb1, com.example.demo.model.ManualTemplate@27ca9868]
-[2m2025-07-11T19:10:18.427-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-4][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@39da49db, com.example.demo.model.ManualTemplate@5f940676]
-Templates: [com.example.demo.model.ManualTemplate@39da49db, com.example.demo.model.ManualTemplate@5f940676]
-[2m2025-07-11T19:10:37.287-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@149bba3, com.example.demo.model.ManualTemplate@208b0bf8]
-Templates: [com.example.demo.model.ManualTemplate@149bba3, com.example.demo.model.ManualTemplate@208b0bf8]
-[2m2025-07-11T19:10:37.527-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@238a31e2, com.example.demo.model.ManualTemplate@e29574]
-Templates: [com.example.demo.model.ManualTemplate@238a31e2, com.example.demo.model.ManualTemplate@e29574]
-[2m2025-07-11T19:10:38.066-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-8][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@3fb5894, com.example.demo.model.ManualTemplate@126e7407]
-Templates: [com.example.demo.model.ManualTemplate@3fb5894, com.example.demo.model.ManualTemplate@126e7407]
-[2m2025-07-11T19:10:38.370-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-4][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@befadd0, com.example.demo.model.ManualTemplate@6aaf9f14]
-Templates: [com.example.demo.model.ManualTemplate@befadd0, com.example.demo.model.ManualTemplate@6aaf9f14]
-[2m2025-07-11T19:10:39.336-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-1][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@6e379742, com.example.demo.model.ManualTemplate@74286de9]
-Templates: [com.example.demo.model.ManualTemplate@6e379742, com.example.demo.model.ManualTemplate@74286de9]
-[2m2025-07-11T19:10:39.563-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-5][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@6e6c1db, com.example.demo.model.ManualTemplate@2cc657a6]
-Templates: [com.example.demo.model.ManualTemplate@6e6c1db, com.example.demo.model.ManualTemplate@2cc657a6]
-[2m2025-07-11T19:15:51.581-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@2475146f, com.example.demo.model.ManualTemplate@56c0cf6c]
-Templates: [com.example.demo.model.ManualTemplate@2475146f, com.example.demo.model.ManualTemplate@56c0cf6c]
-[2m2025-07-11T19:15:51.936-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [io-8080-exec-10][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@6c342b5d, com.example.demo.model.ManualTemplate@59a62973]
-Templates: [com.example.demo.model.ManualTemplate@6c342b5d, com.example.demo.model.ManualTemplate@59a62973]
-[2m2025-07-11T19:15:52.677-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-4][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@7dad10c1, com.example.demo.model.ManualTemplate@5ffd869e]
-Templates: [com.example.demo.model.ManualTemplate@7dad10c1, com.example.demo.model.ManualTemplate@5ffd869e]
-[2m2025-07-11T19:15:52.916-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-1][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-Templates: [com.example.demo.model.ManualTemplate@e0be030, com.example.demo.model.ManualTemplate@780eaf9a]
-Templates: [com.example.demo.model.ManualTemplate@e0be030, com.example.demo.model.ManualTemplate@780eaf9a]
-[2m2025-07-11T19:16:39.798-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-3][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for subscribedTemplates found on class com.example.demo.model.User
-[2m2025-07-11T19:16:39.798-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-3][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for subscribed_template found on class com.example.demo.model.User
-[2m2025-07-11T19:16:40.074-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:16:40.375-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [io-8080-exec-10][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:16:41.541-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-4][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:16:41.834-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-1][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:16:49.453-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:16:49.675-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-1][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:17:30.590-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:17:30.813-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-8][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:17:35.009-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [io-8080-exec-10][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:17:35.260-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-5][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:17:46.873-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:17:47.178-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [io-8080-exec-10][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:17:47.608-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-4][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:17:47.820-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-6][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:18:26.650-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:18:26.814-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-8][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:19:16.236-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:19:16.421-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-8][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:19:17.110-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:19:17.278-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-4][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:19:26.052-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for subscribedTemplates found on class com.example.demo.model.User
-[2m2025-07-11T19:19:26.052-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for subscribed_template found on class com.example.demo.model.User
-[2m2025-07-11T19:19:26.252-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-8][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:19:26.413-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-3][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:20:13.413-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-6][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for subscribedTemplates found on class com.example.demo.model.User
-[2m2025-07-11T19:20:13.413-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-6][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for subscribed_template found on class com.example.demo.model.User
-[2m2025-07-11T19:20:13.610-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-11T19:20:13.799-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-2][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for submittedVideos found on class com.example.demo.model.ManualTemplate
-[2m2025-07-13T21:45:33.152-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-8][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for subscribedTemplates found on class com.example.demo.model.User
-[2m2025-07-13T21:45:33.153-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-8][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for subscribed_template found on class com.example.demo.model.User
-[2m2025-07-13T21:45:57.625-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for subscribedTemplates found on class com.example.demo.model.User
-[2m2025-07-13T21:45:57.626-04:00[0;39m [33m WARN[0;39m [35m7768[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-7][0;39m [2m[0;39m[36mc.g.cloud.firestore.CustomClassMapper   [0;39m [2m:[0;39m No setter/field for subscribed_template found on class com.example.demo.model.User
+[2m2025-07-21T11:13:07.507-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mo.s.b.d.a.OptionalLiveReloadServer      [0;39m [2m:[0;39m LiveReload server is running on port 35729
+[2m2025-07-21T11:13:07.514-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mo.s.b.w.embedded.tomcat.TomcatWebServer [0;39m [2m:[0;39m Tomcat started on port 8080 (http) with context path ''
+[2m2025-07-21T11:13:07.517-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [  restartedMain][0;39m [2m[0;39m[36mcom.example.demo.DemoApplication        [0;39m [2m:[0;39m Started DemoApplication in 1.014 seconds (process running for 1.166)
+Cleaned up expired QR tokens at: Mon Jul 21 11:13:08 EDT 2025
+[2m2025-07-21T11:13:20.439-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-1][0;39m [2m[0;39m[36mo.a.c.c.C.[Tomcat].[localhost].[/]      [0;39m [2m:[0;39m Initializing Spring DispatcherServlet 'dispatcherServlet'
+[2m2025-07-21T11:13:20.439-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-1][0;39m [2m[0;39m[36mo.s.web.servlet.DispatcherServlet       [0;39m [2m:[0;39m Initializing Servlet 'dispatcherServlet'
+[2m2025-07-21T11:13:20.440-04:00[0;39m [32m INFO[0;39m [35m80137[0;39m [2m---[0;39m [2m[demo] [nio-8080-exec-1][0;39m [2m[0;39m[36mo.s.web.servlet.DispatcherServlet       [0;39m [2m:[0;39m Completed initialization in 1 ms
+Cleaned up expired QR tokens at: Mon Jul 21 13:07:52 EDT 2025
