@@ -1,6 +1,7 @@
 package com.example.demo.ai.shared;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.example.demo.config.DeepSeekConfig;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.HttpEntity;
@@ -15,26 +16,33 @@ import java.util.Map;
 @Service
 public class BlockDescriptionServiceImpl implements BlockDescriptionService {
     
-    @Value("${deepseek.api.key:}")
-    private String deepseekApiKey;
+    @Autowired
+    private DeepSeekConfig deepSeekConfig;
     
-    private static final String DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
+    // Using OpenAI GPT-4o-mini (cheaper alternative since DeepSeek API doesn't support vision)
+    private static final String OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Override
     public Map<String, String> describeBlocks(Map<String, String> blockImageUrls) {
-        System.out.printf("Describing %d image blocks using DeepSeek-VL%n", blockImageUrls.size());
+        System.out.printf("Describing %d image blocks using GPT-4o-mini (vision)%n", blockImageUrls.size());
         
         Map<String, String> blockDescriptions = new HashMap<>();
         
-        if (deepseekApiKey == null || deepseekApiKey.trim().isEmpty()) {
-            System.err.println("DeepSeek API key not configured. Using fallback descriptions.");
+        String effectiveApiKey = deepSeekConfig.getApi().getEffectiveKey();
+        if (effectiveApiKey == null || effectiveApiKey.trim().isEmpty()) {
+            System.err.println("OpenAI API key not configured. Using fallback descriptions.");
+            System.err.println("Please set OPENAI_API_KEY environment variable or add openai.api.key.local in application-local.properties");
             // Provide fallback descriptions
             for (String blockKey : blockImageUrls.keySet()) {
-                blockDescriptions.put(blockKey, "Image content description not available (DeepSeek API key not configured)");
+                blockDescriptions.put(blockKey, "Image content description not available (OpenAI API key not configured)");
             }
             return blockDescriptions;
         }
+        
+        System.out.printf("Using OpenAI API key from: %s%n", 
+            (deepSeekConfig.getApi().getKey() != null && !deepSeekConfig.getApi().getKey().isEmpty()) 
+                ? "environment variable" : "local configuration file");
         
         for (Map.Entry<String, String> entry : blockImageUrls.entrySet()) {
             String blockKey = entry.getKey();
@@ -58,13 +66,14 @@ public class BlockDescriptionServiceImpl implements BlockDescriptionService {
     }
     
     private String describeImage(String imageUrl) {
+        String effectiveApiKey = deepSeekConfig.getApi().getEffectiveKey();
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + deepseekApiKey);
+        headers.set("Authorization", "Bearer " + effectiveApiKey);
         headers.set("Content-Type", "application/json");
         
-        // Build request body for DeepSeek-VL with vision
+        // Build request body for GPT-4o-mini with vision
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", "deepseek-vl");
+        requestBody.put("model", "gpt-4o-mini");
         requestBody.put("max_tokens", 100);
         requestBody.put("temperature", 0.3);
         
@@ -89,7 +98,7 @@ public class BlockDescriptionServiceImpl implements BlockDescriptionService {
         
         try {
             ResponseEntity<Map> response = restTemplate.exchange(
-                DEEPSEEK_API_URL, 
+                OPENAI_API_URL, 
                 HttpMethod.POST, 
                 request, 
                 Map.class
@@ -108,7 +117,7 @@ public class BlockDescriptionServiceImpl implements BlockDescriptionService {
             return "No description available";
             
         } catch (Exception e) {
-            System.err.printf("Error calling DeepSeek-VL API for image %s: %s%n", imageUrl, e.getMessage());
+            System.err.printf("Error calling GPT-4o-mini API for image %s: %s%n", imageUrl, e.getMessage());
             throw new RuntimeException("Failed to describe image", e);
         }
     }
