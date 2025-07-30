@@ -105,7 +105,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
         scene.setSceneTitle(String.format("Scene %d", sceneNumber));
         scene.setStartTime(segment.getStartTime());
         scene.setEndTime(segment.getEndTime());
-        scene.setSceneDuration((int) segment.getEndTime().minus(segment.getStartTime()).getSeconds());
+        scene.setSceneDurationInSeconds(segment.getEndTime().minus(segment.getStartTime()).getSeconds());
         scene.setPresenceOfPerson(segment.isPersonPresent());
         scene.setScriptLine(String.join(", ", segment.getLabels()));
 
@@ -178,7 +178,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
         Scene defaultScene = new Scene();
         defaultScene.setSceneNumber(1);
         defaultScene.setSceneTitle("Main Scene");
-        defaultScene.setSceneDuration(30);
+        defaultScene.setSceneDurationInSeconds(30);
         defaultScene.setScriptLine("Please record your content following the template guidelines");
         defaultScene.setPresenceOfPerson(true);
         defaultScene.setPreferredGender("No Preference");

@@ -7,7 +7,7 @@ import java.util.Map;
 public class Scene {
     private int sceneNumber;
     private String sceneTitle;
-    private int sceneDuration;
+    private long sceneDurationInSeconds;
     private String scriptLine;
     private boolean presenceOfPerson;
     private String preferredGender;
@@ -48,12 +48,28 @@ public class Scene {
         this.sceneTitle = sceneTitle;
     }
 
-    public int getSceneDuration() {
-        return sceneDuration;
+    public long getSceneDurationInSeconds() {
+        return sceneDurationInSeconds;
     }
 
-    public void setSceneDuration(int sceneDuration) {
-        this.sceneDuration = sceneDuration;
+    public void setSceneDurationInSeconds(long sceneDurationInSeconds) {
+        this.sceneDurationInSeconds = sceneDurationInSeconds;
+    }
+
+    // Helper methods for Duration compatibility - excluded from Firestore
+    @com.google.cloud.firestore.annotation.Exclude
+    public Duration getSceneDuration() {
+        return Duration.ofSeconds(sceneDurationInSeconds);
+    }
+
+    @com.google.cloud.firestore.annotation.Exclude
+    public void setSceneDuration(Duration duration) {
+        this.sceneDurationInSeconds = duration != null ? duration.getSeconds() : 0;
+    }
+
+    @com.google.cloud.firestore.annotation.Exclude
+    public void setSceneDuration(int durationSeconds) {
+        this.sceneDurationInSeconds = durationSeconds;
     }
 
     public String getScriptLine() {
@@ -160,19 +176,23 @@ public class Scene {
         this.otherNotes = otherNotes;
     }
     
-    // Getters and setters for new AI fields
+    // Getters and setters for new AI fields - excluded from Firestore
+    @com.google.cloud.firestore.annotation.Exclude
     public Duration getStartTime() {
         return startTimeMs != null ? Duration.ofMillis(startTimeMs) : null;
     }
 
+    @com.google.cloud.firestore.annotation.Exclude
     public void setStartTime(Duration startTime) {
         this.startTimeMs = startTime != null ? startTime.toMillis() : null;
     }
 
+    @com.google.cloud.firestore.annotation.Exclude
     public Duration getEndTime() {
         return endTimeMs != null ? Duration.ofMillis(endTimeMs) : null;
     }
 
+    @com.google.cloud.firestore.annotation.Exclude
     public void setEndTime(Duration endTime) {
         this.endTimeMs = endTime != null ? endTime.toMillis() : null;
     }
