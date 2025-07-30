@@ -23,8 +23,8 @@ public class Scene {
     private String otherNotes;
     
     // New AI-generated fields
-    private Duration startTime;
-    private Duration endTime;
+    private Long startTimeMs;
+    private Long endTimeMs;
     private String keyframeUrl;
     private Map<String, String> blockImageUrls;
     private Map<String, String> blockDescriptions;
@@ -162,19 +162,35 @@ public class Scene {
     
     // Getters and setters for new AI fields
     public Duration getStartTime() {
-        return startTime;
+        return startTimeMs != null ? Duration.ofMillis(startTimeMs) : null;
     }
 
     public void setStartTime(Duration startTime) {
-        this.startTime = startTime;
+        this.startTimeMs = startTime != null ? startTime.toMillis() : null;
     }
 
     public Duration getEndTime() {
-        return endTime;
+        return endTimeMs != null ? Duration.ofMillis(endTimeMs) : null;
     }
 
     public void setEndTime(Duration endTime) {
-        this.endTime = endTime;
+        this.endTimeMs = endTime != null ? endTime.toMillis() : null;
+    }
+
+    public Long getStartTimeMs() {
+        return startTimeMs;
+    }
+
+    public void setStartTimeMs(Long startTimeMs) {
+        this.startTimeMs = startTimeMs;
+    }
+
+    public Long getEndTimeMs() {
+        return endTimeMs;
+    }
+
+    public void setEndTimeMs(Long endTimeMs) {
+        this.endTimeMs = endTimeMs;
     }
 
     public String getKeyframeUrl() {

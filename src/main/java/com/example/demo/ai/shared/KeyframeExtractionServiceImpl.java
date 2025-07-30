@@ -1,13 +1,16 @@
 package com.example.demo.ai.shared;
 
+import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,7 +20,12 @@ import java.util.UUID;
 @Service
 public class KeyframeExtractionServiceImpl implements KeyframeExtractionService {
     
-    private static final String BUCKET_NAME = "matrix_ads_video";
+    @Value("${firebase.service-account-key}")
+    private String serviceAccountKeyPath;
+
+    @Value("${firebase.storage.bucket}")
+    private String bucketName;
+    
     private static final String KEYFRAMES_FOLDER = "keyframes/";
 
     @Override
@@ -26,16 +34,24 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
                          videoUrl, startTime, endTime);
         
         try {
+            // Create credentials from service account key file
+            GoogleCredentials credentials = GoogleCredentials.fromStream(
+                new FileInputStream(serviceAccountKeyPath)
+            );
+            
             // Calculate midpoint timestamp
             Duration midpoint = startTime.plus(endTime.minus(startTime).dividedBy(2));
             double midpointSeconds = midpoint.getSeconds() + midpoint.getNano() / 1_000_000_000.0;
             
             // Extract bucket name and object name from GCS URL
-            String objectName = videoUrl.replace("https://storage.googleapis.com/" + BUCKET_NAME + "/", "");
+            String objectName = videoUrl.replace("https://storage.googleapis.com/" + bucketName + "/", "");
             
-            // Download video to temporary file
-            Storage storage = StorageOptions.getDefaultInstance().getService();
-            Blob videoBlob = storage.get(BUCKET_NAME, objectName);
+            // Create storage client with credentials
+            Storage storage = StorageOptions.newBuilder()
+                .setCredentials(credentials)
+                .build()
+                .getService();
+            Blob videoBlob = storage.get(bucketName, objectName);
             
             if (videoBlob == null || !videoBlob.exists()) {
                 throw new IOException("Video not found in Cloud Storage: " + objectName);
@@ -73,14 +89,14 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
                 String keyframeObjectName = KEYFRAMES_FOLDER + UUID.randomUUID().toString() + ".jpg";
                 byte[] keyframeBytes = Files.readAllBytes(tempKeyframePath);
                 
-                BlobId blobId = BlobId.of(BUCKET_NAME, keyframeObjectName);
+                BlobId blobId = BlobId.of(bucketName, keyframeObjectName);
                 BlobInfo blobInfo = BlobInfo.newBuilder(blobId)
                     .setContentType("image/jpeg")
                     .build();
                 
                 storage.create(blobInfo, keyframeBytes);
                 
-                String keyframeUrl = String.format("https://storage.googleapis.com/%s/%s", BUCKET_NAME, keyframeObjectName);
+                String keyframeUrl = String.format("https://storage.googleapis.com/%s/%s", bucketName, keyframeObjectName);
                 System.out.printf("Keyframe extracted and uploaded: %s%n", keyframeUrl);
                 
                 return keyframeUrl;

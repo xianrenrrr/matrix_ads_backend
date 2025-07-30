@@ -4,8 +4,8 @@ import java.time.Duration;
 import java.util.List;
 
 public class SceneSegment {
-    private Duration startTime;
-    private Duration endTime;
+    private Long startTimeMs;
+    private Long endTimeMs;
     private List<String> labels;
     private boolean personPresent;
 
@@ -13,26 +13,42 @@ public class SceneSegment {
     }
 
     public SceneSegment(Duration startTime, Duration endTime, List<String> labels, boolean personPresent) {
-        this.startTime = startTime;
-        this.endTime = endTime;
+        this.startTimeMs = startTime.toMillis();
+        this.endTimeMs = endTime.toMillis();
         this.labels = labels;
         this.personPresent = personPresent;
     }
 
     public Duration getStartTime() {
-        return startTime;
+        return startTimeMs != null ? Duration.ofMillis(startTimeMs) : null;
     }
 
     public void setStartTime(Duration startTime) {
-        this.startTime = startTime;
+        this.startTimeMs = startTime != null ? startTime.toMillis() : null;
     }
 
     public Duration getEndTime() {
-        return endTime;
+        return endTimeMs != null ? Duration.ofMillis(endTimeMs) : null;
     }
 
     public void setEndTime(Duration endTime) {
-        this.endTime = endTime;
+        this.endTimeMs = endTime != null ? endTime.toMillis() : null;
+    }
+
+    public Long getStartTimeMs() {
+        return startTimeMs;
+    }
+
+    public void setStartTimeMs(Long startTimeMs) {
+        this.startTimeMs = startTimeMs;
+    }
+
+    public Long getEndTimeMs() {
+        return endTimeMs;
+    }
+
+    public void setEndTimeMs(Long endTimeMs) {
+        this.endTimeMs = endTimeMs;
     }
 
     public List<String> getLabels() {

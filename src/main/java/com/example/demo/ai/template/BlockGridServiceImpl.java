@@ -1,16 +1,19 @@
 package com.example.demo.ai.template;
 
+import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -19,7 +22,12 @@ import java.util.UUID;
 @Service
 public class BlockGridServiceImpl implements BlockGridService {
     
-    private static final String BUCKET_NAME = "matrix_ads_video";
+    @Value("${firebase.service-account-key}")
+    private String serviceAccountKeyPath;
+
+    @Value("${firebase.storage.bucket}")
+    private String bucketName;
+    
     private static final String BLOCKS_FOLDER = "blocks/";
 
     @Override
@@ -29,12 +37,20 @@ public class BlockGridServiceImpl implements BlockGridService {
         Map<String, String> blockImageUrls = new HashMap<>();
         
         try {
-            // Extract object name from GCS URL
-            String objectName = imageUrl.replace("https://storage.googleapis.com/" + BUCKET_NAME + "/", "");
+            // Create credentials from service account key file
+            GoogleCredentials credentials = GoogleCredentials.fromStream(
+                new FileInputStream(serviceAccountKeyPath)
+            );
             
-            // Download image from Cloud Storage
-            Storage storage = StorageOptions.getDefaultInstance().getService();
-            Blob imageBlob = storage.get(BUCKET_NAME, objectName);
+            // Extract object name from GCS URL
+            String objectName = imageUrl.replace("https://storage.googleapis.com/" + bucketName + "/", "");
+            
+            // Create storage client with credentials
+            Storage storage = StorageOptions.newBuilder()
+                .setCredentials(credentials)
+                .build()
+                .getService();
+            Blob imageBlob = storage.get(bucketName, objectName);
             
             if (imageBlob == null || !imageBlob.exists()) {
                 throw new IOException("Image not found in Cloud Storage: " + objectName);
@@ -75,14 +91,14 @@ public class BlockGridServiceImpl implements BlockGridService {
                     String blockKey = String.format("%d_%d", row, col);
                     String blockObjectName = BLOCKS_FOLDER + UUID.randomUUID().toString() + "_" + blockKey + ".jpg";
                     
-                    BlobId blobId = BlobId.of(BUCKET_NAME, blockObjectName);
+                    BlobId blobId = BlobId.of(bucketName, blockObjectName);
                     BlobInfo blobInfo = BlobInfo.newBuilder(blobId)
                         .setContentType("image/jpeg")
                         .build();
                     
                     storage.create(blobInfo, blockBytes);
                     
-                    String blockUrl = String.format("https://storage.googleapis.com/%s/%s", BUCKET_NAME, blockObjectName);
+                    String blockUrl = String.format("https://storage.googleapis.com/%s/%s", bucketName, blockObjectName);
                     blockImageUrls.put(blockKey, blockUrl);
                     
                     System.out.printf("Created block %s: %s%n", blockKey, blockUrl);
