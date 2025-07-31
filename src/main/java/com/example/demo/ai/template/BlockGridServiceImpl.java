@@ -1,6 +1,7 @@
 package com.example.demo.ai.template;
 
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.cloud.storage.Acl;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
@@ -94,9 +95,13 @@ public class BlockGridServiceImpl implements BlockGridService {
                     BlobId blobId = BlobId.of(bucketName, blockObjectName);
                     BlobInfo blobInfo = BlobInfo.newBuilder(blobId)
                         .setContentType("image/jpeg")
+                        .setAcl(java.util.Arrays.asList(Acl.of(Acl.User.ofAllUsers(), Acl.Role.READER)))
                         .build();
                     
-                    storage.create(blobInfo, blockBytes);
+                    Blob createdBlob = storage.create(blobInfo, blockBytes);
+                    
+                    // Ensure the blob is publicly readable
+                    createdBlob.createAcl(Acl.of(Acl.User.ofAllUsers(), Acl.Role.READER));
                     
                     String blockUrl = String.format("https://storage.googleapis.com/%s/%s", bucketName, blockObjectName);
                     blockImageUrls.put(blockKey, blockUrl);
