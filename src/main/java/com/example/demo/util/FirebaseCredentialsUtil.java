@@ -24,7 +24,6 @@ public class FirebaseCredentialsUtil {
         String credentialsJson = System.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON");
         
         if (credentialsJson != null && !credentialsJson.isEmpty()) {
-            System.out.println("Using Firebase credentials from environment variable");
             return GoogleCredentials.fromStream(
                 new ByteArrayInputStream(credentialsJson.getBytes())
             );
@@ -32,7 +31,6 @@ public class FirebaseCredentialsUtil {
         
         // Fallback to file-based credentials (for local development)
         if (serviceAccountKeyPath != null && Files.exists(Paths.get(serviceAccountKeyPath))) {
-            System.out.println("Using Firebase credentials from file: " + serviceAccountKeyPath);
             return GoogleCredentials.fromStream(
                 new FileInputStream(serviceAccountKeyPath)
             );
