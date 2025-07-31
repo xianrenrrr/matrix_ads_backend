@@ -1,9 +1,11 @@
 package com.example.demo.controller;
 
+import com.example.demo.util.FirebaseCredentialsUtil;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -11,15 +13,13 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.FileInputStream;
-
 @RestController
 @RequestMapping("/api/images")
 @CrossOrigin(origins = "*")
 public class ImageProxyController {
     
-    @Value("${firebase.service-account-key}")
-    private String serviceAccountKeyPath;
+    @Autowired
+    private FirebaseCredentialsUtil firebaseCredentialsUtil;
 
     @Value("${firebase.storage.bucket}")
     private String bucketName;
@@ -27,10 +27,8 @@ public class ImageProxyController {
     @GetMapping("/proxy")
     public ResponseEntity<byte[]> proxyImage(@RequestParam String path) {
         try {
-            // Create credentials from service account key file
-            GoogleCredentials credentials = GoogleCredentials.fromStream(
-                new FileInputStream(serviceAccountKeyPath)
-            );
+            // Get credentials using utility (environment or file)
+            GoogleCredentials credentials = firebaseCredentialsUtil.getCredentials();
             
             // Create storage client with credentials
             Storage storage = StorageOptions.newBuilder()

@@ -1,16 +1,16 @@
 package com.example.demo.ai.template;
 
 import com.example.demo.model.SceneSegment;
+import com.example.demo.util.FirebaseCredentialsUtil;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
 import com.google.cloud.videointelligence.v1.*;
 import com.google.protobuf.ByteString;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -20,8 +20,8 @@ import java.util.concurrent.ExecutionException;
 @Service
 public class SceneDetectionServiceImpl implements SceneDetectionService {
 
-    @Value("${firebase.service-account-key}")
-    private String serviceAccountKeyPath;
+    @Autowired
+    private FirebaseCredentialsUtil firebaseCredentialsUtil;
 
     @Value("${firebase.storage.bucket}")
     private String bucketName;
@@ -31,10 +31,8 @@ public class SceneDetectionServiceImpl implements SceneDetectionService {
         System.out.printf("Starting scene detection for video URL: %s%n", videoUrl);
         
         try {
-            // Create credentials from service account key file
-            GoogleCredentials credentials = GoogleCredentials.fromStream(
-                new FileInputStream(serviceAccountKeyPath)
-            );
+            // Get credentials using utility (environment or file)
+            GoogleCredentials credentials = firebaseCredentialsUtil.getCredentials();
             
             // Create client with credentials
             VideoIntelligenceServiceSettings settings = VideoIntelligenceServiceSettings.newBuilder()

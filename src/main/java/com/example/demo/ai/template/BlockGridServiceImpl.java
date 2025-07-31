@@ -1,11 +1,13 @@
 package com.example.demo.ai.template;
 
+import com.example.demo.util.FirebaseCredentialsUtil;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -13,7 +15,6 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -22,8 +23,8 @@ import java.util.UUID;
 @Service
 public class BlockGridServiceImpl implements BlockGridService {
     
-    @Value("${firebase.service-account-key}")
-    private String serviceAccountKeyPath;
+    @Autowired
+    private FirebaseCredentialsUtil firebaseCredentialsUtil;
 
     @Value("${firebase.storage.bucket}")
     private String bucketName;
@@ -37,10 +38,8 @@ public class BlockGridServiceImpl implements BlockGridService {
         Map<String, String> blockImageUrls = new HashMap<>();
         
         try {
-            // Create credentials from service account key file
-            GoogleCredentials credentials = GoogleCredentials.fromStream(
-                new FileInputStream(serviceAccountKeyPath)
-            );
+            // Get credentials using utility (environment or file)
+            GoogleCredentials credentials = firebaseCredentialsUtil.getCredentials();
             
             // Extract object name from GCS URL
             String objectName = imageUrl.replace("https://storage.googleapis.com/" + bucketName + "/", "");

@@ -1,15 +1,16 @@
 package com.example.demo.ai.shared;
 
+import com.example.demo.util.FirebaseCredentialsUtil;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,8 +20,8 @@ import java.util.UUID;
 @Service
 public class KeyframeExtractionServiceImpl implements KeyframeExtractionService {
     
-    @Value("${firebase.service-account-key}")
-    private String serviceAccountKeyPath;
+    @Autowired
+    private FirebaseCredentialsUtil firebaseCredentialsUtil;
 
     @Value("${firebase.storage.bucket}")
     private String bucketName;
@@ -33,10 +34,8 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
                          videoUrl, startTime, endTime);
         
         try {
-            // Create credentials from service account key file
-            GoogleCredentials credentials = GoogleCredentials.fromStream(
-                new FileInputStream(serviceAccountKeyPath)
-            );
+            // Get credentials using utility (environment or file)
+            GoogleCredentials credentials = firebaseCredentialsUtil.getCredentials();
             
             // Calculate midpoint timestamp
             Duration midpoint = startTime.plus(endTime.minus(startTime).dividedBy(2));
