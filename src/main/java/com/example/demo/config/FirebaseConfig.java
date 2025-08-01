@@ -4,9 +4,9 @@ import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import javax.annotation.PostConstruct;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.File;
@@ -23,11 +23,15 @@ public class FirebaseConfig {
     @Value("${firebase.enabled:true}")
     private boolean firebaseEnabled;
 
-    @PostConstruct
-    public void init() throws IOException {
+    @Bean(name = "firebaseApp")
+    public FirebaseApp initializeFirebase() throws IOException {
         if (!firebaseEnabled) {
-            System.out.println("Firebase Storage is disabled - running in development mode");
-            return;
+            System.out.println("Firebase is disabled - running in development mode");
+            return null;
+        }
+        
+        if (!FirebaseApp.getApps().isEmpty()) {
+            return FirebaseApp.getInstance();
         }
         
         GoogleCredentials credentials = null;
@@ -46,13 +50,13 @@ public class FirebaseConfig {
             } else if (serviceAccountKeyPath != null && new File(serviceAccountKeyPath).exists()) {
                 credentials = GoogleCredentials.fromStream(new FileInputStream(serviceAccountKeyPath));
             } else {
-                System.out.println("WARNING: No Firebase Storage credentials found. Running without Firebase Storage.");
+                System.out.println("WARNING: No Firebase credentials found. Running without Firebase.");
                 System.out.println("To fix this, either:");
                 System.out.println("1. Set GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable");
                 System.out.println("2. Set GOOGLE_APPLICATION_CREDENTIALS to point to service account file");
                 System.out.println("3. Place serviceAccountKey.json in the specified path");
                 System.out.println("4. Set firebase.enabled=false in application.properties for development");
-                return;
+                return null;
             }
         }
         
@@ -60,8 +64,7 @@ public class FirebaseConfig {
             .setCredentials(credentials)
             .setStorageBucket(storageBucket)
             .build();
-        if (FirebaseApp.getApps().isEmpty()) {
-            FirebaseApp.initializeApp(options);
-        }
+        
+        return FirebaseApp.initializeApp(options);
     }
 }
