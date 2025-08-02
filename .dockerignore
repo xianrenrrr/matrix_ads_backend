@@ -1,0 +1,32 @@
+# Maven
+target/
+!target/*.jar
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Test files
+src/test/
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Local config files
+*.local
+application-local.properties

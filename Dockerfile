@@ -1,6 +1,14 @@
 # Use an official OpenJDK runtime as a parent image
 FROM eclipse-temurin:17-jdk
 
+# Install FFmpeg and other system dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    ffmpeg \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
 # Set the working directory
 WORKDIR /app
 
@@ -20,5 +28,8 @@ RUN ./mvnw clean package -DskipTests
 # Expose port 8080 (Spring Boot default)
 EXPOSE 8080
 
-# Run the Spring Boot app
-CMD ["./mvnw", "spring-boot:run"]
+# Set environment variables for memory optimization
+ENV JAVA_OPTS="-Xmx512m -Xms256m"
+
+# Run the Spring Boot app using the built JAR (more efficient than Maven)
+CMD ["sh", "-c", "java $JAVA_OPTS -jar target/*.jar"]
