@@ -156,5 +156,45 @@ public class ContentManager {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+
+    // Get user information by ID
+    @GetMapping("/users/{userId}")
+    public ResponseEntity<UserInfo> getUserById(@PathVariable String userId) {
+        try {
+            com.example.demo.model.User user = userDao.findById(userId);
+            if (user != null) {
+                UserInfo userInfo = new UserInfo(user.getId(), user.getUsername(), user.getEmail(), user.getRole());
+                return ResponseEntity.ok(userInfo);
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // DTO for user information
+    public static class UserInfo {
+        private String id;
+        private String username;
+        private String email;
+        private String role;
+        
+        public UserInfo(String id, String username, String email, String role) {
+            this.id = id;
+            this.username = username;
+            this.email = email;
+            this.role = role;
+        }
+        
+        public String getId() { return id; }
+        public String getUsername() { return username; }
+        public String getEmail() { return email; }
+        public String getRole() { return role; }
+        public void setId(String id) { this.id = id; }
+        public void setUsername(String username) { this.username = username; }
+        public void setEmail(String email) { this.email = email; }
+        public void setRole(String role) { this.role = role; }
+    }
 }
 
