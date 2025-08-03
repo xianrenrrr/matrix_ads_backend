@@ -7,17 +7,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class ScheduledTasks {
     
-    @Autowired
-    private QRLoginService qrLoginService;
+    // Note: QR login functionality has been removed
+    // Only invite-based QR codes are now supported
     
-    // Clean up expired QR tokens every 10 minutes
-    @Scheduled(fixedRate = 600000) // 10 minutes in milliseconds
-    public void cleanupExpiredQRTokens() {
-        try {
-            qrLoginService.cleanupExpiredTokens();
-            System.out.println("Cleaned up expired QR tokens at: " + new java.util.Date());
-        } catch (Exception e) {
-            System.err.println("Failed to cleanup expired QR tokens: " + e.getMessage());
-        }
-    }
 }

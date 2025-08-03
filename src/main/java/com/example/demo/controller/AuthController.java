@@ -1,7 +1,9 @@
 package com.example.demo.controller;
 
 import com.example.demo.dao.UserDao;
+import com.example.demo.dao.InviteDao;
 import com.example.demo.model.User;
+import com.example.demo.model.Invite;
 import com.example.demo.service.I18nService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +18,9 @@ import java.util.UUID;
 public class AuthController {
     @Autowired
     private UserDao userDao;
+    
+    @Autowired
+    private InviteDao inviteDao;
     
     @Autowired
     private I18nService i18nService;
@@ -111,6 +116,14 @@ public class AuthController {
                 return ResponseEntity.badRequest().body(response);
             }
             
+            // Only allow Content Managers to login to dashboard
+            if (!"content_manager".equals(user.getRole())) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Content creators should use the mini app for access");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
             // Generate access token
             String token = "token_" + UUID.randomUUID().toString() + "_" + System.currentTimeMillis();
             
@@ -137,6 +150,145 @@ public class AuthController {
             errorResponse.put("message", i18nService.getMessage("login.failed", language));
             errorResponse.put("error", e.getMessage());
             return ResponseEntity.badRequest().body(errorResponse);
+        }
+    }
+
+    // Validate invite token
+    @GetMapping("/validate-invite/{token}")
+    public ResponseEntity<Map<String, Object>> validateInvite(@PathVariable String token,
+                                                              @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
+        try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            
+            Invite invite = inviteDao.findByToken(token);
+            if (invite == null) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Invite not found");
+                return ResponseEntity.notFound().build();
+            }
+
+            if (!invite.isValid()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", invite.isExpired() ? "Invite has expired" : "Invite is not valid");
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            // Return invite data
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("inviteeName", invite.getInviteeName());
+            response.put("inviteeEmail", invite.getInviteeEmail());
+            response.put("managerName", invite.getManagerName());
+            response.put("role", invite.getRole());
+            response.put("expiresAt", invite.getExpiresAt());
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Failed to validate invite: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    // Invite-based signup
+    @PostMapping("/invite-signup")
+    public ResponseEntity<Map<String, Object>> inviteSignup(@RequestBody Map<String, Object> requestBody,
+                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
+        try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            
+            String inviteToken = (String) requestBody.get("inviteToken");
+            String username = (String) requestBody.get("username");
+            String email = (String) requestBody.get("email");
+            String phone = (String) requestBody.get("phone");
+            String password = (String) requestBody.get("password");
+            String role = (String) requestBody.get("role");
+
+            // Validate required fields
+            if (inviteToken == null || username == null || email == null || password == null) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", i18nService.getMessage("bad.request", language));
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            // Validate invite
+            Invite invite = inviteDao.findByToken(inviteToken);
+            if (invite == null || !invite.isValid()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Invalid or expired invite");
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            // Verify email matches invite (only if invite has email set)
+            if (invite.getInviteeEmail() != null && !invite.getInviteeEmail().trim().isEmpty()) {
+                if (!email.equals(invite.getInviteeEmail())) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Email does not match invite");
+                    return ResponseEntity.badRequest().body(response);
+                }
+            }
+
+            // Check if username already exists
+            if (userDao.findByUsername(username) != null) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Username already exists");
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            // Check if email already exists for this role
+            if (userDao.findByEmailAndRole(email, invite.getRole()) != null) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Email already exists for this role");
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            // Create new user
+            User user = new User();
+            user.setId(UUID.randomUUID().toString());
+            user.setUsername(username);
+            user.setEmail(email);
+            user.setPassword(password);
+            user.setRole(invite.getRole()); // Use role from invite
+
+            // Initialize fields based on role
+            if ("content_creator".equals(user.getRole())) {
+                user.setSubscribed_Templates(new HashMap<>());
+            } else if ("content_manager".equals(user.getRole())) {
+                user.setCreated_Templates(new HashMap<>());
+            }
+            user.setNotifications(new HashMap<>());
+
+            // Save user
+            userDao.save(user);
+
+            // Mark invite as accepted
+            invite.setStatus("accepted");
+            invite.setAcceptedAt(new java.util.Date());
+            inviteDao.save(invite);
+
+            // Return user data (without password)
+            user.setPassword(null);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", i18nService.getMessage("registration.success", language));
+            response.put("user", user);
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", i18nService.getMessage("registration.failed", language));
+            response.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
 }
