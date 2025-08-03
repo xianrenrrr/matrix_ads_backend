@@ -12,7 +12,7 @@ public class ManualTemplate {
     private List<Scene> scenes;
     private String videoFormat;
     private String lightingRequirements;
-    private String soundRequirements;
+    private String backgroundMusic;
     private String id;
     private String videoId;
 
@@ -74,8 +74,8 @@ public class ManualTemplate {
         return lightingRequirements;
     }
 
-    public String getSoundRequirements() {
-        return soundRequirements;
+    public String getBackgroundMusic() {
+        return backgroundMusic;
     }
 
     // Setters
@@ -107,8 +107,8 @@ public class ManualTemplate {
         this.lightingRequirements = lightingRequirements;
     }
 
-    public void setSoundRequirements(String soundRequirements) {
-        this.soundRequirements = soundRequirements;
+    public void setBackgroundMusic(String backgroundMusic) {
+        this.backgroundMusic = backgroundMusic;
     }
 
 

@@ -35,7 +35,7 @@ public class TemplateControllerTest {
         template.setTone("Friendly");
         template.setVideoFormat("1080p 9:16");
         template.setLightingRequirements("Natural daylight preferred");
-        template.setSoundRequirements("Quiet environment");
+        template.setBackgroundMusic("Calm instrumental music");
 
         Scene scene = new Scene();
         scene.setSceneNumber(1);

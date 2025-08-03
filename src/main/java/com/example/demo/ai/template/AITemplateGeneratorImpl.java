@@ -81,7 +81,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
             template.setVideoPurpose("Product demonstration and promotion");
             template.setTone("Professional");
             template.setLightingRequirements("Good natural or artificial lighting");
-            template.setSoundRequirements("Clear audio, minimal background noise");
+            template.setBackgroundMusic("Soft instrumental or ambient music");
 
             // Step 4: Generate summary (optional)
             System.out.println("Step 4: Generating video summary...");
@@ -172,7 +172,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
         template.setVideoPurpose("Basic video content showcase");
         template.setTone("Professional");
         template.setLightingRequirements("Good lighting required");
-        template.setSoundRequirements("Clear audio required");
+        template.setBackgroundMusic("Light background music recommended");
 
         // Create a single default scene
         Scene defaultScene = new Scene();
