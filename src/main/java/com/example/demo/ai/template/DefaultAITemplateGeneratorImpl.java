@@ -15,7 +15,7 @@ public class DefaultAITemplateGeneratorImpl implements DefaultAITemplateGenerato
 
         template.setTemplateTitle(video.getTitle() + " Basic Template");
         template.setTotalVideoLength(0);  // Placeholder
-        template.setTargetAudience("Not specified");
+        template.setVideoPurpose("General content sharing");
         template.setTone("Neutral");
 
         return template;

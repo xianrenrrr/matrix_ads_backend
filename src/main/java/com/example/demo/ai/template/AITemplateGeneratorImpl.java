@@ -78,7 +78,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
             // Set some default values
             template.setVideoFormat("1080p 16:9");
             template.setTotalVideoLength(calculateTotalDuration(sceneSegments));
-            template.setTargetAudience("General audience");
+            template.setVideoPurpose("Product demonstration and promotion");
             template.setTone("Professional");
             template.setLightingRequirements("Good natural or artificial lighting");
             template.setSoundRequirements("Clear audio, minimal background noise");
@@ -169,7 +169,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
         template.setTemplateTitle(video.getTitle() + " - Basic Template");
         template.setVideoFormat("1080p 16:9");
         template.setTotalVideoLength(30); // Default 30 seconds
-        template.setTargetAudience("General audience");
+        template.setVideoPurpose("Basic video content showcase");
         template.setTone("Professional");
         template.setLightingRequirements("Good lighting required");
         template.setSoundRequirements("Clear audio required");

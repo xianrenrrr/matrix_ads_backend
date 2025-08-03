@@ -31,7 +31,7 @@ public class TemplateControllerTest {
         template.setUserId("user123");
         template.setTemplateTitle("New Product Launch Campaign");
         template.setTotalVideoLength(30);
-        template.setTargetAudience("Young shoppers");
+        template.setVideoPurpose("Product promotion for young shoppers");
         template.setTone("Friendly");
         template.setVideoFormat("1080p 9:16");
         template.setLightingRequirements("Natural daylight preferred");

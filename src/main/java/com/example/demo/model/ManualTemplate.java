@@ -7,7 +7,7 @@ public class ManualTemplate {
     private String userId;
     private String templateTitle;
     private int totalVideoLength;
-    private String targetAudience;
+    private String videoPurpose;
     private String tone;
     private List<Scene> scenes;
     private String videoFormat;
@@ -54,8 +54,8 @@ public class ManualTemplate {
         return totalVideoLength;
     }
 
-    public String getTargetAudience() {
-        return targetAudience;
+    public String getVideoPurpose() {
+        return videoPurpose;
     }
 
     public String getTone() {
@@ -87,8 +87,8 @@ public class ManualTemplate {
         this.totalVideoLength = totalVideoLength;
     }
 
-    public void setTargetAudience(String targetAudience) {
-        this.targetAudience = targetAudience;
+    public void setVideoPurpose(String videoPurpose) {
+        this.videoPurpose = videoPurpose;
     }
 
     public void setTone(String tone) {
