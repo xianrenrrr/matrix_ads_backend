@@ -80,9 +80,14 @@ public class AuthController {
         try {
             String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             String usernameOrEmail = loginRequest.get("username");
+            String phone = loginRequest.get("phone");
             String password = loginRequest.get("password");
+            String platform = loginRequest.get("platform");
             
-            if (usernameOrEmail == null || usernameOrEmail.trim().isEmpty()) {
+            // For mini program (content creators), use phone login
+            String loginField = (platform != null && "miniprogram".equals(platform)) ? phone : usernameOrEmail;
+            
+            if (loginField == null || loginField.trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
                 response.put("message", i18nService.getMessage("bad.request", language));
@@ -96,10 +101,15 @@ public class AuthController {
             }
             
             User user = null;
-            // Try to find by username first, then by email
-            user = userDao.findByUsername(usernameOrEmail.trim());
-            if (user == null) {
-                user = userDao.findByEmail(usernameOrEmail.trim());
+            if (platform != null && "miniprogram".equals(platform)) {
+                // Mini program login: find user by phone number
+                user = userDao.findByPhone(loginField.trim());
+            } else {
+                // Web login: find by username first, then by email
+                user = userDao.findByUsername(loginField.trim());
+                if (user == null) {
+                    user = userDao.findByEmail(loginField.trim());
+                }
             }
             
             if (user == null) {
@@ -208,10 +218,26 @@ public class AuthController {
             String role = (String) requestBody.get("role");
 
             // Validate required fields
-            if (inviteToken == null || username == null || email == null || password == null) {
+            if (inviteToken == null || username == null || password == null) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
                 response.put("message", i18nService.getMessage("bad.request", language));
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            // For content creators, phone is required (no email needed)
+            // For content managers, email is required
+            if (role != null && role.equals("content_creator") && (phone == null || phone.trim().isEmpty())) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Phone number is required for content creators");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            if (role != null && role.equals("content_manager") && (email == null || email.trim().isEmpty())) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Email is required for content managers");
                 return ResponseEntity.badRequest().body(response);
             }
 
@@ -224,8 +250,10 @@ public class AuthController {
                 return ResponseEntity.badRequest().body(response);
             }
 
-            // Verify email matches invite (only if invite has email set)
-            if (invite.getInviteeEmail() != null && !invite.getInviteeEmail().trim().isEmpty()) {
+            // For content managers only: verify email matches invite if both are provided
+            if (role != null && role.equals("content_manager") 
+                && invite.getInviteeEmail() != null && !invite.getInviteeEmail().trim().isEmpty() 
+                && email != null && !email.trim().isEmpty()) {
                 if (!email.equals(invite.getInviteeEmail())) {
                     Map<String, Object> response = new HashMap<>();
                     response.put("success", false);
@@ -242,21 +270,42 @@ public class AuthController {
                 return ResponseEntity.badRequest().body(response);
             }
 
-            // Check if email already exists for this role
-            if (userDao.findByEmailAndRole(email, invite.getRole()) != null) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Email already exists for this role");
-                return ResponseEntity.badRequest().body(response);
+            // Check if phone already exists (for content creators)
+            if (phone != null && !phone.trim().isEmpty()) {
+                if (userDao.findByPhone(phone) != null) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Phone number already exists");
+                    return ResponseEntity.badRequest().body(response);
+                }
+            }
+
+            // Check if email already exists for content managers (only if email is provided)
+            if (role != null && role.equals("content_manager") 
+                && email != null && !email.trim().isEmpty()) {
+                if (userDao.findByEmailAndRole(email, invite.getRole()) != null) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Email already exists for this role");
+                    return ResponseEntity.badRequest().body(response);
+                }
             }
 
             // Create new user
             User user = new User();
             user.setId(UUID.randomUUID().toString());
             user.setUsername(username);
-            user.setEmail(email);
             user.setPassword(password);
             user.setRole(invite.getRole()); // Use role from invite
+            
+            // Set role-specific fields
+            if ("content_creator".equals(invite.getRole())) {
+                user.setPhone(phone); // Content creators use phone
+                user.setEmail(null);  // No email for content creators
+            } else if ("content_manager".equals(invite.getRole())) {
+                user.setEmail(email); // Content managers use email
+                user.setPhone(null);  // No phone for content managers
+            }
 
             // Initialize fields based on role
             if ("content_creator".equals(user.getRole())) {
