@@ -3,6 +3,7 @@ package com.example.demo.controller.contentcreator;
 import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import com.google.firebase.cloud.StorageClient;
+import com.google.firebase.FirebaseApp;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -38,6 +39,9 @@ public class ContentCreatorVideoController {
     
     @Autowired
     private VideoComparisonIntegrationService videoComparisonService;
+    
+    @Autowired(required = false)
+    private FirebaseApp firebaseApp;
 
     @PostMapping("/upload")
     public ResponseEntity<?> uploadContentCreatorVideo(
@@ -49,11 +53,17 @@ public class ContentCreatorVideoController {
             return ResponseEntity.badRequest().body("Missing required parameters.");
         }
         try {
+            // Check if Firebase is available
+            if (firebaseApp == null) {
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body("Firebase Storage is not available. Please check configuration.");
+            }
+            
             // Upload new video to GCS
             String newVideoId = UUID.randomUUID().toString();
             String newObjectName = String.format("content-creator-videos/%s/%s/%s.mp4", userId, templateId, newVideoId);
-            StorageClient.getInstance().bucket().create(newObjectName, file.getInputStream(), file.getContentType());
-            String videoUrl = String.format("https://storage.googleapis.com/%s/%s", StorageClient.getInstance().bucket().getName(), newObjectName);
+            StorageClient.getInstance(firebaseApp).bucket().create(newObjectName, file.getInputStream(), file.getContentType());
+            String videoUrl = String.format("https://storage.googleapis.com/%s/%s", StorageClient.getInstance(firebaseApp).bucket().getName(), newObjectName);
 
             // Perform similarity analysis immediately after upload
             double similarityScore = 0.0;

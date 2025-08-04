@@ -2,7 +2,9 @@ package com.example.demo.service;
 
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
+import com.google.firebase.FirebaseApp;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -20,10 +22,18 @@ import com.google.firebase.cloud.StorageClient;
 public class FirebaseStorageService {
     private final Storage storage;
     private final String bucketName;
+    private final FirebaseApp firebaseApp;
 
-    public FirebaseStorageService(@Value("${firebase.storage.bucket}") String bucketName) {
-        this.storage = StorageClient.getInstance().bucket(bucketName).getStorage();
+    @Autowired
+    public FirebaseStorageService(@Value("${firebase.storage.bucket}") String bucketName, FirebaseApp firebaseApp) {
+        this.firebaseApp = firebaseApp;
         this.bucketName = bucketName;
+        
+        if (firebaseApp == null) {
+            throw new IllegalStateException("Firebase is not properly initialized. Please check your Firebase configuration.");
+        }
+        
+        this.storage = StorageClient.getInstance(firebaseApp).bucket(bucketName).getStorage();
     }
 
     public static class UploadResult {

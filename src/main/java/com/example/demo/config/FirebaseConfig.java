@@ -25,12 +25,17 @@ public class FirebaseConfig {
 
     @Bean(name = "firebaseApp")
     public FirebaseApp initializeFirebase() throws IOException {
+        System.out.println("Initializing Firebase...");
+        System.out.println("Firebase enabled: " + firebaseEnabled);
+        System.out.println("Storage bucket: " + storageBucket);
+        
         if (!firebaseEnabled) {
             System.out.println("Firebase is disabled - running in development mode");
             return null;
         }
         
         if (!FirebaseApp.getApps().isEmpty()) {
+            System.out.println("Firebase app already exists, returning existing instance");
             return FirebaseApp.getInstance();
         }
         
@@ -38,10 +43,18 @@ public class FirebaseConfig {
         
         // Try environment variable first (for production)
         String credentialsJson = System.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON");
-        if (credentialsJson != null) {
-            credentials = GoogleCredentials.fromStream(
-                new java.io.ByteArrayInputStream(credentialsJson.getBytes(java.nio.charset.StandardCharsets.UTF_8))
-            );
+        if (credentialsJson != null && !credentialsJson.trim().isEmpty()) {
+            System.out.println("Found GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable");
+            System.out.println("JSON length: " + credentialsJson.length());
+            try {
+                credentials = GoogleCredentials.fromStream(
+                    new java.io.ByteArrayInputStream(credentialsJson.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                );
+                System.out.println("Successfully loaded Firebase credentials from environment variable");
+            } catch (Exception e) {
+                System.err.println("Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON: " + e.getMessage());
+                throw e;
+            }
         } else {
             // Try service account file (for local development)
             String credentialsPath = System.getenv("GOOGLE_APPLICATION_CREDENTIALS");
