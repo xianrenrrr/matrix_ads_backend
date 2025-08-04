@@ -5,6 +5,8 @@ public class User {
     private String username;
     private String email;
     private String phone;
+    private String province;
+    private String city;
     private String password;
     private String role; // "content_creator" or "content_manager"
 
@@ -42,6 +44,12 @@ public class User {
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
+
+    public String getProvince() { return province; }
+    public void setProvince(String province) { this.province = province; }
+
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
 
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }

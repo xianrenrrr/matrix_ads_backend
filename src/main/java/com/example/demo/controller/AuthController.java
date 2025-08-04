@@ -224,6 +224,8 @@ public class AuthController {
             String username = (String) requestBody.get("username");
             String email = (String) requestBody.get("email");
             String phone = (String) requestBody.get("phone");
+            String province = (String) requestBody.get("province");
+            String city = (String) requestBody.get("city");
             String password = (String) requestBody.get("password");
             String role = (String) requestBody.get("role");
 
@@ -235,13 +237,27 @@ public class AuthController {
                 return ResponseEntity.badRequest().body(response);
             }
             
-            // For content creators, phone is required (no email needed)
+            // For content creators, phone, province, and city are required (no email needed)
             // For content managers, email is required
-            if (role != null && role.equals("content_creator") && (phone == null || phone.trim().isEmpty())) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Phone number is required for content creators");
-                return ResponseEntity.badRequest().body(response);
+            if (role != null && role.equals("content_creator")) {
+                if (phone == null || phone.trim().isEmpty()) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Phone number is required for content creators");
+                    return ResponseEntity.badRequest().body(response);
+                }
+                if (province == null || province.trim().isEmpty()) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Province is required for content creators");
+                    return ResponseEntity.badRequest().body(response);
+                }
+                if (city == null || city.trim().isEmpty()) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "City is required for content creators");
+                    return ResponseEntity.badRequest().body(response);
+                }
             }
             
             if (role != null && role.equals("content_manager") && (email == null || email.trim().isEmpty())) {
@@ -310,11 +326,15 @@ public class AuthController {
             
             // Set role-specific fields
             if ("content_creator".equals(invite.getRole())) {
-                user.setPhone(phone); // Content creators use phone
-                user.setEmail(null);  // No email for content creators
+                user.setPhone(phone);     // Content creators use phone
+                user.setProvince(province); // Content creators have location
+                user.setCity(city);
+                user.setEmail(null);      // No email for content creators
             } else if ("content_manager".equals(invite.getRole())) {
-                user.setEmail(email); // Content managers use email
-                user.setPhone(null);  // No phone for content managers
+                user.setEmail(email);     // Content managers use email
+                user.setPhone(null);      // No phone for content managers
+                user.setProvince(null);   // No location for content managers
+                user.setCity(null);
             }
 
             // Initialize fields based on role
