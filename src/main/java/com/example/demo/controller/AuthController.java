@@ -126,11 +126,21 @@ public class AuthController {
                 return ResponseEntity.badRequest().body(response);
             }
             
-            // Only allow Content Managers to login to dashboard
-            if (!"content_manager".equals(user.getRole())) {
+            // Only allow Content Managers to login to web dashboard
+            // Content creators can only login via mini program
+            if (!"content_manager".equals(user.getRole()) && (platform == null || !"miniprogram".equals(platform))) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
                 response.put("message", "Content creators should use the mini app for access");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            // Only allow Content Creators to login to mini program
+            // Content managers should use web dashboard
+            if (!"content_creator".equals(user.getRole()) && platform != null && "miniprogram".equals(platform)) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Content managers should use the web dashboard for access");
                 return ResponseEntity.badRequest().body(response);
             }
             
