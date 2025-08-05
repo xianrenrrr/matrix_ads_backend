@@ -22,9 +22,6 @@ public class InviteController {
     @Autowired
     private UserDao userDao;
 
-    @Autowired
-    private GroupDao groupDao;
-
     // Generate a new invite
     @PostMapping("/generate")
     public ResponseEntity<Map<String, Object>> generateInvite(@RequestBody Map<String, Object> requestBody) {
