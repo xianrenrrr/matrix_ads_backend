@@ -15,7 +15,6 @@ import com.example.demo.dao.TemplateDao;
 import com.example.demo.model.Video;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.ai.EditSuggestionService;
-import com.example.demo.ai.comparison.VideoComparisonIntegrationService;
 
 import java.io.IOException;
 import java.util.*;
@@ -35,9 +34,6 @@ public class ContentCreatorVideoController {
     
     @Autowired
     private EditSuggestionService editSuggestionService;
-    
-    @Autowired
-    private VideoComparisonIntegrationService videoComparisonService;
     
     @Autowired(required = false)
     private FirebaseApp firebaseApp;
@@ -84,9 +80,10 @@ public class ContentCreatorVideoController {
                             submittedVideo.setUrl(videoUrl);
                             submittedVideo.setTemplateId(templateId);
                             
-                            // Get scenes for comparison
-                            List<Map<String, String>> userScenes = videoComparisonService.getUserVideoScenesById(newVideoId);
-                            List<Map<String, String>> exampleScenes = videoComparisonService.getUserVideoScenesById(exampleVideo.getId());
+                            // TODO: Replace empty lists with real scene extraction from videos
+                            // Use VideoComparisonIntegrationService.getUserVideoScenesById() to get actual scene data
+                            List<Map<String, String>> userScenes = new ArrayList<>();
+                            List<Map<String, String>> exampleScenes = new ArrayList<>();
                             
                             if (userScenes != null && !userScenes.isEmpty() && exampleScenes != null && !exampleScenes.isEmpty()) {
                                 // Calculate similarity
