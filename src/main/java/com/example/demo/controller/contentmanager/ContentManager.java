@@ -211,5 +211,27 @@ public class ContentManager {
         public void setRole(String role) { this.role = role; }
     }
 
+        // Get groups managed by a user
+    @GetMapping("/groups/manager/{managerId}")
+    public ResponseEntity<List<Map<String, Object>>> getGroupsByManager(@PathVariable String managerId) {
+        try {
+            List<Group> groups = groupDao.findByManagerId(managerId);
+            List<Map<String, Object>> groupSummaries = new ArrayList<>();
+            
+            for (Group group : groups) {
+                Map<String, Object> summary = new HashMap<>();
+                summary.put("id", group.getId());
+                summary.put("groupName", group.getGroupName());
+                summary.put("memberCount", group.getMemberIds() != null ? group.getMemberIds().size() : 0);
+                summary.put("description", group.getDescription());
+                summary.put("createdAt", group.getCreatedAt());
+                groupSummaries.add(summary);
+            }
+            
+            return ResponseEntity.ok(groupSummaries);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
 }
 
