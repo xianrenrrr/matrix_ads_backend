@@ -8,7 +8,6 @@ public interface InviteDao {
     Invite findByToken(String token);
     Invite findById(String id);
     List<Invite> findByManagerId(String managerId);
-    List<Invite> findByInviteeEmail(String inviteeEmail);
     List<Invite> findByStatus(String status);
     void delete(String id);
     void updateStatus(String id, String status);

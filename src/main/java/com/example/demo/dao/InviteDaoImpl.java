@@ -82,22 +82,6 @@ public class InviteDaoImpl implements InviteDao {
         }
     }
 
-    @Override
-    public List<Invite> findByInviteeEmail(String inviteeEmail) {
-        try {
-            CollectionReference invitesRef = db.collection(COLLECTION_NAME);
-            Query query = invitesRef.whereEqualTo("inviteeEmail", inviteeEmail);
-            ApiFuture<QuerySnapshot> querySnapshot = query.get();
-            
-            List<Invite> invites = new ArrayList<>();
-            for (DocumentSnapshot document : querySnapshot.get().getDocuments()) {
-                invites.add(document.toObject(Invite.class));
-            }
-            return invites;
-        } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Failed to fetch invites by invitee email", e);
-        }
-    }
 
     @Override
     public List<Invite> findByStatus(String status) {

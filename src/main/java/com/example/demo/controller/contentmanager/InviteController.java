@@ -2,6 +2,7 @@ package com.example.demo.controller.contentmanager;
 
 import com.example.demo.dao.InviteDao;
 import com.example.demo.dao.UserDao;
+import com.example.demo.dao.GroupDao;
 import com.example.demo.model.Invite;
 import com.example.demo.model.User;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,20 +22,22 @@ public class InviteController {
     @Autowired
     private UserDao userDao;
 
+    @Autowired
+    private GroupDao groupDao;
+
     // Generate a new invite
     @PostMapping("/generate")
     public ResponseEntity<Map<String, Object>> generateInvite(@RequestBody Map<String, Object> requestBody) {
         try {
             String managerId = (String) requestBody.get("managerId");
-            String inviteeEmail = (String) requestBody.get("inviteeEmail"); // Optional for WeChat
-            String inviteeName = (String) requestBody.get("inviteeName");
+            String groupName = (String) requestBody.get("groupName");
             Integer expiresInDays = (Integer) requestBody.get("expiresInDays");
 
-            // Validate required fields (only managerId and inviteeName are required)
-            if (managerId == null || inviteeName == null) {
+            // Validate required fields
+            if (managerId == null || groupName == null || groupName.trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Missing required fields: managerId and inviteeName");
+                response.put("message", "Missing required fields: managerId and groupName");
                 return ResponseEntity.badRequest().body(response);
             }
 
@@ -47,16 +50,15 @@ public class InviteController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
             }
 
-            // Check if there's already a pending invite for this email (only if email provided)
-            if (inviteeEmail != null && !inviteeEmail.trim().isEmpty()) {
-                List<Invite> existingInvites = inviteDao.findByInviteeEmail(inviteeEmail);
-                for (Invite existing : existingInvites) {
-                    if ("pending".equals(existing.getStatus()) && !existing.isExpired()) {
-                        Map<String, Object> response = new HashMap<>();
-                        response.put("success", false);
-                        response.put("message", "Active invite already exists for this email");
-                        return ResponseEntity.badRequest().body(response);
-                    }
+            // Check if there's already a pending invite for this group name
+            List<Invite> existingInvites = inviteDao.findByManagerId(managerId);
+            for (Invite existing : existingInvites) {
+                if (groupName.equals(existing.getGroupName()) && 
+                    "pending".equals(existing.getStatus()) && !existing.isExpired()) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Active group invite already exists for this group name");
+                    return ResponseEntity.badRequest().body(response);
                 }
             }
 
@@ -68,13 +70,13 @@ public class InviteController {
             calendar.add(Calendar.DAY_OF_MONTH, expiresInDays != null ? expiresInDays : 7);
             Date expiresAt = calendar.getTime();
 
-            // Create and save invite
+            // Create and save group invite
             Invite invite = new Invite(
                 null, // ID will be auto-generated
                 managerId,
                 manager.getUsername(),
-                inviteeEmail,
-                inviteeName,
+                groupName,
+                null, // groupId will be set when first user joins
                 "content_creator", // Always content_creator for now
                 token,
                 "pending",
@@ -88,8 +90,7 @@ public class InviteController {
             Map<String, Object> qrData = new HashMap<>();
             qrData.put("type", "invite");
             qrData.put("token", invite.getToken());
-            qrData.put("inviteeName", invite.getInviteeName());
-            qrData.put("inviteeEmail", invite.getInviteeEmail());
+            qrData.put("groupName", invite.getGroupName());
             qrData.put("managerName", invite.getManagerName());
             qrData.put("platform", "miniprogram");
             qrData.put("expiresAt", invite.getExpiresAt().getTime());
@@ -103,12 +104,11 @@ public class InviteController {
             // Return success response with invite data
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Invite generated successfully");
+            response.put("message", "Group invite generated successfully");
             response.put("id", invite.getId());
             response.put("token", invite.getToken());
             response.put("managerId", invite.getManagerId());
-            response.put("inviteeName", invite.getInviteeName());
-            response.put("inviteeEmail", invite.getInviteeEmail());
+            response.put("groupName", invite.getGroupName());
             response.put("managerName", invite.getManagerName());
             response.put("expiresAt", invite.getExpiresAt());
             response.put("createdAt", invite.getCreatedAt());
@@ -137,8 +137,7 @@ public class InviteController {
             for (Invite invite : invites) {
                 Map<String, Object> inviteData = new HashMap<>();
                 inviteData.put("id", invite.getId());
-                inviteData.put("inviteeName", invite.getInviteeName());
-                inviteData.put("inviteeEmail", invite.getInviteeEmail());
+                inviteData.put("groupName", invite.getGroupName());
                 inviteData.put("token", invite.getToken());
                 inviteData.put("status", invite.getStatus());
                 inviteData.put("createdAt", invite.getCreatedAt());
@@ -218,7 +217,7 @@ public class InviteController {
             Map<String, Object> qrData = new HashMap<>();
             qrData.put("type", "invite");
             qrData.put("token", token);
-            qrData.put("inviteeName", invite.getInviteeName());
+            qrData.put("groupName", invite.getGroupName());
             qrData.put("managerName", invite.getManagerName());
             qrData.put("platform", "miniprogram");
             qrData.put("expiresAt", invite.getExpiresAt().getTime());
