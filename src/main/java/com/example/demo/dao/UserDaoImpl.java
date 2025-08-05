@@ -182,5 +182,25 @@ public class UserDaoImpl implements UserDao {
             throw new RuntimeException("Failed to get subscribed templates", e);
         }
     }
+    
+    @Override
+    public java.util.List<User> findByRole(String role) {
+        try {
+            Query query = db.collection(COLLECTION_NAME).whereEqualTo("role", role);
+            QuerySnapshot querySnapshot = query.get().get();
+            
+            java.util.List<User> users = new java.util.ArrayList<>();
+            for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
+                User user = doc.toObject(User.class);
+                if (user != null) {
+                    user.setId(doc.getId());
+                    users.add(user);
+                }
+            }
+            return users;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to find users by role: " + role, e);
+        }
+    }
 }
 

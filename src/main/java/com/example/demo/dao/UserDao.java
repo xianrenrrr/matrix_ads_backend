@@ -19,4 +19,7 @@ public interface UserDao {
     void addSubscribedTemplate(String userId, String templateId);
     void removeSubscribedTemplate(String userId, String templateId);
     java.util.Map<String, Boolean> getSubscribedTemplates(String userId);
+    
+    // Find users by role
+    java.util.List<User> findByRole(String role);
 }
