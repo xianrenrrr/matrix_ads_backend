@@ -170,38 +170,6 @@ public class ContentManager {
         }
     }
 
-    // Add a template to created_Templates
-    @PostMapping("/users/{userId}/created-template/{templateId}")
-    public ResponseEntity<Void> addCreatedTemplate(@PathVariable String userId, @PathVariable String templateId) {
-        try {
-            userDao.addCreatedTemplate(userId, templateId);
-            return ResponseEntity.ok().build();
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-
-    // Remove a template from created_Templates
-    @DeleteMapping("/users/{userId}/created-template/{templateId}")
-    public ResponseEntity<Void> removeCreatedTemplate(@PathVariable String userId, @PathVariable String templateId) {
-        try {
-            userDao.removeCreatedTemplate(userId, templateId);
-            return ResponseEntity.noContent().build();
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-
-    // Get all templates in created_Templates
-    @GetMapping("/users/{userId}/created-template")
-    public ResponseEntity<java.util.Map<String, Boolean>> getCreatedTemplates(@PathVariable String userId) {
-        try {
-            java.util.Map<String, Boolean> createdTemplates = userDao.getCreatedTemplates(userId);
-            return ResponseEntity.ok(createdTemplates);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
 
     // Get user information by ID
     @GetMapping("/users/{userId}")
@@ -243,27 +211,5 @@ public class ContentManager {
         public void setRole(String role) { this.role = role; }
     }
 
-    // Get groups managed by a user
-    @GetMapping("/groups/manager/{managerId}")
-    public ResponseEntity<List<Map<String, Object>>> getGroupsByManager(@PathVariable String managerId) {
-        try {
-            List<Group> groups = groupDao.findByManagerId(managerId);
-            List<Map<String, Object>> groupSummaries = new ArrayList<>();
-            
-            for (Group group : groups) {
-                Map<String, Object> summary = new HashMap<>();
-                summary.put("id", group.getId());
-                summary.put("groupName", group.getGroupName());
-                summary.put("memberCount", group.getMemberIds() != null ? group.getMemberIds().size() : 0);
-                summary.put("description", group.getDescription());
-                summary.put("createdAt", group.getCreatedAt());
-                groupSummaries.add(summary);
-            }
-            
-            return ResponseEntity.ok(groupSummaries);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
 }
 

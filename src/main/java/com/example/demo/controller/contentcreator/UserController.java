@@ -3,7 +3,6 @@ package com.example.demo.controller.contentcreator;
 import com.example.demo.model.ManualTemplate;
 
 import com.example.demo.dao.UserDao;
-import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -20,59 +19,6 @@ public class UserController {
     @Autowired
     private UserDao userDao;
 
-    // Subscribe to a template (Content Creator)
-    @PostMapping("/users/{userId}/subscribe")
-    public ResponseEntity<String> subscribeTemplate(@PathVariable String userId, @RequestParam String templateId) {
-        System.out.println("[subscribeTemplate] Called with userId=" + userId + ", templateId=" + templateId);
-        try {
-            // Check if template exists
-            DocumentReference templateRef = db.collection("templates").document(templateId);
-            DocumentSnapshot templateSnap = templateRef.get().get();
-            if (!templateSnap.exists()) {
-                System.out.println("[subscribeTemplate] Template with templateId=" + templateId + " does not exist. Subscription aborted.");
-                return ResponseEntity.badRequest().body("Template does not exist.");
-            }
-            DocumentReference userRef = db.collection("users").document(userId);
-            String alreadySubscribedMsg = "Already subscribed to this template.";
-            String successMsg = "Subscribed to template successfully.";
-            final boolean[] alreadySubscribed = {false};
-            db.runTransaction(transaction -> {
-                DocumentSnapshot userSnap = transaction.get(userRef).get();
-                List<String> subscribedTemplates = new ArrayList<>();
-                if (userSnap.exists() && userSnap.contains("subscribed_template")) {
-                    Object raw = userSnap.get("subscribed_template");
-                    if (raw instanceof List<?>) {
-                        for (Object obj : (List<?>) raw) {
-                            if (obj instanceof String) {
-                                subscribedTemplates.add((String) obj);
-                            }
-                        }
-                    }
-                    System.out.println("[subscribeTemplate] User exists. Current subscribed_template: " + subscribedTemplates);
-                } else {
-                    System.out.println("[subscribeTemplate] User does not have 'subscribed_template' field or does not exist.");
-                }
-                if (subscribedTemplates.contains(templateId)) {
-                    System.out.println("[subscribeTemplate] User already subscribed to templateId: " + templateId);
-                    alreadySubscribed[0] = true;
-                } else {
-                    subscribedTemplates.add(templateId);
-                    transaction.update(userRef, "subscribed_template", subscribedTemplates);
-                    System.out.println("[subscribeTemplate] Added templateId " + templateId + " to user's subscriptions.");
-                }
-                return null;
-            }).get();
-            if (alreadySubscribed[0]) {
-                System.out.println("[subscribeTemplate] Returning: " + alreadySubscribedMsg);
-                return ResponseEntity.badRequest().body(alreadySubscribedMsg);
-            }
-            System.out.println("[subscribeTemplate] Returning: " + successMsg);
-            return ResponseEntity.ok(successMsg);
-        } catch (Exception e) {
-            System.out.println("[subscribeTemplate] ERROR: " + e.getMessage());
-            return ResponseEntity.internalServerError().body("Failed to subscribe: " + e.getMessage());
-        }
-    }
 
     // Get subscribed templates (Content Creator)
     @GetMapping("/users/{userId}/subscribed-templates")
@@ -120,18 +66,6 @@ public class UserController {
         }
     }
 
-    // Get all submissions for a content creator user
-    @GetMapping("/users/{userId}/submissions")
-    public ResponseEntity<List<Map<String, Object>>> getMySubmissions(@PathVariable String userId) throws ExecutionException, InterruptedException {
-        CollectionReference submittedVideosRef = db.collection("submittedVideos");
-        Query query = submittedVideosRef.whereEqualTo("uploadedBy", userId);
-        List<Map<String, Object>> submissions = new ArrayList<>();
-        ApiFuture<QuerySnapshot> querySnapshot = query.get();
-        for (DocumentSnapshot doc : querySnapshot.get().getDocuments()) {
-            submissions.add(doc.getData());
-        }
-        return ResponseEntity.ok(submissions);
-    }
 
         // Inject TemplateDao for template access
         @Autowired
