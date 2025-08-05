@@ -29,6 +29,7 @@ public class AuthController {
     
     @Autowired
     private I18nService i18nService;
+
     // Token validation endpoint for mini app
     @PostMapping("/validate")
     public ResponseEntity<Map<String, Object>> validateToken(@RequestBody Map<String, String> request) {
