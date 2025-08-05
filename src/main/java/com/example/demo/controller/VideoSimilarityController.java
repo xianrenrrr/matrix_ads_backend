@@ -2,7 +2,6 @@ package com.example.demo.controller;
 
 import com.example.demo.ai.EditSuggestionService;
 import com.example.demo.ai.comparison.VideoComparisonIntegrationService;
-import com.example.demo.ai.comparison.VideoComparisonService;
 import com.example.demo.dao.VideoDao;
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.model.Video;
