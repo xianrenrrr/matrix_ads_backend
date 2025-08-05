@@ -1,6 +1,8 @@
 package com.example.demo.controller.contentcreator;
 
 import com.example.demo.model.ManualTemplate;
+
+import com.example.demo.dao.UserDao;
 import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +16,9 @@ import java.util.concurrent.ExecutionException;
 public class UserController {
     @Autowired
     private Firestore db;
+    
+    @Autowired
+    private UserDao userDao;
 
     // Subscribe to a template (Content Creator)
     @PostMapping("/users/{userId}/subscribe")
@@ -72,38 +77,47 @@ public class UserController {
     // Get subscribed templates (Content Creator)
     @GetMapping("/users/{userId}/subscribed-templates")
     public ResponseEntity<List<ManualTemplate>> getSubscribedTemplates(@PathVariable String userId) throws ExecutionException, InterruptedException {
-        DocumentReference userRef = db.collection("users").document(userId);
-        DocumentSnapshot userSnap = userRef.get().get();
-        List<ManualTemplate> templates = new ArrayList<>();
-        boolean userFieldUpdated = false;
-        if (userSnap.exists() && userSnap.contains("subscribed_template")) {
-            Object raw = userSnap.get("subscribed_template");
-            List<String> templateIds = new ArrayList<>();
-            if (raw instanceof List<?>) {
-                for (Object obj : (List<?>) raw) {
-                    if (obj instanceof String) {
-                        templateIds.add((String) obj);
+        try {
+            System.out.println("DEBUG: Getting subscribed templates for user: " + userId);
+            
+            // Get user's subscribed templates using UserDao
+            Map<String, Boolean> subscribedTemplatesMap = userDao.getSubscribedTemplates(userId);
+            System.out.println("DEBUG: User subscribed templates map: " + subscribedTemplatesMap);
+            
+            List<ManualTemplate> templates = new ArrayList<>();
+            
+            // Get template details for each subscribed template
+            for (String templateId : subscribedTemplatesMap.keySet()) {
+                if (Boolean.TRUE.equals(subscribedTemplatesMap.get(templateId))) {
+                    try {
+                        DocumentReference templateRef = db.collection("templates").document(templateId);
+                        DocumentSnapshot templateSnap = templateRef.get().get();
+                        if (templateSnap.exists()) {
+                            ManualTemplate template = templateSnap.toObject(ManualTemplate.class);
+                            if (template != null) {
+                                template.setId(templateId); // Ensure ID is set
+                                templates.add(template);
+                                System.out.println("DEBUG: Added template: " + templateId + " - " + template.getTemplateTitle());
+                            }
+                        } else {
+                            System.out.println("DEBUG: Template not found: " + templateId + " - removing from user subscriptions");
+                            // Remove non-existent template from user's subscriptions
+                            userDao.removeSubscribedTemplate(userId, templateId);
+                        }
+                    } catch (Exception e) {
+                        System.out.println("DEBUG: Error processing template " + templateId + ": " + e.getMessage());
                     }
                 }
             }
-            List<String> validTemplateIds = new ArrayList<>();
-            for (String templateId : templateIds) {
-                DocumentReference templateRef = db.collection("templates").document(templateId);
-                DocumentSnapshot templateSnap = templateRef.get().get();
-                if (templateSnap.exists()) {
-                    ManualTemplate template = templateSnap.toObject(ManualTemplate.class);
-                    templates.add(template);
-                    validTemplateIds.add(templateId);
-                } else {
-                    userFieldUpdated = true;
-                }
-            }
-            // Clean up user's field if any templates were deleted
-            if (userFieldUpdated) {
-                userRef.update("subscribed_template", validTemplateIds);
-            }
+            
+            System.out.println("DEBUG: Returning " + templates.size() + " templates");
+            return ResponseEntity.ok(templates);
+            
+        } catch (Exception e) {
+            System.out.println("DEBUG: Error getting subscribed templates: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.internalServerError().build();
         }
-        return ResponseEntity.ok(templates);
     }
 
     // Get all submissions for a content creator user
