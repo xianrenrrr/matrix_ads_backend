@@ -30,6 +30,33 @@ public class AuthController {
     @Autowired
     private I18nService i18nService;
 
+    // Token validation endpoint for mini app
+    @PostMapping("/validate")
+    public ResponseEntity<Map<String, Object>> validateToken(@RequestBody Map<String, String> request) {
+        try {
+            String token = request.get("token");
+            if (token == null || token.isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Token is required");
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            // Simple token validation - in production this would validate JWT or session tokens
+            // For now, just return success for any non-empty token
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Token is valid");
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Token validation failed: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
     @PostMapping("/signup")
     public ResponseEntity<Map<String, Object>> signup(@RequestBody User user, 
                                                       @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {

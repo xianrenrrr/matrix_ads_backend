@@ -38,23 +38,4 @@ public class NotificationController {
         }
     }
 
-    @PostMapping("/users/{userId}/notifications")
-    public ResponseEntity<String> addNotification(@PathVariable String userId, @RequestBody Map<String, Object> notif) throws Exception {
-        if (db == null) {
-            System.out.println("Firebase is disabled - notification not saved: " + notif);
-            return ResponseEntity.ok("Notification logged (Firebase disabled).");
-        }
-        
-        try {
-            DocumentReference userRef = db.collection("users").document(userId);
-            String notifId = java.util.UUID.randomUUID().toString();
-            notif.put("timestamp", System.currentTimeMillis());
-            notif.put("read", false);
-            userRef.update("notifications." + notifId, notif);
-            return ResponseEntity.ok("Notification added.");
-        } catch (Exception e) {
-            System.err.println("Error adding notification for user " + userId + ": " + e.getMessage());
-            return ResponseEntity.status(500).body("Failed to add notification.");
-        }
-    }
 }

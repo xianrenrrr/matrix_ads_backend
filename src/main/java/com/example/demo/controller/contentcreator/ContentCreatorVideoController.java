@@ -1,6 +1,5 @@
 package com.example.demo.controller.contentcreator;
 
-import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import com.google.firebase.cloud.StorageClient;
 import com.google.firebase.FirebaseApp;
@@ -192,36 +191,4 @@ public class ContentCreatorVideoController {
         }
     }
 
-    @GetMapping("/submission")
-    public ResponseEntity<?> getContentCreatorVideoSubmission(
-            @RequestParam("templateId") String templateId,
-            @RequestParam("userId") String userId
-    ) {
-        if (!StringUtils.hasText(templateId) || !StringUtils.hasText(userId)) {
-            return ResponseEntity.badRequest().body("Missing required parameters.");
-        }
-        try {
-            // Query submittedVideos for a doc where templateId and uploadedBy match
-            CollectionReference submittedVideosCol = db.collection("submittedVideos");
-            Query query = submittedVideosCol.whereEqualTo("templateId", templateId).whereEqualTo("uploadedBy", userId).limit(1);
-            ApiFuture<QuerySnapshot> querySnapshot = query.get();
-            List<QueryDocumentSnapshot> documents = querySnapshot.get().getDocuments();
-            if (!documents.isEmpty()) {
-                DocumentSnapshot doc = documents.get(0);
-                Map<String, Object> response = new HashMap<>();
-                response.put("videoId", doc.getString("videoId"));
-                response.put("videoUrl", doc.getString("videoUrl"));
-                response.put("similarityScore", doc.contains("similarityScore") ? doc.get("similarityScore") : null);
-                response.put("feedback", doc.contains("feedback") ? doc.get("feedback") : new ArrayList<>());
-                response.put("publishStatus", doc.contains("publishStatus") ? doc.get("publishStatus") : "pending");
-                return ResponseEntity.ok(response);
-            } else {
-                Map<String, Object> response = new HashMap<>();
-                response.put("videoId", null);
-                return ResponseEntity.ok(response);
-            }
-        } catch (InterruptedException | ExecutionException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to fetch submission: " + e.getMessage());
-        }
-    }
 }

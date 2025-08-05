@@ -110,46 +110,7 @@ public class VideoSimilarityController {
         }
     }
 
-    /**
-     * Get suggestions only for a specific video
-     */
-    @GetMapping("/suggestions/{videoId}")
-    public ResponseEntity<List<String>> getVideoSuggestions(@PathVariable String videoId) {
-        try {
-            VideoAnalysisResponse analysis = analyzeVideo(videoId).getBody();
-            return ResponseEntity.ok(analysis != null ? analysis.suggestions : List.of("No suggestions available"));
-        } catch (Exception e) {
-            return ResponseEntity.ok(List.of("Unable to generate suggestions at this time"));
-        }
-    }
 
-    private EditSuggestionService.EditSuggestionRequest createSuggestionRequest(
-            Map<String, String> templateScene, 
-            Map<String, String> userScene, 
-            double overallSimilarity) {
-        
-        EditSuggestionService.EditSuggestionRequest request = new EditSuggestionService.EditSuggestionRequest();
-        request.setTemplateDescriptions(templateScene);
-        request.setUserDescriptions(userScene);
-        
-        // Create mock similarity scores based on overall similarity
-        Map<String, Double> scores = new HashMap<>();
-        for (String key : templateScene.keySet()) {
-            scores.put(key, overallSimilarity + (Math.random() * 0.2 - 0.1)); // Add some variance
-        }
-        request.setSimilarityScores(scores);
-        
-        return request;
-    }
-
-    private double calculateOverallSimilarity(List<Map<String, String>> userScenes, 
-                                            List<Map<String, String>> templateScenes) {
-        if (userScenes == null || templateScenes == null || userScenes.isEmpty() || templateScenes.isEmpty()) {
-            return 0.75; // Default similarity for demo
-        }
-        // Simple mock calculation - in real implementation, this would use AI comparison
-        return 0.70 + (Math.random() * 0.25); // Random between 70-95%
-    }
 
     private Map<String, Object> createDetailedAnalysis(List<Map<String, String>> userScenes, 
                                                      List<Map<String, String>> templateScenes) {

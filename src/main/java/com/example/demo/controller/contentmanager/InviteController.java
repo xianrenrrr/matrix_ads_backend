@@ -201,40 +201,4 @@ public class InviteController {
         return baseUrl + "/invite-signup?token=" + token;
     }
 
-    // Add endpoint to get QR code image data
-    @GetMapping("/qr/{token}")
-    public ResponseEntity<Map<String, Object>> getInviteQRCode(@PathVariable String token) {
-        try {
-            Invite invite = inviteDao.findByToken(token);
-            if (invite == null || !invite.isValid()) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Invalid or expired invite");
-                return ResponseEntity.badRequest().body(response);
-            }
-
-            // Generate QR code data for display
-            Map<String, Object> qrData = new HashMap<>();
-            qrData.put("type", "invite");
-            qrData.put("token", token);
-            qrData.put("groupName", invite.getGroupName());
-            qrData.put("managerName", invite.getManagerName());
-            qrData.put("platform", "miniprogram");
-            qrData.put("expiresAt", invite.getExpiresAt().getTime());
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("qrData", qrData);
-            response.put("miniProgramQRUrl", generateMiniProgramQRUrl(token));
-            response.put("webUrl", generateWebInviteUrl(token));
-            
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Failed to generate QR code: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
-    }
 }
