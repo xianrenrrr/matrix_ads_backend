@@ -14,4 +14,9 @@ public interface UserDao {
     void addCreatedTemplate(String userId, String templateId);
     void removeCreatedTemplate(String userId, String templateId);
     java.util.Map<String, Boolean> getCreatedTemplates(String userId);
+    
+    // Content Creator: manage subscribed_Templates
+    void addSubscribedTemplate(String userId, String templateId);
+    void removeSubscribedTemplate(String userId, String templateId);
+    java.util.Map<String, Boolean> getSubscribedTemplates(String userId);
 }

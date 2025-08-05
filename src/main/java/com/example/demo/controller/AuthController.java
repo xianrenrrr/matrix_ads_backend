@@ -2,8 +2,10 @@ package com.example.demo.controller;
 
 import com.example.demo.dao.UserDao;
 import com.example.demo.dao.InviteDao;
+import com.example.demo.dao.GroupDao;
 import com.example.demo.model.User;
 import com.example.demo.model.Invite;
+import com.example.demo.model.Group;
 import com.example.demo.service.I18nService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +23,9 @@ public class AuthController {
     
     @Autowired
     private InviteDao inviteDao;
+    
+    @Autowired
+    private GroupDao groupDao;
     
     @Autowired
     private I18nService i18nService;
@@ -198,8 +203,7 @@ public class AuthController {
             // Return invite data
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("inviteeName", invite.getInviteeName());
-            response.put("inviteeEmail", invite.getInviteeEmail());
+            response.put("groupName", invite.getGroupName());
             response.put("managerName", invite.getManagerName());
             response.put("role", invite.getRole());
             response.put("expiresAt", invite.getExpiresAt());
@@ -276,17 +280,7 @@ public class AuthController {
                 return ResponseEntity.badRequest().body(response);
             }
 
-            // For content managers only: verify email matches invite if both are provided
-            if (role != null && role.equals("content_manager") 
-                && invite.getInviteeEmail() != null && !invite.getInviteeEmail().trim().isEmpty() 
-                && email != null && !email.trim().isEmpty()) {
-                if (!email.equals(invite.getInviteeEmail())) {
-                    Map<String, Object> response = new HashMap<>();
-                    response.put("success", false);
-                    response.put("message", "Email does not match invite");
-                    return ResponseEntity.badRequest().body(response);
-                }
-            }
+            // Group invites don't need email verification since they're open to multiple users
 
             // Check if username already exists
             if (userDao.findByUsername(username) != null) {
@@ -348,17 +342,67 @@ public class AuthController {
             // Save user
             userDao.save(user);
 
-            // Mark invite as accepted
-            invite.setStatus("accepted");
-            invite.setAcceptedAt(new java.util.Date());
-            inviteDao.save(invite);
+            // Handle group membership for group invites
+            System.out.println("DEBUG: Processing invite for group creation");
+            System.out.println("DEBUG: Invite ID: " + invite.getId());
+            System.out.println("DEBUG: Invite GroupName: " + invite.getGroupName());
+            System.out.println("DEBUG: Invite ManagerId: " + invite.getManagerId());
+            
+            if (invite.getGroupName() != null && !invite.getGroupName().trim().isEmpty()) {
+                System.out.println("DEBUG: Group name found, proceeding with group creation/joining");
+                
+                // Find or create the group
+                Group group = groupDao.findByNameAndManagerId(invite.getGroupName(), invite.getManagerId());
+                if (group == null) {
+                    System.out.println("DEBUG: Group not found, creating new group: " + invite.getGroupName());
+                    // Create new group
+                    group = new Group();
+                    group.setGroupName(invite.getGroupName());
+                    group.setManagerId(invite.getManagerId());
+                    group.setManagerName(invite.getManagerName());
+                    group.setMemberIds(new java.util.ArrayList<>());
+                    group.setDescription("Group created from invite: " + invite.getGroupName());
+                    group.setCreatedAt(new java.util.Date());
+                    group.setUpdatedAt(new java.util.Date());
+                    group.setActive(true);
+                    groupDao.save(group);
+                    System.out.println("DEBUG: Group saved with ID: " + group.getId());
+                    
+                    // Update invite with the new group ID
+                    invite.setGroupId(group.getId());
+                } else {
+                    System.out.println("DEBUG: Existing group found with ID: " + group.getId());
+                }
+                
+                // Add user to the group
+                if (!group.isMember(user.getId())) {
+                    System.out.println("DEBUG: Adding user " + user.getId() + " to group " + group.getId());
+                    group.addMember(user.getId());
+                    groupDao.update(group);
+                    System.out.println("DEBUG: User added to group successfully");
+                } else {
+                    System.out.println("DEBUG: User " + user.getId() + " already in group " + group.getId());
+                }
+            } else {
+                System.out.println("DEBUG: No group name found in invite, skipping group creation");
+            }
 
-            // Return user data (without password)
+            // Keep invite active for group invites (don't mark as accepted)
+            // Individual users can join the same group invite multiple times
+
+            // Return user data (without password) and group info
             user.setPassword(null);
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", i18nService.getMessage("registration.success", language));
             response.put("user", user);
+            
+            // Include group information for group invites
+            if (invite.getGroupName() != null && !invite.getGroupName().trim().isEmpty()) {
+                response.put("groupName", invite.getGroupName());
+                response.put("managerName", invite.getManagerName());
+            }
+            
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {

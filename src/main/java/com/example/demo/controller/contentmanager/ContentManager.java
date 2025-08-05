@@ -2,7 +2,9 @@ package com.example.demo.controller.contentmanager;
 
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.UserDao;
+import com.example.demo.dao.GroupDao;
 import com.example.demo.model.ManualTemplate;
+import com.example.demo.model.Group;
 import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -46,25 +48,69 @@ public class ContentManager {
     }
     private final TemplateDao templateDao;
     private final UserDao userDao;
+    private final GroupDao groupDao;
 
     @Autowired
-    public ContentManager(TemplateDao templateDao, UserDao userDao) {
+    public ContentManager(TemplateDao templateDao, UserDao userDao, GroupDao groupDao) {
         this.templateDao = templateDao;
         this.userDao = userDao;
+        this.groupDao = groupDao;
     }
 
     @PostMapping
-    public ResponseEntity<ManualTemplate> createTemplate(@RequestBody com.example.demo.model.CreateTemplateRequest request) {
+    public ResponseEntity<Map<String, Object>> createTemplate(@RequestBody com.example.demo.model.CreateTemplateRequest request) {
         String userId = request.getUserId();
         ManualTemplate manualTemplate = request.getManualTemplate();
+        List<String> selectedGroupIds = request.getSelectedGroupIds();
+        
         manualTemplate.setUserId(userId);
+        
         try {
+            // Create the template
             String templateId = templateDao.createTemplate(manualTemplate);
             userDao.addCreatedTemplate(userId, templateId); // Add templateId to created_template field in user doc
+            
+            // If groups are selected, assign the template to all members of those groups
+            int totalMembersAssigned = 0;
+            List<String> assignedGroupNames = new ArrayList<>();
+            
+            if (selectedGroupIds != null && !selectedGroupIds.isEmpty()) {
+                for (String groupId : selectedGroupIds) {
+                    Group group = groupDao.findById(groupId);
+                    if (group != null && group.getMemberIds() != null) {
+                        assignedGroupNames.add(group.getGroupName());
+                        
+                        // Subscribe all group members to this template
+                        for (String memberId : group.getMemberIds()) {
+                            try {
+                                userDao.addSubscribedTemplate(memberId, templateId);
+                                totalMembersAssigned++;
+                            } catch (Exception e) {
+                                System.err.println("Failed to assign template to user " + memberId + ": " + e.getMessage());
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Prepare response with assignment details
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("template", manualTemplate);
+            response.put("templateId", templateId);
+            response.put("assignedGroups", assignedGroupNames);
+            response.put("totalMembersAssigned", totalMembersAssigned);
+            response.put("message", "Template created successfully" + 
+                (totalMembersAssigned > 0 ? " and assigned to " + totalMembersAssigned + " content creators across " + assignedGroupNames.size() + " groups" : ""));
+            
+            return new ResponseEntity<>(response, HttpStatus.CREATED);
+            
         } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Failed to create template: " + e.getMessage());
+            return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
         }
-        return new ResponseEntity<>(manualTemplate, HttpStatus.CREATED);
     }
 
     @GetMapping("/user/{userId}")
@@ -195,6 +241,29 @@ public class ContentManager {
         public void setUsername(String username) { this.username = username; }
         public void setEmail(String email) { this.email = email; }
         public void setRole(String role) { this.role = role; }
+    }
+
+    // Get groups managed by a user
+    @GetMapping("/groups/manager/{managerId}")
+    public ResponseEntity<List<Map<String, Object>>> getGroupsByManager(@PathVariable String managerId) {
+        try {
+            List<Group> groups = groupDao.findByManagerId(managerId);
+            List<Map<String, Object>> groupSummaries = new ArrayList<>();
+            
+            for (Group group : groups) {
+                Map<String, Object> summary = new HashMap<>();
+                summary.put("id", group.getId());
+                summary.put("groupName", group.getGroupName());
+                summary.put("memberCount", group.getMemberIds() != null ? group.getMemberIds().size() : 0);
+                summary.put("description", group.getDescription());
+                summary.put("createdAt", group.getCreatedAt());
+                groupSummaries.add(summary);
+            }
+            
+            return ResponseEntity.ok(groupSummaries);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 }
 

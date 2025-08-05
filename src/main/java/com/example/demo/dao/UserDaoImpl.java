@@ -11,6 +11,8 @@ import java.util.concurrent.ExecutionException;
 public class UserDaoImpl implements UserDao {
     @Autowired
     private Firestore db;
+    
+    private static final String COLLECTION_NAME = "users";
 
 
     @Override
@@ -139,6 +141,45 @@ public class UserDaoImpl implements UserDao {
             return new java.util.HashMap<>();
         } catch (Exception e) {
             throw new RuntimeException("Failed to get created templates", e);
+        }
+    }
+
+    // Content Creator: manage subscribed_Templates
+    @Override
+    public void addSubscribedTemplate(String userId, String templateId) {
+        try {
+            DocumentReference userRef = db.collection(COLLECTION_NAME).document(userId);
+            userRef.update("subscribed_Templates." + templateId, true).get();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to add subscribed template", e);
+        }
+    }
+
+    @Override
+    public void removeSubscribedTemplate(String userId, String templateId) {
+        try {
+            DocumentReference userRef = db.collection(COLLECTION_NAME).document(userId);
+            userRef.update("subscribed_Templates." + templateId, FieldValue.delete()).get();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to remove subscribed template", e);
+        }
+    }
+
+    @Override
+    public java.util.Map<String, Boolean> getSubscribedTemplates(String userId) {
+        try {
+            DocumentSnapshot userDoc = db.collection(COLLECTION_NAME).document(userId).get().get();
+            if (userDoc.exists() && userDoc.contains("subscribed_Templates")) {
+                Object subscribedTemplatesObj = userDoc.get("subscribed_Templates");
+                if (subscribedTemplatesObj instanceof java.util.Map) {
+                    @SuppressWarnings("unchecked")
+                    java.util.Map<String, Boolean> result = (java.util.Map<String, Boolean>) subscribedTemplatesObj;
+                    return result;
+                }
+            }
+            return new java.util.HashMap<>();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to get subscribed templates", e);
         }
     }
 }
