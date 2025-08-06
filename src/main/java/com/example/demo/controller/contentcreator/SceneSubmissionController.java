@@ -385,6 +385,14 @@ public class SceneSubmissionController {
                 "completionPercentage", totalScenes > 0 ? (double) approvedScenes / totalScenes * 100 : 0
             ));
             
+            // Automatically update publishStatus when all scenes are approved
+            String currentPublishStatus = (String) videoDoc.get("publishStatus");
+            if (approvedScenes == totalScenes && totalScenes > 0 && !"approved".equals(currentPublishStatus) && !"published".equals(currentPublishStatus)) {
+                updates.put("publishStatus", "approved");
+                updates.put("approvedAt", com.google.cloud.firestore.FieldValue.serverTimestamp());
+                System.out.println("Automatically updated publishStatus to 'approved' for video: " + compositeVideoId);
+            }
+            
             videoDocRef.update(updates);
         } else {
             // Create new document
