@@ -9,6 +9,8 @@ import com.example.demo.ai.EditSuggestionService;
 import com.example.demo.ai.comparison.VideoComparisonIntegrationService;
 import com.example.demo.ai.scene.SceneAnalysisService;
 import com.google.cloud.firestore.Firestore;
+import com.google.cloud.firestore.DocumentReference;
+import com.google.cloud.firestore.DocumentSnapshot;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -88,9 +90,12 @@ public class SceneSubmissionController {
                 return createErrorResponse("Scene already submitted and pending/approved", HttpStatus.CONFLICT);
             }
             
-            // Upload file to Firebase Storage
-            String videoId = UUID.randomUUID().toString();
-            FirebaseStorageService.UploadResult uploadResult = firebaseStorageService.uploadVideoWithThumbnail(file, userId, videoId);
+            // Create composite video ID using userId + templateId
+            String compositeVideoId = userId + "_" + templateId;
+            
+            // Upload file to Firebase Storage with scene-specific naming
+            String sceneVideoId = UUID.randomUUID().toString();
+            FirebaseStorageService.UploadResult uploadResult = firebaseStorageService.uploadVideoWithThumbnail(file, userId, sceneVideoId);
             String videoUrl = uploadResult.videoUrl;
             
             // Get thumbnail from upload result
@@ -138,6 +143,14 @@ public class SceneSubmissionController {
             // Save to database
             String sceneId = sceneSubmissionDao.save(sceneSubmission);
             sceneSubmission.setId(sceneId);
+            
+            // Save/update scene in submittedVideos collection
+            try {
+                updateSubmittedVideoWithScene(compositeVideoId, templateId, userId, sceneSubmission);
+            } catch (Exception e) {
+                System.err.println("Error updating submittedVideos: " + e.getMessage());
+                // Continue even if this fails - the scene is still saved in sceneSubmissions
+            }
             
             // Prepare response
             Map<String, Object> response = new HashMap<>();
@@ -313,6 +326,98 @@ public class SceneSubmissionController {
     }
     
     // Helper Methods
+    
+    @SuppressWarnings("unchecked")
+    private void updateSubmittedVideoWithScene(String compositeVideoId, String templateId, String userId, SceneSubmission sceneSubmission) throws ExecutionException, InterruptedException {
+        DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
+        DocumentSnapshot videoDoc = videoDocRef.get().get();
+        
+        Map<String, Object> sceneData = new HashMap<>();
+        sceneData.put("sceneId", sceneSubmission.getId());
+        sceneData.put("sceneNumber", sceneSubmission.getSceneNumber());
+        sceneData.put("sceneTitle", sceneSubmission.getSceneTitle());
+        sceneData.put("videoUrl", sceneSubmission.getVideoUrl());
+        sceneData.put("thumbnailUrl", sceneSubmission.getThumbnailUrl());
+        sceneData.put("status", sceneSubmission.getStatus());
+        sceneData.put("similarityScore", sceneSubmission.getSimilarityScore());
+        sceneData.put("aiSuggestions", sceneSubmission.getAiSuggestions());
+        sceneData.put("submittedAt", sceneSubmission.getSubmittedAt());
+        sceneData.put("originalFileName", sceneSubmission.getOriginalFileName());
+        sceneData.put("fileSize", sceneSubmission.getFileSize());
+        sceneData.put("format", sceneSubmission.getFormat());
+        
+        if (videoDoc.exists()) {
+            // Update existing document - replace the scene or add it
+            Map<String, Object> currentScenes = (Map<String, Object>) videoDoc.get("scenes");
+            if (currentScenes == null) {
+                currentScenes = new HashMap<>();
+            }
+            
+            // Update the specific scene
+            currentScenes.put(String.valueOf(sceneSubmission.getSceneNumber()), sceneData);
+            
+            // Update the document
+            Map<String, Object> updates = new HashMap<>();
+            updates.put("scenes", currentScenes);
+            updates.put("lastUpdated", com.google.cloud.firestore.FieldValue.serverTimestamp());
+            
+            // Calculate overall progress
+            int totalScenes = currentScenes.size();
+            int approvedScenes = 0;
+            int pendingScenes = 0;
+            int rejectedScenes = 0;
+            
+            for (Object sceneObj : currentScenes.values()) {
+                if (sceneObj instanceof Map) {
+                    Map<String, Object> scene = (Map<String, Object>) sceneObj;
+                    String status = (String) scene.get("status");
+                    if ("approved".equals(status)) approvedScenes++;
+                    else if ("pending".equals(status)) pendingScenes++;
+                    else if ("rejected".equals(status)) rejectedScenes++;
+                }
+            }
+            
+            updates.put("progress", Map.of(
+                "totalScenes", totalScenes,
+                "approved", approvedScenes,
+                "pending", pendingScenes,
+                "rejected", rejectedScenes,
+                "completionPercentage", totalScenes > 0 ? (double) approvedScenes / totalScenes * 100 : 0
+            ));
+            
+            videoDocRef.update(updates);
+        } else {
+            // Create new document
+            Map<String, Object> videoData = new HashMap<>();
+            videoData.put("videoId", compositeVideoId);
+            videoData.put("templateId", templateId);
+            videoData.put("uploadedBy", userId);
+            videoData.put("publishStatus", "pending");
+            videoData.put("requestedApproval", true);
+            videoData.put("createdAt", com.google.cloud.firestore.FieldValue.serverTimestamp());
+            videoData.put("lastUpdated", com.google.cloud.firestore.FieldValue.serverTimestamp());
+            
+            // Add the first scene
+            Map<String, Object> scenes = new HashMap<>();
+            scenes.put(String.valueOf(sceneSubmission.getSceneNumber()), sceneData);
+            videoData.put("scenes", scenes);
+            
+            // Initial progress
+            videoData.put("progress", Map.of(
+                "totalScenes", 1,
+                "approved", 0,
+                "pending", 1,
+                "rejected", 0,
+                "completionPercentage", 0.0
+            ));
+            
+            videoDocRef.set(videoData);
+            
+            // Update template's submittedVideos mapping
+            DocumentReference templateDoc = db.collection("templates").document(templateId);
+            templateDoc.update("submittedVideos." + userId, compositeVideoId);
+        }
+    }
     
     private void performAIAnalysis(SceneSubmission sceneSubmission, com.example.demo.model.Scene templateScene) {
         try {

@@ -7,6 +7,7 @@ import com.example.demo.model.SceneSubmission;
 import com.example.demo.model.CompiledVideo;
 import com.example.demo.service.VideoCompilationService;
 import com.example.demo.service.WorkflowAutomationService;
+import com.google.cloud.firestore.Firestore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -37,6 +38,9 @@ public class SceneReviewController {
     
     @Autowired
     private WorkflowAutomationService workflowAutomationService;
+    
+    @Autowired
+    private Firestore db;
     
     /**
      * Get all pending scene submissions for review
@@ -89,6 +93,9 @@ public class SceneReviewController {
                 statusCounts.merge(submission.getStatus(), 1, Integer::sum);
             }
             
+            // Also get compiled scene data from submittedVideos collection
+            Map<String, Object> submittedVideosData = getSubmittedVideosForTemplate(templateId);
+            
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("templateId", templateId);
@@ -96,6 +103,7 @@ public class SceneReviewController {
             response.put("submissions", submissions);
             response.put("submissionsByUser", submissionsByUser);
             response.put("statusCounts", statusCounts);
+            response.put("submittedVideos", submittedVideosData);
             
             return ResponseEntity.ok(response);
             
@@ -299,6 +307,62 @@ public class SceneReviewController {
     }
     
     // Helper Methods
+    
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getSubmittedVideosForTemplate(String templateId) {
+        try {
+            Map<String, Object> result = new HashMap<>();
+            
+            // Query submittedVideos collection for documents where templateId matches
+            // Since we're using composite IDs (userId_templateId), we need to query by templateId field
+            var query = db.collection("submittedVideos")
+                .whereEqualTo("templateId", templateId);
+            
+            var querySnapshot = query.get().get();
+            
+            for (var document : querySnapshot.getDocuments()) {
+                String videoId = document.getId();
+                Map<String, Object> videoData = document.getData();
+                
+                if (videoData != null) {
+                    // Extract scenes data
+                    Object scenesObj = videoData.get("scenes");
+                    if (scenesObj instanceof Map) {
+                        Map<String, Object> scenes = (Map<String, Object>) scenesObj;
+                        videoData.put("scenes", scenes);
+                        videoData.put("sceneCount", scenes.size());
+                        
+                        // Calculate summary stats for this video
+                        int approved = 0, pending = 0, rejected = 0;
+                        for (Object sceneObj : scenes.values()) {
+                            if (sceneObj instanceof Map) {
+                                Map<String, Object> scene = (Map<String, Object>) sceneObj;
+                                String status = (String) scene.get("status");
+                                if ("approved".equals(status)) approved++;
+                                else if ("pending".equals(status)) pending++;
+                                else if ("rejected".equals(status)) rejected++;
+                            }
+                        }
+                        
+                        videoData.put("sceneStats", Map.of(
+                            "approved", approved,
+                            "pending", pending,
+                            "rejected", rejected,
+                            "total", scenes.size()
+                        ));
+                    }
+                    
+                    result.put(videoId, videoData);
+                }
+            }
+            
+            return result;
+            
+        } catch (Exception e) {
+            System.err.println("Error retrieving submitted videos for template " + templateId + ": " + e.getMessage());
+            return new HashMap<>();
+        }
+    }
     
     private boolean checkAndTriggerCompilation(String templateId, String userId, String reviewerId) {
         try {
