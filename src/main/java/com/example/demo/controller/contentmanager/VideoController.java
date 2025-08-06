@@ -4,6 +4,7 @@ import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.VideoDao;
 import com.example.demo.model.Video;
 import com.example.demo.model.ManualTemplate;
+import com.example.demo.service.TemplateSubscriptionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -31,6 +32,7 @@ public class VideoController {
         }
         return aiTemplateGenerator.generateTemplate(video);
     }
+    
     @Autowired
     private VideoDao videoDao;
 
@@ -42,6 +44,9 @@ public class VideoController {
 
     @Autowired(required = false)
     private com.google.cloud.firestore.Firestore db;
+
+    @Autowired
+    private TemplateSubscriptionService templateSubscriptionService;
 
     @PostMapping("/{videoId}/approve")
     public ResponseEntity<String> approveVideo(@PathVariable String videoId) throws Exception {
@@ -88,7 +93,8 @@ public class VideoController {
                                              @RequestParam("userId") String userId,
                                              @RequestParam(value = "title", required = false) String title,
                                              @RequestParam(value = "description", required = false) String description,
-                                             @RequestParam(value = "templateId", required = false) String templateId) {
+                                             @RequestParam(value = "templateId", required = false) String templateId,
+                                             @RequestParam(value = "groupIds", required = false) String groupIdsStr) {
         try {
             // Upload to Firebase Storage and extract thumbnail
             // Generate videoId first
@@ -99,8 +105,8 @@ public class VideoController {
             Video video = new Video();
             video.setId(videoId);
             video.setUserId(userId);
-            video.setTitle(title);
-            video.setDescription(description);
+            video.setTitle(title != null ? title : "");
+            video.setDescription(description != null ? description : "");
             video.setUrl(result.videoUrl);
             video.setThumbnailUrl(result.thumbnailUrl);
             Video savedVideo = videoDao.saveVideo(video);
@@ -113,10 +119,20 @@ public class VideoController {
                     ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo);
                     aiGeneratedTemplate.setUserId(userId);
                     aiGeneratedTemplate.setVideoId(savedVideo.getId());
-                    aiGeneratedTemplate.setTemplateTitle(title);
+                    aiGeneratedTemplate.setTemplateTitle(title != null ? title : "AI Generated Template");
                     String savedTemplateId = templateDao.createTemplate(aiGeneratedTemplate);
                     savedVideo.setTemplateId(savedTemplateId);
                     videoDao.updateVideo(savedVideo);
+                    
+                    // Handle group subscription for AI-generated template
+                    if (groupIdsStr != null && !groupIdsStr.trim().isEmpty()) {
+                        List<String> groupIds = java.util.Arrays.asList(groupIdsStr.split(","));
+                        TemplateSubscriptionService.SubscriptionResult subscriptionResult = 
+                            templateSubscriptionService.batchSubscribeToTemplate(savedTemplateId, groupIds);
+                        
+                        System.out.printf("AI-generated template %s subscribed to %d users across %d groups%n", 
+                            savedTemplateId, subscriptionResult.getTotalUsersAffected(), subscriptionResult.getProcessedGroups().size());
+                    }
                 } else {
                     // If templateId is provided, link the existing template
                     savedVideo.setTemplateId(templateId);

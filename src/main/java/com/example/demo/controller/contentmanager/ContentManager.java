@@ -5,7 +5,7 @@ import com.example.demo.dao.UserDao;
 import com.example.demo.dao.GroupDao;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Group;
-import com.google.cloud.firestore.*;
+import com.example.demo.service.TemplateSubscriptionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -49,6 +49,9 @@ public class ContentManager {
     private final TemplateDao templateDao;
     private final UserDao userDao;
     private final GroupDao groupDao;
+    
+    @Autowired
+    private TemplateSubscriptionService templateSubscriptionService;
 
     @Autowired
     public ContentManager(TemplateDao templateDao, UserDao userDao, GroupDao groupDao) {
@@ -56,6 +59,7 @@ public class ContentManager {
         this.userDao = userDao;
         this.groupDao = groupDao;
     }
+    
 
     @PostMapping
     public ResponseEntity<Map<String, Object>> createTemplate(@RequestBody com.example.demo.model.CreateTemplateRequest request) {
@@ -70,27 +74,17 @@ public class ContentManager {
             String templateId = templateDao.createTemplate(manualTemplate);
             userDao.addCreatedTemplate(userId, templateId); // Add templateId to created_template field in user doc
             
-            // If groups are selected, assign the template to all members of those groups
+            // If groups are selected, assign the template to all members of those groups using batch subscription
             int totalMembersAssigned = 0;
             List<String> assignedGroupNames = new ArrayList<>();
             
             if (selectedGroupIds != null && !selectedGroupIds.isEmpty()) {
-                for (String groupId : selectedGroupIds) {
-                    Group group = groupDao.findById(groupId);
-                    if (group != null && group.getMemberIds() != null) {
-                        assignedGroupNames.add(group.getGroupName());
-                        
-                        // Subscribe all group members to this template
-                        for (String memberId : group.getMemberIds()) {
-                            try {
-                                userDao.addSubscribedTemplate(memberId, templateId);
-                                totalMembersAssigned++;
-                            } catch (Exception e) {
-                                System.err.println("Failed to assign template to user " + memberId + ": " + e.getMessage());
-                            }
-                        }
-                    }
-                }
+                // Use shared batch subscription service
+                TemplateSubscriptionService.SubscriptionResult result = 
+                    templateSubscriptionService.batchSubscribeToTemplate(templateId, selectedGroupIds);
+                
+                totalMembersAssigned = result.getTotalUsersAffected();
+                assignedGroupNames = result.getProcessedGroups();
             }
             
             // Prepare response with assignment details
