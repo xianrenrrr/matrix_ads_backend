@@ -82,26 +82,34 @@ public class SceneReviewController {
     @GetMapping("/template/{templateId}")
     public ResponseEntity<Map<String, Object>> getTemplateSubmissions(@PathVariable String templateId) {
         try {
-            List<SceneSubmission> submissions = sceneSubmissionDao.findByTemplateId(templateId);
-            
-            // Group by user and status
-            Map<String, List<SceneSubmission>> submissionsByUser = new HashMap<>();
-            Map<String, Integer> statusCounts = new HashMap<>();
-            
-            for (SceneSubmission submission : submissions) {
-                submissionsByUser.computeIfAbsent(submission.getUserId(), k -> new ArrayList<>()).add(submission);
-                statusCounts.merge(submission.getStatus(), 1, Integer::sum);
-            }
-            
-            // Also get compiled scene data from submittedVideos collection
+            // Get compiled scene data from submittedVideos collection (the primary source)
             Map<String, Object> submittedVideosData = getSubmittedVideosForTemplate(templateId);
+            
+            // Calculate status counts from submittedVideos data
+            Map<String, Integer> statusCounts = new HashMap<>();
+            statusCounts.put("approved", 0);
+            statusCounts.put("pending", 0);
+            statusCounts.put("rejected", 0);
+            
+            int totalScenes = 0;
+            
+            for (Object videoDataObj : submittedVideosData.values()) {
+                if (videoDataObj instanceof Map) {
+                    Map<String, Object> videoData = (Map<String, Object>) videoDataObj;
+                    Map<String, Object> stats = (Map<String, Object>) videoData.get("sceneStats");
+                    if (stats != null) {
+                        statusCounts.merge("approved", (Integer) stats.get("approved"), Integer::sum);
+                        statusCounts.merge("pending", (Integer) stats.get("pending"), Integer::sum);
+                        statusCounts.merge("rejected", (Integer) stats.get("rejected"), Integer::sum);
+                        totalScenes += (Integer) stats.get("total");
+                    }
+                }
+            }
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("templateId", templateId);
-            response.put("totalSubmissions", submissions.size());
-            response.put("submissions", submissions);
-            response.put("submissionsByUser", submissionsByUser);
+            response.put("totalScenes", totalScenes);
             response.put("statusCounts", statusCounts);
             response.put("submittedVideos", submittedVideosData);
             
