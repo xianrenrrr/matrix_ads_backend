@@ -215,6 +215,36 @@ public class SceneSubmissionController {
     }
     
     /**
+     * Get submitted video data by composite ID (userId_templateId)
+     * GET /content-creator/scenes/submitted-videos/{compositeVideoId}
+     */
+    @GetMapping("/submitted-videos/{compositeVideoId}")
+    public ResponseEntity<Map<String, Object>> getSubmittedVideo(@PathVariable String compositeVideoId) {
+        try {
+            // Get video document from submittedVideos collection
+            DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
+            DocumentSnapshot videoDoc = videoDocRef.get().get();
+            
+            if (!videoDoc.exists()) {
+                return createErrorResponse("No submission found for this template", HttpStatus.NOT_FOUND);
+            }
+            
+            Map<String, Object> videoData = videoDoc.getData();
+            
+            // Return the video data directly
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.putAll(videoData); // Include all video data fields
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            return createErrorResponse("Failed to get submitted video: " + e.getMessage(), 
+                HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
      * Get specific scene submission details
      * GET /content-creator/scenes/{sceneId}
      */
@@ -421,9 +451,9 @@ public class SceneSubmissionController {
             
             videoDocRef.set(videoData);
             
-            // Update template's submittedVideos mapping
+            // Add this submittedVideo ID to the template's submittedVideos list (not scene data!)
             DocumentReference templateDoc = db.collection("templates").document(templateId);
-            templateDoc.update("submittedVideos." + userId, compositeVideoId);
+            templateDoc.update("submittedVideos", FieldValue.arrayUnion(compositeVideoId));
         }
     }
     

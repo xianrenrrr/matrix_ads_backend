@@ -20,6 +20,35 @@ public class ContentManager {
     private com.google.cloud.firestore.Firestore db;
 
 
+    // --- Get single submitted video by composite ID ---
+    @GetMapping("/submitted-videos/{compositeVideoId}")
+    public ResponseEntity<Map<String, Object>> getSubmittedVideo(@PathVariable String compositeVideoId) throws Exception {
+        try {
+            // Get video document from submittedVideos collection
+            com.google.cloud.firestore.DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
+            com.google.cloud.firestore.DocumentSnapshot videoDoc = videoDocRef.get().get();
+            
+            if (!videoDoc.exists()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Submitted video not found");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+            }
+            
+            Map<String, Object> videoData = videoDoc.getData();
+            videoData.put("id", compositeVideoId); // Add document ID
+            videoData.put("success", true);
+            
+            return ResponseEntity.ok(videoData);
+            
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Failed to get submitted video: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
     // --- Submissions grouped by status ---
     @GetMapping("/submissions")
     public ResponseEntity<Map<String, List<Map<String, Object>>>> getAllSubmissions() throws Exception {
