@@ -27,22 +27,32 @@ public class ContentManager {
         com.google.api.core.ApiFuture<com.google.cloud.firestore.QuerySnapshot> querySnapshot = submissionsRef.get();
         List<Map<String, Object>> pending = new ArrayList<>();
         List<Map<String, Object>> approved = new ArrayList<>();
+        List<Map<String, Object>> published = new ArrayList<>();
         List<Map<String, Object>> rejected = new ArrayList<>();
+        
         for (com.google.cloud.firestore.DocumentSnapshot doc : querySnapshot.get().getDocuments()) {
             Map<String, Object> data = doc.getData();
             if (data == null) continue;
+            
+            // Add document ID for frontend use
+            data.put("id", doc.getId());
+            
             String status = (String) data.getOrDefault("publishStatus", "pending");
             if ("approved".equalsIgnoreCase(status)) {
                 approved.add(data);
+            } else if ("published".equalsIgnoreCase(status)) {
+                published.add(data);
             } else if ("rejected".equalsIgnoreCase(status)) {
                 rejected.add(data);
             } else {
                 pending.add(data);
             }
         }
+        
         Map<String, List<Map<String, Object>>> result = new HashMap<>();
         result.put("pending", pending);
         result.put("approved", approved);
+        result.put("published", published);
         result.put("rejected", rejected);
         return ResponseEntity.ok(result);
     }

@@ -88,6 +88,32 @@ public class VideoController {
         return ResponseEntity.ok("Video rejected and creator notified.");
     }
 
+    @PostMapping("/{videoId}/publish")
+    public ResponseEntity<String> publishVideo(@PathVariable String videoId, @RequestParam String publisherId) throws Exception {
+        com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
+        com.google.cloud.firestore.DocumentSnapshot videoSnap = videoRef.get().get();
+        if (!videoSnap.exists()) return ResponseEntity.notFound().build();
+        
+        String currentStatus = (String) videoSnap.get("publishStatus");
+        if (!"approved".equals(currentStatus)) {
+            return ResponseEntity.badRequest().body("Can only publish approved videos");
+        }
+        
+        String creatorId = (String) videoSnap.get("uploadedBy");
+        videoRef.update("publishStatus", "published", "publishedAt", com.google.cloud.firestore.FieldValue.serverTimestamp(), "publishedBy", publisherId);
+        
+        // Send notification to creator
+        com.google.cloud.firestore.DocumentReference userRef = db.collection("users").document(creatorId);
+        String notifId = java.util.UUID.randomUUID().toString();
+        java.util.Map<String, Object> notif = new java.util.HashMap<>();
+        notif.put("type", "video_published");
+        notif.put("message", "Your video has been published!");
+        notif.put("timestamp", System.currentTimeMillis());
+        notif.put("read", false);
+        userRef.update("notifications." + notifId, notif);
+        return ResponseEntity.ok("Video published and creator notified.");
+    }
+
     @PostMapping("/upload")
     public ResponseEntity<Video> uploadVideo(@RequestParam("file") MultipartFile file,
                                              @RequestParam("userId") String userId,
