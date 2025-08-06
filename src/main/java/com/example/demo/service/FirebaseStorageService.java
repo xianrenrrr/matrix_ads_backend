@@ -91,17 +91,5 @@ public class FirebaseStorageService {
         return new UploadResult(videoUrl, thumbnailUrl);
     }   
 
-    public void uploadVideo(InputStream inputStream, String fileName, String contentType) throws IOException {
-        String objectName = "videos/" + fileName;
-
-        BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, objectName)
-            .setContentType(contentType)
-            .build();
-
-        try (WritableByteChannel channel = storage.writer(blobInfo);
-            OutputStream outputStream = Channels.newOutputStream(channel)) {
-            inputStream.transferTo(outputStream);
-        }
-    }
 }
 
