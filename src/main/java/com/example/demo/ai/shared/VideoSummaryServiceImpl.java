@@ -25,6 +25,10 @@ public class VideoSummaryServiceImpl implements VideoSummaryService {
 
     @Override
     public String generateSummary(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions) {
+        return generateSummary(video, sceneLabels, allBlockDescriptions, "en");
+    }
+    
+    public String generateSummary(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions, String language) {
         System.out.printf("Generating video summary for: %s%n", video.getTitle());
         
         if (openaiApiKey == null || openaiApiKey.trim().isEmpty()) {
@@ -34,7 +38,7 @@ public class VideoSummaryServiceImpl implements VideoSummaryService {
         }
         
         try {
-            String prompt = buildSummaryPrompt(video, sceneLabels, allBlockDescriptions);
+            String prompt = buildSummaryPrompt(video, sceneLabels, allBlockDescriptions, language);
             return callGPT4(prompt);
             
         } catch (Exception e) {
@@ -44,8 +48,14 @@ public class VideoSummaryServiceImpl implements VideoSummaryService {
         }
     }
     
-    private String buildSummaryPrompt(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions) {
+    private String buildSummaryPrompt(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions, String language) {
         StringBuilder prompt = new StringBuilder();
+        
+        // Add language instruction if Chinese
+        if ("zh".equals(language)) {
+            prompt.append("请用中文回答。\n\n");
+        }
+        
         prompt.append("Generate a 1-2 sentence summary for a video marketing template based on the following information:\n\n");
         prompt.append("Video Title: ").append(video.getTitle()).append("\n");
         

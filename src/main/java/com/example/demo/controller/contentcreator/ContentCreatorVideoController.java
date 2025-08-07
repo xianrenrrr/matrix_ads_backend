@@ -42,7 +42,8 @@ public class ContentCreatorVideoController {
     public ResponseEntity<?> uploadContentCreatorVideo(
             @RequestParam("file") MultipartFile file,
             @RequestParam("templateId") String templateId,
-            @RequestParam("userId") String userId
+            @RequestParam("userId") String userId,
+            @RequestHeader(value = "Accept-Language", required = false, defaultValue = "en") String acceptLanguage
     ) throws ExecutionException, InterruptedException {
         if (file == null || file.isEmpty() || !StringUtils.hasText(templateId) || !StringUtils.hasText(userId)) {
             return ResponseEntity.badRequest().body("Missing required parameters.");
@@ -89,8 +90,11 @@ public class ContentCreatorVideoController {
                                 // Calculate similarity
                                 similarityScore = calculateSimilarity(userScenes, exampleScenes);
                                 
+                                // Detect language from header
+                                String language = detectLanguage(acceptLanguage);
+                                
                                 // Generate suggestions
-                                suggestions = generateSuggestions(exampleScenes.get(0), userScenes.get(0), similarityScore);
+                                suggestions = generateSuggestions(exampleScenes.get(0), userScenes.get(0), similarityScore, language);
                                 
                                 System.out.println("Similarity analysis complete: " + similarityScore);
                             }
@@ -167,7 +171,21 @@ public class ContentCreatorVideoController {
         return 0.70 + (Math.random() * 0.25); // Random between 70-95%
     }
     
-    private List<String> generateSuggestions(Map<String, String> exampleScene, Map<String, String> userScene, double similarity) {
+    private String detectLanguage(String acceptLanguageHeader) {
+        if (acceptLanguageHeader == null || acceptLanguageHeader.isEmpty()) {
+            return "en";
+        }
+        String[] languages = acceptLanguageHeader.split(",");
+        for (String lang : languages) {
+            String cleanLang = lang.trim().split(";")[0].toLowerCase();
+            if (cleanLang.startsWith("zh")) {
+                return "zh";
+            }
+        }
+        return "en";
+    }
+    
+    private List<String> generateSuggestions(Map<String, String> exampleScene, Map<String, String> userScene, double similarity, String language) {
         try {
             EditSuggestionService.EditSuggestionRequest request = new EditSuggestionService.EditSuggestionRequest();
             request.setTemplateDescriptions(exampleScene);
@@ -180,7 +198,7 @@ public class ContentCreatorVideoController {
             }
             request.setSimilarityScores(scores);
             
-            EditSuggestionService.EditSuggestionResponse response = editSuggestionService.generateSuggestions(request);
+            EditSuggestionService.EditSuggestionResponse response = editSuggestionService.generateSuggestions(request, language);
             return response.getSuggestions();
         } catch (Exception e) {
             System.err.println("Error generating suggestions: " + e.getMessage());

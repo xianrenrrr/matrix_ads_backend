@@ -25,6 +25,10 @@ public class BlockDescriptionServiceImpl implements BlockDescriptionService {
 
     @Override
     public Map<String, String> describeBlocks(Map<String, String> blockImageUrls) {
+        return describeBlocks(blockImageUrls, "en");
+    }
+    
+    public Map<String, String> describeBlocks(Map<String, String> blockImageUrls, String language) {
         System.out.printf("Describing %d image blocks using GPT-4o-mini (vision)%n", blockImageUrls.size());
         
         Map<String, String> blockDescriptions = new HashMap<>();
@@ -49,7 +53,7 @@ public class BlockDescriptionServiceImpl implements BlockDescriptionService {
             String imageUrl = entry.getValue();
             
             try {
-                String description = describeImage(imageUrl);
+                String description = describeImage(imageUrl, language);
                 blockDescriptions.put(blockKey, description);
                 System.out.printf("Block %s described: %s%n", blockKey, description);
                 
@@ -65,7 +69,7 @@ public class BlockDescriptionServiceImpl implements BlockDescriptionService {
         return blockDescriptions;
     }
     
-    private String describeImage(String imageUrl) {
+    private String describeImage(String imageUrl, String language) {
         String effectiveApiKey = deepSeekConfig.getApi().getEffectiveKey();
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + effectiveApiKey);
@@ -83,7 +87,13 @@ public class BlockDescriptionServiceImpl implements BlockDescriptionService {
         // Content with text and image for DeepSeek format
         Map<String, Object> textContent = new HashMap<>();
         textContent.put("type", "text");
-        textContent.put("text", "Describe the visual content of this image in one concise sentence. Focus on the main objects, people, or elements visible.");
+        
+        // Add language instruction if Chinese
+        String textPrompt = "Describe the visual content of this image in one concise sentence. Focus on the main objects, people, or elements visible.";
+        if ("zh".equals(language)) {
+            textPrompt = "请用中文回答。" + textPrompt;
+        }
+        textContent.put("text", textPrompt);
         
         Map<String, Object> imageContent = new HashMap<>();
         imageContent.put("type", "image_url");

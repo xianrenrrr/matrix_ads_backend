@@ -35,6 +35,13 @@ public class EditSuggestionService {
      * Generate edit suggestions based on comparison results
      */
     public EditSuggestionResponse generateSuggestions(EditSuggestionRequest request) {
+        return generateSuggestions(request, "en");
+    }
+    
+    /**
+     * Generate edit suggestions based on comparison results with language support
+     */
+    public EditSuggestionResponse generateSuggestions(EditSuggestionRequest request, String language) {
         try {
             // Identify blocks with lowest similarity scores
             List<BlockMismatch> mismatches = identifyWorstMatches(
@@ -45,7 +52,7 @@ public class EditSuggestionService {
             );
 
             // Generate AI-powered suggestions
-            List<String> suggestions = generateAISuggestions(mismatches, request);
+            List<String> suggestions = generateAISuggestions(mismatches, request, language);
 
             return EditSuggestionResponse.builder()
                 .suggestions(suggestions)
@@ -121,13 +128,13 @@ public class EditSuggestionService {
     /**
      * Generate AI-powered suggestions using GPT-4o
      */
-    private List<String> generateAISuggestions(List<BlockMismatch> mismatches, EditSuggestionRequest request) {
+    private List<String> generateAISuggestions(List<BlockMismatch> mismatches, EditSuggestionRequest request, String language) {
         if (openaiApiKey == null || openaiApiKey.isEmpty()) {
             return generateFallbackSuggestions(mismatches);
         }
 
         try {
-            String prompt = buildPrompt(mismatches, request);
+            String prompt = buildPrompt(mismatches, request, language);
             String response = callOpenAI(prompt);
             return parseAISuggestions(response);
 
@@ -140,8 +147,13 @@ public class EditSuggestionService {
     /**
      * Build prompt for AI suggestion generation
      */
-    private String buildPrompt(List<BlockMismatch> mismatches, EditSuggestionRequest request) {
+    private String buildPrompt(List<BlockMismatch> mismatches, EditSuggestionRequest request, String language) {
         StringBuilder prompt = new StringBuilder();
+        
+        // Add language instruction if Chinese
+        if ("zh".equals(language)) {
+            prompt.append("请用中文回答。\n\n");
+        }
         prompt.append("You are an expert video editor helping a content creator improve their video to match a template better.\n\n");
         
         prompt.append("CONTEXT:\n");
