@@ -421,7 +421,8 @@ public class SceneSubmissionController {
             updates.put("lastUpdated", com.google.cloud.firestore.FieldValue.serverTimestamp());
             
             // Calculate overall progress (only pending and approved now)
-            int totalScenes = currentScenes.size();
+            // Get total scenes from template, not from submitted scenes count
+            int templateTotalScenes = getTemplateTotalScenes(templateId);
             int approvedScenes = 0;
             int pendingScenes = 0;
             
@@ -435,15 +436,15 @@ public class SceneSubmissionController {
             }
             
             updates.put("progress", Map.of(
-                "totalScenes", totalScenes,
+                "totalScenes", templateTotalScenes,
                 "approved", approvedScenes,
                 "pending", pendingScenes,
-                "completionPercentage", totalScenes > 0 ? (double) approvedScenes / totalScenes * 100 : 0
+                "completionPercentage", templateTotalScenes > 0 ? (double) approvedScenes / templateTotalScenes * 100 : 0
             ));
             
             // Automatically update publishStatus when all scenes are approved
             String currentPublishStatus = (String) videoDoc.get("publishStatus");
-            if (approvedScenes == totalScenes && totalScenes > 0 && !"approved".equals(currentPublishStatus) && !"published".equals(currentPublishStatus)) {
+            if (approvedScenes == templateTotalScenes && templateTotalScenes > 0 && !"approved".equals(currentPublishStatus) && !"published".equals(currentPublishStatus)) {
                 updates.put("publishStatus", "approved");
                 updates.put("approvedAt", com.google.cloud.firestore.FieldValue.serverTimestamp());
                 System.out.println("Automatically updated publishStatus to 'approved' for video: " + compositeVideoId);
@@ -467,8 +468,9 @@ public class SceneSubmissionController {
             videoData.put("scenes", scenes);
             
             // Initial progress (only pending and approved now)
+            int templateTotalScenes = getTemplateTotalScenes(templateId);
             videoData.put("progress", Map.of(
-                "totalScenes", 1,
+                "totalScenes", templateTotalScenes,
                 "approved", 0,
                 "pending", 1,
                 "completionPercentage", 0.0
@@ -537,6 +539,18 @@ public class SceneSubmissionController {
             return filename.substring(filename.lastIndexOf(".") + 1).toLowerCase();
         }
         return "mp4";
+    }
+    
+    private int getTemplateTotalScenes(String templateId) {
+        try {
+            ManualTemplate template = templateDao.getTemplate(templateId);
+            if (template != null && template.getScenes() != null) {
+                return template.getScenes().size();
+            }
+        } catch (Exception e) {
+            System.err.println("Error getting template total scenes for " + templateId + ": " + e.getMessage());
+        }
+        return 0; // Default to 0 if template not found
     }
     
     private ResponseEntity<Map<String, Object>> createErrorResponse(String message, HttpStatus status) {
