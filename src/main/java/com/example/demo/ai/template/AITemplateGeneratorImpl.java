@@ -35,7 +35,12 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
 
     @Override
     public ManualTemplate generateTemplate(Video video) {
-        System.out.printf("Starting AI template generation for video ID: %s%n", video.getId());
+        return generateTemplate(video, "en");
+    }
+    
+    @Override
+    public ManualTemplate generateTemplate(Video video, String language) {
+        System.out.printf("Starting AI template generation for video ID: %s in language: %s%n", video.getId(), language);
 
         try {
             // Step 1: Detect scenes using Google Video Intelligence API
@@ -85,7 +90,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
 
             // Step 4: Generate summary (optional)
             System.out.println("Step 4: Generating video summary...");
-            String summary = videoSummaryService.generateSummary(video, allSceneLabels, allBlockDescriptions);
+            String summary = videoSummaryService.generateSummary(video, allSceneLabels, allBlockDescriptions, language);
             System.out.printf("Generated summary: %s%n", summary);
             
             System.out.printf("AI template generation completed for video ID: %s with %d scenes%n", 
@@ -128,7 +133,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
                 if (!blockImageUrls.isEmpty()) {
                     // Step 2c: Describe each block using GPT-4o
                     System.out.printf("Describing blocks for scene %d...%n", sceneNumber);
-                    Map<String, String> blockDescriptions = blockDescriptionService.describeBlocks(blockImageUrls);
+                    Map<String, String> blockDescriptions = blockDescriptionService.describeBlocks(blockImageUrls, language);
                     scene.setBlockDescriptions(blockDescriptions);
 
                     // Set screen grid overlay based on described blocks

@@ -24,13 +24,27 @@ public class VideoController {
     @Autowired
     private DefaultAITemplateGenerator defaultAITemplateGenerator;
     private boolean useDefaultAITemplateGenerator = false;
-    private ManualTemplate generateAITemplate(Video video) {
-        // Use AI template generator to create template
-        System.out.println("Generating AI template for video ID: " + video.getId());
-        if (useDefaultAITemplateGenerator) {
-            return defaultAITemplateGenerator.generateTemplate(video);
+    private String detectLanguage(String acceptLanguageHeader) {
+        if (acceptLanguageHeader == null || acceptLanguageHeader.isEmpty()) {
+            return "en";
         }
-        return aiTemplateGenerator.generateTemplate(video);
+        String[] languages = acceptLanguageHeader.split(",");
+        for (String lang : languages) {
+            String cleanLang = lang.trim().split(";")[0].toLowerCase();
+            if (cleanLang.startsWith("zh")) {
+                return "zh";
+            }
+        }
+        return "en";
+    }
+    
+    private ManualTemplate generateAITemplate(Video video, String language) {
+        // Use AI template generator to create template
+        System.out.println("Generating AI template for video ID: " + video.getId() + " in language: " + language);
+        if (useDefaultAITemplateGenerator) {
+            return defaultAITemplateGenerator.generateTemplate(video, language);
+        }
+        return aiTemplateGenerator.generateTemplate(video, language);
     }
     
     @Autowired
@@ -120,7 +134,8 @@ public class VideoController {
                                              @RequestParam(value = "title", required = false) String title,
                                              @RequestParam(value = "description", required = false) String description,
                                              @RequestParam(value = "templateId", required = false) String templateId,
-                                             @RequestParam(value = "groupIds", required = false) String groupIdsStr) {
+                                             @RequestParam(value = "groupIds", required = false) String groupIdsStr,
+                                             @RequestHeader(value = "Accept-Language", required = false, defaultValue = "en") String acceptLanguage) {
         try {
             // Upload to Firebase Storage and extract thumbnail
             // Generate videoId first
@@ -142,7 +157,10 @@ public class VideoController {
                 if (templateId == null) {
                     // No templateId provided, generate a new template using AI and associate it to the video
                     System.out.printf("No templateId provided, generating AI template for video ID: %s\n", savedVideo.getId());
-                    ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo);
+                    // Detect language from header
+                    String language = detectLanguage(acceptLanguage);
+                    
+                    ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language);
                     aiGeneratedTemplate.setUserId(userId);
                     aiGeneratedTemplate.setVideoId(savedVideo.getId());
                     aiGeneratedTemplate.setTemplateTitle(title != null ? title : "AI Generated Template");

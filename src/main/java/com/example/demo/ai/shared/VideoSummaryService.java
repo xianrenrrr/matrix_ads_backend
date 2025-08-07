@@ -6,4 +6,6 @@ import java.util.Map;
 
 public interface VideoSummaryService {
     String generateSummary(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions);
+    
+    String generateSummary(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions, String language);
 }

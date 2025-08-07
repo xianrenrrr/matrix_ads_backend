@@ -5,4 +5,8 @@ import com.example.demo.model.Video;
 
 public interface AITemplateGenerator {
     ManualTemplate generateTemplate(Video video);
+    
+    default ManualTemplate generateTemplate(Video video, String language) {
+        return generateTemplate(video);
+    }
 }
