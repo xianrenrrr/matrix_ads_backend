@@ -86,10 +86,7 @@ public class SceneSubmissionController {
             SceneSubmission existingSubmission = sceneSubmissionDao.findByTemplateIdAndUserIdAndSceneNumber(
                 templateId, userId, sceneNumber);
             
-            if (existingSubmission != null && 
-                ("pending".equals(existingSubmission.getStatus()) || "approved".equals(existingSubmission.getStatus()))) {
-                return createErrorResponse("Scene already submitted and pending/approved", HttpStatus.CONFLICT);
-            }
+            // Allow resubmission for both pending and approved scenes (no blocking)
             
             // Create composite video ID using userId + templateId
             String compositeVideoId = userId + "_" + templateId;
@@ -124,8 +121,8 @@ public class SceneSubmissionController {
             sceneSubmission.setSceneInstructions(templateScene.getScriptLine());
             sceneSubmission.setExpectedDuration(String.valueOf(templateScene.getSceneDurationInSeconds()));
             
-            // Handle resubmission
-            if (existingSubmission != null && "rejected".equals(existingSubmission.getStatus())) {
+            // Handle resubmission (both pending with feedback and approved can be resubmitted)
+            if (existingSubmission != null) {
                 sceneSubmission.setPreviousSubmissionId(existingSubmission.getId());
                 sceneSubmission.setResubmissionCount(existingSubmission.getResubmissionCount() + 1);
                 
@@ -423,11 +420,10 @@ public class SceneSubmissionController {
             updates.put("scenes", currentScenes);
             updates.put("lastUpdated", com.google.cloud.firestore.FieldValue.serverTimestamp());
             
-            // Calculate overall progress
+            // Calculate overall progress (only pending and approved now)
             int totalScenes = currentScenes.size();
             int approvedScenes = 0;
             int pendingScenes = 0;
-            int rejectedScenes = 0;
             
             for (Object sceneObj : currentScenes.values()) {
                 if (sceneObj instanceof Map) {
@@ -435,7 +431,6 @@ public class SceneSubmissionController {
                     String status = (String) scene.get("status");
                     if ("approved".equals(status)) approvedScenes++;
                     else if ("pending".equals(status)) pendingScenes++;
-                    else if ("rejected".equals(status)) rejectedScenes++;
                 }
             }
             
@@ -443,7 +438,6 @@ public class SceneSubmissionController {
                 "totalScenes", totalScenes,
                 "approved", approvedScenes,
                 "pending", pendingScenes,
-                "rejected", rejectedScenes,
                 "completionPercentage", totalScenes > 0 ? (double) approvedScenes / totalScenes * 100 : 0
             ));
             
@@ -472,12 +466,11 @@ public class SceneSubmissionController {
             scenes.put(String.valueOf(sceneSubmission.getSceneNumber()), sceneData);
             videoData.put("scenes", scenes);
             
-            // Initial progress
+            // Initial progress (only pending and approved now)
             videoData.put("progress", Map.of(
                 "totalScenes", 1,
                 "approved", 0,
                 "pending", 1,
-                "rejected", 0,
                 "completionPercentage", 0.0
             ));
             

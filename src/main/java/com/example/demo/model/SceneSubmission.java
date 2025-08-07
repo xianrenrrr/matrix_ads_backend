@@ -16,7 +16,7 @@ public class SceneSubmission {
     private String sceneTitle;                  // Title from template scene
     private String videoUrl;                    // Firebase Storage URL for scene video
     private String thumbnailUrl;                // Auto-generated thumbnail
-    private String status;                      // "pending", "approved", "rejected", "resubmitted"
+    private String status;                      // "pending", "approved" (simplified to just 2 statuses)
     private Date submittedAt;                   // Initial submission timestamp
     private Date lastUpdatedAt;                 // Last status change timestamp
     private Date reviewedAt;                    // When manager reviewed
@@ -148,8 +148,6 @@ public class SceneSubmission {
     // Utility Methods
     public boolean isPending() { return "pending".equals(status); }
     public boolean isApproved() { return "approved".equals(status); }
-    public boolean isRejected() { return "rejected".equals(status); }
-    public boolean isResubmitted() { return "resubmitted".equals(status); }
     
     public void incrementResubmissionCount() {
         this.resubmissionCount++;
@@ -164,7 +162,8 @@ public class SceneSubmission {
     }
     
     public void reject(String reviewerId, List<String> feedback) {
-        this.status = "rejected";
+        // Keep status as "pending" when rejected - allows resubmission
+        this.status = "pending";  
         this.reviewedBy = reviewerId;
         this.reviewedAt = new Date();
         this.feedback = feedback;

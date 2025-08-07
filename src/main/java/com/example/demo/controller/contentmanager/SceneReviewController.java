@@ -121,133 +121,10 @@ public class SceneReviewController {
         }
     }
     
-    /**
-     * Approve a scene submission
-     * POST /content-manager/scenes/{sceneId}/approve
-     */
-    @PostMapping("/{sceneId}/approve")
-    public ResponseEntity<Map<String, Object>> approveScene(
-            @PathVariable String sceneId,
-            @RequestParam String reviewerId,
-            @RequestBody(required = false) Map<String, Object> requestBody) {
-        
-        try {
-            SceneSubmission submission = sceneSubmissionDao.findById(sceneId);
-            if (submission == null) {
-                return createErrorResponse("Scene submission not found", HttpStatus.NOT_FOUND);
-            }
-            
-            if (!"pending".equals(submission.getStatus())) {
-                return createErrorResponse("Can only approve pending submissions", HttpStatus.BAD_REQUEST);
-            }
-            
-            // Get feedback if provided
-            List<String> feedback = null;
-            if (requestBody != null && requestBody.containsKey("feedback")) {
-                feedback = (List<String>) requestBody.get("feedback");
-            }
-            
-            // Check if this is a manual override (below AI threshold)
-            boolean isManualOverride = false;
-            if (requestBody != null && requestBody.containsKey("manualOverride")) {
-                isManualOverride = (Boolean) requestBody.get("manualOverride");
-            }
-            
-            // Approve the scene
-            submission.approve(reviewerId);
-            if (feedback != null) {
-                submission.setFeedback(feedback);
-            }
-            
-            // Add manual override tracking if needed
-            if (isManualOverride) {
-                String overrideReason = requestBody != null ? (String) requestBody.get("overrideReason") : null;
-                if (overrideReason == null || overrideReason.trim().isEmpty()) {
-                    return createErrorResponse("Override reason is required for manual approvals", HttpStatus.BAD_REQUEST);
-                }
-                
-                // Add override metadata to the submission
-                Map<String, Object> overrideMetadata = new HashMap<>();
-                overrideMetadata.put("isManualOverride", true);
-                overrideMetadata.put("overrideReason", overrideReason);
-                overrideMetadata.put("overrideBy", reviewerId);
-                overrideMetadata.put("overrideAt", new Date());
-                overrideMetadata.put("originalSimilarityScore", submission.getSimilarityScore());
-                
-                submission.getQualityMetrics().putAll(overrideMetadata);
-                System.out.println("Manual override applied for scene " + sceneId + " by " + reviewerId + ": " + overrideReason);
-            }
-            
-            sceneSubmissionDao.update(submission);
-            
-            // Process approval through workflow automation
-            Map<String, Object> workflowResult = workflowAutomationService.processSceneApproval(sceneId, reviewerId);
-            boolean compilationTriggered = (Boolean) workflowResult.getOrDefault("compilationTriggered", false);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "Scene approved successfully");
-            response.put("sceneSubmission", submission);
-            response.put("compilationTriggered", compilationTriggered);
-            response.put("workflowActions", workflowResult.getOrDefault("actionsPerformed", new ArrayList<>()));
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            return createErrorResponse("Failed to approve scene: " + e.getMessage(), 
-                HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
+    // REMOVED approve and reject endpoints - consolidated into manual-override only
     
     /**
-     * Reject a scene submission
-     * POST /content-manager/scenes/{sceneId}/reject
-     */
-    @PostMapping("/{sceneId}/reject")
-    public ResponseEntity<Map<String, Object>> rejectScene(
-            @PathVariable String sceneId,
-            @RequestParam String reviewerId,
-            @RequestBody Map<String, Object> requestBody) {
-        
-        try {
-            SceneSubmission submission = sceneSubmissionDao.findById(sceneId);
-            if (submission == null) {
-                return createErrorResponse("Scene submission not found", HttpStatus.NOT_FOUND);
-            }
-            
-            if (!"pending".equals(submission.getStatus())) {
-                return createErrorResponse("Can only reject pending submissions", HttpStatus.BAD_REQUEST);
-            }
-            
-            // Get feedback (required for rejection)
-            List<String> feedback = (List<String>) requestBody.get("feedback");
-            if (feedback == null || feedback.isEmpty()) {
-                return createErrorResponse("Feedback is required when rejecting a scene", HttpStatus.BAD_REQUEST);
-            }
-            
-            // Reject the scene
-            submission.reject(reviewerId, feedback);
-            sceneSubmissionDao.update(submission);
-            
-            // Process rejection through workflow automation
-            Map<String, Object> workflowResult = workflowAutomationService.processSceneRejection(sceneId, reviewerId, feedback);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "Scene rejected with feedback");
-            response.put("sceneSubmission", submission);
-            response.put("workflowActions", workflowResult.getOrDefault("actionsPerformed", new ArrayList<>()));
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            return createErrorResponse("Failed to reject scene: " + e.getMessage(), 
-                HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-    
-    /**
-     * Manual override to approve a scene that doesn't meet AI threshold
+     * Manual override for scene approval or rejection
      * POST /content-manager/scenes/{sceneId}/manual-override
      */
     @PostMapping("/{sceneId}/manual-override")
@@ -272,49 +149,94 @@ public class SceneReviewController {
                 return createErrorResponse("Override reason is required", HttpStatus.BAD_REQUEST);
             }
             
-            // Optional feedback
+            // Optional feedback (presence indicates rejection)
             List<String> feedback = (List<String>) requestBody.get("feedback");
+            boolean isApproval = feedback == null || feedback.isEmpty();
             
-            // Approve the scene with override
-            submission.approve(reviewerId);
-            if (feedback != null && !feedback.isEmpty()) {
-                submission.setFeedback(feedback);
+            // Apply the override action
+            if (isApproval) {
+                // Approve the scene with override
+                submission.approve(reviewerId);
+                
+                // Add manual override metadata for approval
+                Map<String, Object> overrideMetadata = new HashMap<>();
+                overrideMetadata.put("isManualOverride", true);
+                overrideMetadata.put("overrideReason", overrideReason.trim());
+                overrideMetadata.put("overrideBy", reviewerId);
+                overrideMetadata.put("overrideAt", new Date());
+                overrideMetadata.put("originalSimilarityScore", submission.getSimilarityScore());
+                
+                // Merge with existing quality metrics
+                Map<String, Object> qualityMetrics = submission.getQualityMetrics();
+                if (qualityMetrics == null) {
+                    qualityMetrics = new HashMap<>();
+                }
+                qualityMetrics.putAll(overrideMetadata);
+                submission.setQualityMetrics(qualityMetrics);
+                
+                // Update status in submittedVideos collection
+                updateSceneStatusInSubmittedVideos(submission.getTemplateId(), submission.getUserId(), 
+                    submission.getSceneNumber(), "approved");
+                
+                // Process approval through workflow automation
+                Map<String, Object> workflowResult = workflowAutomationService.processSceneApproval(sceneId, reviewerId);
+                boolean compilationTriggered = (Boolean) workflowResult.getOrDefault("compilationTriggered", false);
+                
+                sceneSubmissionDao.update(submission);
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", true);
+                response.put("message", "Scene manually approved");
+                response.put("sceneSubmission", submission);
+                response.put("isManualOverride", true);
+                response.put("action", "approved");
+                response.put("overrideReason", overrideReason);
+                response.put("compilationTriggered", compilationTriggered);
+                response.put("workflowActions", workflowResult.getOrDefault("actionsPerformed", new ArrayList<>()));
+                
+                System.out.println("Manual approval for scene " + sceneId + " by " + reviewerId + ": " + overrideReason);
+                
+                return ResponseEntity.ok(response);
+                
+            } else {
+                // Reject the scene (status stays "pending" but with feedback)
+                submission.reject(reviewerId, feedback);
+                
+                // Add rejection override metadata
+                Map<String, Object> overrideMetadata = new HashMap<>();
+                overrideMetadata.put("isManualOverride", true);
+                overrideMetadata.put("overrideReason", overrideReason.trim());
+                overrideMetadata.put("overrideBy", reviewerId);
+                overrideMetadata.put("overrideAt", new Date());
+                overrideMetadata.put("action", "rejected");
+                
+                // Merge with existing quality metrics
+                Map<String, Object> qualityMetrics = submission.getQualityMetrics();
+                if (qualityMetrics == null) {
+                    qualityMetrics = new HashMap<>();
+                }
+                qualityMetrics.putAll(overrideMetadata);
+                submission.setQualityMetrics(qualityMetrics);
+                
+                sceneSubmissionDao.update(submission);
+                
+                // Update status in submittedVideos collection (stays "pending")
+                updateSceneStatusInSubmittedVideos(submission.getTemplateId(), submission.getUserId(), 
+                    submission.getSceneNumber(), "pending");
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", true);
+                response.put("message", "Scene rejected with feedback");
+                response.put("sceneSubmission", submission);
+                response.put("isManualOverride", true);
+                response.put("action", "rejected");
+                response.put("overrideReason", overrideReason);
+                response.put("feedback", feedback);
+                
+                System.out.println("Manual rejection for scene " + sceneId + " by " + reviewerId + ": " + overrideReason);
+                
+                return ResponseEntity.ok(response);
             }
-            
-            // Add manual override metadata
-            Map<String, Object> overrideMetadata = new HashMap<>();
-            overrideMetadata.put("isManualOverride", true);
-            overrideMetadata.put("overrideReason", overrideReason.trim());
-            overrideMetadata.put("overrideBy", reviewerId);
-            overrideMetadata.put("overrideAt", new Date());
-            overrideMetadata.put("originalSimilarityScore", submission.getSimilarityScore());
-            
-            // Merge with existing quality metrics
-            Map<String, Object> qualityMetrics = submission.getQualityMetrics();
-            if (qualityMetrics == null) {
-                qualityMetrics = new HashMap<>();
-            }
-            qualityMetrics.putAll(overrideMetadata);
-            submission.setQualityMetrics(qualityMetrics);
-            
-            sceneSubmissionDao.update(submission);
-            
-            // Process approval through workflow automation
-            Map<String, Object> workflowResult = workflowAutomationService.processSceneApproval(sceneId, reviewerId);
-            boolean compilationTriggered = (Boolean) workflowResult.getOrDefault("compilationTriggered", false);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "Scene manually overridden and approved");
-            response.put("sceneSubmission", submission);
-            response.put("isManualOverride", true);
-            response.put("overrideReason", overrideReason);
-            response.put("compilationTriggered", compilationTriggered);
-            response.put("workflowActions", workflowResult.getOrDefault("actionsPerformed", new ArrayList<>()));
-            
-            System.out.println("Manual override applied for scene " + sceneId + " by " + reviewerId + ": " + overrideReason);
-            
-            return ResponseEntity.ok(response);
             
         } catch (Exception e) {
             return createErrorResponse("Failed to manually override scene: " + e.getMessage(), 
@@ -505,6 +427,78 @@ public class SceneReviewController {
         } catch (Exception e) {
             System.err.println("Error checking compilation trigger: " + e.getMessage());
             return false;
+        }
+    }
+    
+    /**
+     * Update scene status in submittedVideos collection
+     */
+    @SuppressWarnings("unchecked")
+    private void updateSceneStatusInSubmittedVideos(String templateId, String userId, int sceneNumber, String newStatus) {
+        try {
+            // Create composite video ID
+            String compositeVideoId = userId + "_" + templateId;
+            
+            // Get the submitted video document
+            var videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
+            var videoDoc = videoDocRef.get().get();
+            
+            if (videoDoc.exists()) {
+                Map<String, Object> videoData = videoDoc.getData();
+                Map<String, Object> scenes = (Map<String, Object>) videoData.get("scenes");
+                
+                if (scenes != null) {
+                    // Update the specific scene status
+                    Map<String, Object> sceneData = (Map<String, Object>) scenes.get(String.valueOf(sceneNumber));
+                    if (sceneData != null) {
+                        sceneData.put("status", newStatus);
+                        
+                        // Update the document
+                        Map<String, Object> updates = new HashMap<>();
+                        updates.put("scenes." + sceneNumber + ".status", newStatus);
+                        updates.put("lastUpdated", com.google.cloud.firestore.FieldValue.serverTimestamp());
+                        
+                        // Recalculate progress (only pending and approved now)
+                        int approvedCount = 0;
+                        int pendingCount = 0;
+                        
+                        for (Object sceneObj : scenes.values()) {
+                            if (sceneObj instanceof Map) {
+                                Map<String, Object> scene = (Map<String, Object>) sceneObj;
+                                String status = (String) scene.get("status");
+                                if ("approved".equals(status)) approvedCount++;
+                                else if ("pending".equals(status)) pendingCount++;
+                            }
+                        }
+                        
+                        updates.put("progress", Map.of(
+                            "totalScenes", scenes.size(),
+                            "approved", approvedCount,
+                            "pending", pendingCount,
+                            "completionPercentage", scenes.size() > 0 ? (double) approvedCount / scenes.size() * 100 : 0
+                        ));
+                        
+                        // Update publishStatus if all scenes are approved
+                        if (approvedCount == scenes.size() && scenes.size() > 0) {
+                            String currentPublishStatus = (String) videoData.get("publishStatus");
+                            if (!"approved".equals(currentPublishStatus) && !"published".equals(currentPublishStatus)) {
+                                updates.put("publishStatus", "approved");
+                                updates.put("approvedAt", com.google.cloud.firestore.FieldValue.serverTimestamp());
+                                System.out.println("Automatically updated publishStatus to 'approved' for video: " + compositeVideoId);
+                            }
+                        }
+                        
+                        videoDocRef.update(updates);
+                        System.out.println("Updated scene " + sceneNumber + " status to '" + newStatus + "' in submittedVideos: " + compositeVideoId);
+                    }
+                }
+            } else {
+                System.err.println("SubmittedVideo not found for update: " + compositeVideoId);
+            }
+            
+        } catch (Exception e) {
+            System.err.println("Error updating scene status in submittedVideos: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     
