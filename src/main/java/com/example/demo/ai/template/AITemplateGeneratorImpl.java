@@ -62,7 +62,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
                 SceneSegment segment = sceneSegments.get(i);
                 System.out.printf("Processing scene %d/%d...%n", i + 1, sceneSegments.size());
                 
-                Scene scene = processScene(segment, i + 1, video.getUrl());
+                Scene scene = processScene(segment, i + 1, video.getUrl(), language);
                 scenes.add(scene);
                 
                 // Collect data for summary
@@ -104,7 +104,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
         }
     }
 
-    private Scene processScene(SceneSegment segment, int sceneNumber, String videoUrl) {
+    private Scene processScene(SceneSegment segment, int sceneNumber, String videoUrl, String language) {
         Scene scene = new Scene();
         scene.setSceneNumber(sceneNumber);
         scene.setSceneTitle(String.format("Scene %d", sceneNumber));
