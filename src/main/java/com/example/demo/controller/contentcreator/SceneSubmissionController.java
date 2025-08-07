@@ -230,12 +230,52 @@ public class SceneSubmissionController {
                 return createErrorResponse("No submission found for this template", HttpStatus.NOT_FOUND);
             }
             
-            Map<String, Object> videoData = videoDoc.getData();
+            Map<String, Object> videoData = new HashMap<>(videoDoc.getData());
             
-            // Return the video data directly
+            // Fetch full scene details from sceneSubmissions collection using scene IDs
+            @SuppressWarnings("unchecked")
+            Map<String, Object> scenes = (Map<String, Object>) videoData.get("scenes");
+            if (scenes != null && !scenes.isEmpty()) {
+                Map<String, Object> fullScenes = new HashMap<>();
+                
+                for (Map.Entry<String, Object> entry : scenes.entrySet()) {
+                    String sceneNumber = entry.getKey();
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> sceneRef = (Map<String, Object>) entry.getValue();
+                    String sceneId = (String) sceneRef.get("sceneId");
+                    
+                    if (sceneId != null) {
+                        // Fetch full scene data from sceneSubmissions collection
+                        SceneSubmission sceneSubmission = sceneSubmissionDao.findById(sceneId);
+                        if (sceneSubmission != null) {
+                            Map<String, Object> fullSceneData = new HashMap<>();
+                            fullSceneData.put("sceneId", sceneSubmission.getId());
+                            fullSceneData.put("sceneNumber", sceneSubmission.getSceneNumber());
+                            fullSceneData.put("sceneTitle", sceneSubmission.getSceneTitle());
+                            fullSceneData.put("videoUrl", sceneSubmission.getVideoUrl());
+                            fullSceneData.put("thumbnailUrl", sceneSubmission.getThumbnailUrl());
+                            fullSceneData.put("status", sceneSubmission.getStatus());
+                            fullSceneData.put("similarityScore", sceneSubmission.getSimilarityScore());
+                            fullSceneData.put("aiSuggestions", sceneSubmission.getAiSuggestions());
+                            fullSceneData.put("submittedAt", sceneSubmission.getSubmittedAt());
+                            fullSceneData.put("originalFileName", sceneSubmission.getOriginalFileName());
+                            fullSceneData.put("fileSize", sceneSubmission.getFileSize());
+                            fullSceneData.put("format", sceneSubmission.getFormat());
+                            fullScenes.put(sceneNumber, fullSceneData);
+                        } else {
+                            // Keep the minimal data if scene not found
+                            fullScenes.put(sceneNumber, sceneRef);
+                        }
+                    }
+                }
+                
+                videoData.put("scenes", fullScenes);
+            }
+            
+            // Return the video data with full scene details
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.putAll(videoData); // Include all video data fields
+            response.putAll(videoData);
             
             return ResponseEntity.ok(response);
             
@@ -363,19 +403,10 @@ public class SceneSubmissionController {
         DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
         DocumentSnapshot videoDoc = videoDocRef.get().get();
         
+        // Only keep scene ID and status in submittedVideos document
         Map<String, Object> sceneData = new HashMap<>();
         sceneData.put("sceneId", sceneSubmission.getId());
-        sceneData.put("sceneNumber", sceneSubmission.getSceneNumber());
-        sceneData.put("sceneTitle", sceneSubmission.getSceneTitle());
-        sceneData.put("videoUrl", sceneSubmission.getVideoUrl());
-        sceneData.put("thumbnailUrl", sceneSubmission.getThumbnailUrl());
         sceneData.put("status", sceneSubmission.getStatus());
-        sceneData.put("similarityScore", sceneSubmission.getSimilarityScore());
-        sceneData.put("aiSuggestions", sceneSubmission.getAiSuggestions());
-        sceneData.put("submittedAt", sceneSubmission.getSubmittedAt());
-        sceneData.put("originalFileName", sceneSubmission.getOriginalFileName());
-        sceneData.put("fileSize", sceneSubmission.getFileSize());
-        sceneData.put("format", sceneSubmission.getFormat());
         
         if (videoDoc.exists()) {
             // Update existing document - replace the scene or add it

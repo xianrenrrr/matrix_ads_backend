@@ -3,8 +3,10 @@ package com.example.demo.controller.contentmanager;
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.UserDao;
 import com.example.demo.dao.GroupDao;
+import com.example.demo.dao.SceneSubmissionDao;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Group;
+import com.example.demo.model.SceneSubmission;
 import com.example.demo.service.TemplateSubscriptionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -18,6 +20,9 @@ import java.util.concurrent.ExecutionException;
 public class ContentManager {
     @Autowired
     private com.google.cloud.firestore.Firestore db;
+    
+    @Autowired
+    private SceneSubmissionDao sceneSubmissionDao;
 
 
     // --- Get single submitted video by composite ID ---
@@ -35,7 +40,48 @@ public class ContentManager {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
             }
             
-            Map<String, Object> videoData = videoDoc.getData();
+            Map<String, Object> videoData = new HashMap<>(videoDoc.getData());
+            
+            // Fetch full scene details from sceneSubmissions collection using scene IDs
+            @SuppressWarnings("unchecked")
+            Map<String, Object> scenes = (Map<String, Object>) videoData.get("scenes");
+            if (scenes != null && !scenes.isEmpty()) {
+                Map<String, Object> fullScenes = new HashMap<>();
+                
+                for (Map.Entry<String, Object> entry : scenes.entrySet()) {
+                    String sceneNumber = entry.getKey();
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> sceneRef = (Map<String, Object>) entry.getValue();
+                    String sceneId = (String) sceneRef.get("sceneId");
+                    
+                    if (sceneId != null) {
+                        // Fetch full scene data from sceneSubmissions collection
+                        SceneSubmission sceneSubmission = sceneSubmissionDao.findById(sceneId);
+                        if (sceneSubmission != null) {
+                            Map<String, Object> fullSceneData = new HashMap<>();
+                            fullSceneData.put("sceneId", sceneSubmission.getId());
+                            fullSceneData.put("sceneNumber", sceneSubmission.getSceneNumber());
+                            fullSceneData.put("sceneTitle", sceneSubmission.getSceneTitle());
+                            fullSceneData.put("videoUrl", sceneSubmission.getVideoUrl());
+                            fullSceneData.put("thumbnailUrl", sceneSubmission.getThumbnailUrl());
+                            fullSceneData.put("status", sceneSubmission.getStatus());
+                            fullSceneData.put("similarityScore", sceneSubmission.getSimilarityScore());
+                            fullSceneData.put("aiSuggestions", sceneSubmission.getAiSuggestions());
+                            fullSceneData.put("submittedAt", sceneSubmission.getSubmittedAt());
+                            fullSceneData.put("originalFileName", sceneSubmission.getOriginalFileName());
+                            fullSceneData.put("fileSize", sceneSubmission.getFileSize());
+                            fullSceneData.put("format", sceneSubmission.getFormat());
+                            fullScenes.put(sceneNumber, fullSceneData);
+                        } else {
+                            // Keep the minimal data if scene not found
+                            fullScenes.put(sceneNumber, sceneRef);
+                        }
+                    }
+                }
+                
+                videoData.put("scenes", fullScenes);
+            }
+            
             videoData.put("id", compositeVideoId); // Add document ID
             videoData.put("success", true);
             
