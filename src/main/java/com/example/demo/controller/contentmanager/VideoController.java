@@ -136,6 +136,13 @@ public class VideoController {
                                              @RequestParam(value = "templateId", required = false) String templateId,
                                              @RequestParam(value = "groupIds", required = false) String groupIdsStr,
                                              @RequestHeader(value = "Accept-Language", required = false, defaultValue = "en") String acceptLanguage) {
+        System.out.println("=== VIDEO UPLOAD REQUEST ===");
+        System.out.println("Accept-Language header: " + acceptLanguage);
+        System.out.println("User ID: " + userId);
+        System.out.println("Title: " + title);
+        System.out.println("Template ID: " + templateId);
+        System.out.println("=============================");
+        
         try {
             // Upload to Firebase Storage and extract thumbnail
             // Generate videoId first
@@ -159,6 +166,7 @@ public class VideoController {
                     System.out.printf("No templateId provided, generating AI template for video ID: %s\n", savedVideo.getId());
                     // Detect language from header
                     String language = detectLanguage(acceptLanguage);
+                    System.out.println("Detected language: " + language);
                     
                     ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language);
                     aiGeneratedTemplate.setUserId(userId);
@@ -197,9 +205,22 @@ public class VideoController {
 
             // Log
             System.out.println("[INFO] [uploadVideo] Uploaded video and thumbnail for user " + userId + ", videoId " + savedVideo.getId());
+            
+            System.out.println("=== VIDEO UPLOAD SUCCESS ===");
+            System.out.println("Video ID: " + savedVideo.getId());
+            System.out.println("Template ID: " + savedVideo.getTemplateId());
+            System.out.println("Title: " + savedVideo.getTitle());
+            System.out.println("URL: " + savedVideo.getUrl());
+            System.out.println("Returning status: 200 OK");
+            System.out.println("=============================");
 
             return ResponseEntity.ok(savedVideo);
         } catch (Exception e) {
+            System.out.println("=== VIDEO UPLOAD ERROR ===");
+            System.out.println("Error message: " + e.getMessage());
+            System.out.println("Error class: " + e.getClass().getSimpleName());
+            System.out.println("Returning status: 500 Internal Server Error");
+            System.out.println("===========================");
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }

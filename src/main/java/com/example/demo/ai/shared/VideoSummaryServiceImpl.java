@@ -75,7 +75,15 @@ public class VideoSummaryServiceImpl implements VideoSummaryService {
         
         prompt.append("\nPlease create a concise, marketing-focused summary that describes what this video template would help users create.");
         
-        return prompt.toString();
+        String finalPrompt = prompt.toString();
+        
+        // LOG: What we're sending to AI
+        System.out.println("=== AI VIDEO SUMMARY REQUEST ===");
+        System.out.println("Language: " + language);
+        System.out.println("Prompt being sent to AI: " + finalPrompt);
+        System.out.println("================================");
+        
+        return finalPrompt;
     }
     
     private String callGPT4(String prompt) {
@@ -110,7 +118,14 @@ public class VideoSummaryServiceImpl implements VideoSummaryService {
                 if (!choices.isEmpty()) {
                     Map<String, Object> firstChoice = choices.get(0);
                     Map<String, Object> message1 = (Map<String, Object>) firstChoice.get("message");
-                    return (String) message1.get("content");
+                    String aiResponse = (String) message1.get("content");
+                    
+                    // LOG: What AI responded
+                    System.out.println("=== AI VIDEO SUMMARY RESPONSE ===");
+                    System.out.println("AI Response: " + aiResponse);
+                    System.out.println("==================================");
+                    
+                    return aiResponse;
                 }
             }
             

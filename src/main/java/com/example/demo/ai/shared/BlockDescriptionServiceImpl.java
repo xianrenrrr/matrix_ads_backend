@@ -93,6 +93,14 @@ public class BlockDescriptionServiceImpl implements BlockDescriptionService {
         if ("zh".equals(language)) {
             textPrompt = "请用中文回答。" + textPrompt;
         }
+        
+        // LOG: What we're sending to AI
+        System.out.println("=== AI BLOCK DESCRIPTION REQUEST ===");
+        System.out.println("Language: " + language);
+        System.out.println("Prompt being sent to AI: " + textPrompt);
+        System.out.println("Image URL: " + imageUrl);
+        System.out.println("=====================================");
+        
         textContent.put("text", textPrompt);
         
         Map<String, Object> imageContent = new HashMap<>();

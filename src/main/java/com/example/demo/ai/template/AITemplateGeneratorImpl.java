@@ -60,7 +60,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
 
             for (int i = 0; i < sceneSegments.size(); i++) {
                 SceneSegment segment = sceneSegments.get(i);
-                System.out.printf("Processing scene %d/%d...%n", i + 1, sceneSegments.size());
+                System.out.printf("Processing scene %d/%d with language: %s%n", i + 1, sceneSegments.size(), language);
                 
                 Scene scene = processScene(segment, i + 1, video.getUrl(), language);
                 scenes.add(scene);
@@ -80,9 +80,14 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
             template.setTemplateTitle(video.getTitle() + " - AI Generated Template");
             template.setScenes(scenes);
             
-            // Set some default values
+            // Set some default values (note: these are hardcoded and not AI-generated)
             template.setVideoFormat("1080p 16:9");
             template.setTotalVideoLength(calculateTotalDuration(sceneSegments));
+            
+            // LOG: These are preset values, not AI-generated
+            System.out.println("=== AI TEMPLATE DEFAULT VALUES (NOT AI-GENERATED) ===");
+            System.out.println("Setting preset values for videoPurpose, tone, etc.");
+            
             template.setVideoPurpose("Product demonstration and promotion");
             template.setTone("Professional");
             template.setLightingRequirements("Good natural or artificial lighting");
