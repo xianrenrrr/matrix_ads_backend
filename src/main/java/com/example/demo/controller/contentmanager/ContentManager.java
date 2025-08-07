@@ -234,6 +234,34 @@ public class ContentManager {
         }
     }
 
+    @PutMapping("/{templateId}")
+    public ResponseEntity<Map<String, Object>> updateTemplate(
+            @PathVariable String templateId, 
+            @RequestBody ManualTemplate updatedTemplate) {
+        try {
+            updatedTemplate.setId(templateId); // Ensure ID matches path parameter
+            boolean updated = templateDao.updateTemplate(templateId, updatedTemplate);
+            
+            if (updated) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", true);
+                response.put("message", "Template updated successfully");
+                response.put("template", updatedTemplate);
+                return ResponseEntity.ok(response);
+            } else {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Template not found");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+            }
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Failed to update template: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
     @DeleteMapping("/{templateId}")
     public ResponseEntity<Void> deleteTemplate(@PathVariable String templateId, @RequestParam String userId) {
         try {
