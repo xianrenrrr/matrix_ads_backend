@@ -37,7 +37,7 @@ public class InviteController {
             if (managerId == null || groupName == null || groupName.trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Missing required fields: managerId and groupName");
+                response.put("message", "HARDCODED_Missing required fields: managerId and groupName"); // TODO: Internationalize this message
                 return ResponseEntity.badRequest().body(response);
             }
 
@@ -46,7 +46,7 @@ public class InviteController {
             if (manager == null || !"content_manager".equals(manager.getRole())) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Invalid manager or insufficient permissions");
+                response.put("message", "HARDCODED_Invalid manager or insufficient permissions"); // TODO: Internationalize this message
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
             }
 
@@ -57,7 +57,7 @@ public class InviteController {
                     "pending".equals(existing.getStatus()) && !existing.isExpired()) {
                     Map<String, Object> response = new HashMap<>();
                     response.put("success", false);
-                    response.put("message", "Active group invite already exists for this group name");
+                    response.put("message", "HARDCODED_Active group invite already exists for this group name"); // TODO: Internationalize this message
                     return ResponseEntity.badRequest().body(response);
                 }
             }
@@ -104,7 +104,7 @@ public class InviteController {
             // Return success response with invite data
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Group invite generated successfully");
+            response.put("message", "HARDCODED_Group invite generated successfully"); // TODO: Internationalize this message
             response.put("id", invite.getId());
             response.put("token", invite.getToken());
             response.put("managerId", invite.getManagerId());
@@ -122,7 +122,7 @@ public class InviteController {
         } catch (Exception e) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Failed to generate invite: " + e.getMessage());
+            response.put("message", "HARDCODED_Failed to generate invite: " + e.getMessage()); // TODO: Internationalize this message
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -161,7 +161,7 @@ public class InviteController {
             if (invite == null) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Invite not found");
+                response.put("message", "HARDCODED_Invite not found"); // TODO: Internationalize this message
                 return ResponseEntity.notFound().build();
             }
 
@@ -169,13 +169,13 @@ public class InviteController {
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Invite deleted successfully");
+            response.put("message", "HARDCODED_Invite deleted successfully"); // TODO: Internationalize this message
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Failed to delete invite: " + e.getMessage());
+            response.put("message", "HARDCODED_Failed to delete invite: " + e.getMessage()); // TODO: Internationalize this message
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }

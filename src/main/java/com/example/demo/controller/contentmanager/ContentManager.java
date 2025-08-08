@@ -36,7 +36,7 @@ public class ContentManager {
             if (!videoDoc.exists()) {
                 Map<String, Object> errorResponse = new HashMap<>();
                 errorResponse.put("success", false);
-                errorResponse.put("message", "Submitted video not found");
+                errorResponse.put("message", "HARDCODED_Submitted video not found"); // TODO: Internationalize this message
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
             }
             
@@ -90,7 +90,7 @@ public class ContentManager {
         } catch (Exception e) {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
-            errorResponse.put("message", "Failed to get submitted video: " + e.getMessage());
+            errorResponse.put("message", "HARDCODED_Failed to get submitted video: " + e.getMessage()); // TODO: Internationalize this message
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
@@ -179,7 +179,7 @@ public class ContentManager {
             response.put("templateId", templateId);
             response.put("assignedGroups", assignedGroupNames);
             response.put("totalMembersAssigned", totalMembersAssigned);
-            response.put("message", "Template created successfully" + 
+            response.put("message", "HARDCODED_Template created successfully" + // TODO: Internationalize this message 
                 (totalMembersAssigned > 0 ? " and assigned to " + totalMembersAssigned + " content creators across " + assignedGroupNames.size() + " groups" : ""));
             
             return new ResponseEntity<>(response, HttpStatus.CREATED);
@@ -187,7 +187,7 @@ public class ContentManager {
         } catch (Exception e) {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
-            errorResponse.put("message", "Failed to create template: " + e.getMessage());
+            errorResponse.put("message", "HARDCODED_Failed to create template: " + e.getMessage()); // TODO: Internationalize this message
             return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -245,19 +245,19 @@ public class ContentManager {
             if (updated) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", true);
-                response.put("message", "Template updated successfully");
+                response.put("message", "HARDCODED_Template updated successfully"); // TODO: Internationalize this message
                 response.put("template", updatedTemplate);
                 return ResponseEntity.ok(response);
             } else {
                 Map<String, Object> errorResponse = new HashMap<>();
                 errorResponse.put("success", false);
-                errorResponse.put("message", "Template not found");
+                errorResponse.put("message", "HARDCODED_Template not found"); // TODO: Internationalize this message
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
             }
         } catch (Exception e) {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
-            errorResponse.put("message", "Failed to update template: " + e.getMessage());
+            errorResponse.put("message", "HARDCODED_Failed to update template: " + e.getMessage()); // TODO: Internationalize this message
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }

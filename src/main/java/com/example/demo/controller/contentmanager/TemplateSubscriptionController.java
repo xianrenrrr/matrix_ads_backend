@@ -25,14 +25,14 @@ public class TemplateSubscriptionController {
             if (templateId == null || templateId.trim().isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of(
                     "success", false,
-                    "message", "Template ID is required"
+                    "message", "HARDCODED_Template ID is required" // TODO: Internationalize this message
                 ));
             }
             
             if (groupIds == null || groupIds.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of(
                     "success", false,
-                    "message", "At least one group ID is required"
+                    "message", "HARDCODED_At least one group ID is required" // TODO: Internationalize this message
                 ));
             }
             
@@ -43,7 +43,7 @@ public class TemplateSubscriptionController {
             // Prepare response
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", String.format("Template subscribed to %d users across %d groups", 
+            response.put("message", String.format("HARDCODED_Template subscribed to %d users across %d groups", // TODO: Internationalize this message 
                 result.getTotalUsersAffected(), result.getProcessedGroups().size()));
             response.put("templateId", templateId);
             response.put("totalUsersSubscribed", result.getTotalUsersAffected());
@@ -59,7 +59,7 @@ public class TemplateSubscriptionController {
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of(
                 "success", false,
-                "message", "Error processing batch subscription: " + e.getMessage()
+                "message", "HARDCODED_Error processing batch subscription: " + e.getMessage() // TODO: Internationalize this message
             ));
         }
     }
@@ -74,14 +74,14 @@ public class TemplateSubscriptionController {
             if (templateId == null || templateId.trim().isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of(
                     "success", false,
-                    "message", "Template ID is required"
+                    "message", "HARDCODED_Template ID is required" // TODO: Internationalize this message
                 ));
             }
             
             if (groupIds == null || groupIds.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of(
                     "success", false,
-                    "message", "At least one group ID is required"
+                    "message", "HARDCODED_At least one group ID is required" // TODO: Internationalize this message
                 ));
             }
             
@@ -91,7 +91,7 @@ public class TemplateSubscriptionController {
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", String.format("Template unsubscribed from %d users across %d groups", 
+            response.put("message", String.format("HARDCODED_Template unsubscribed from %d users across %d groups", // TODO: Internationalize this message 
                 result.getTotalUsersAffected(), result.getProcessedGroups().size()));
             response.put("templateId", templateId);
             response.put("totalUsersUnsubscribed", result.getTotalUsersAffected());

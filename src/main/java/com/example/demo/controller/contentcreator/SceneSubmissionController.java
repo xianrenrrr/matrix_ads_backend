@@ -65,17 +65,17 @@ public class SceneSubmissionController {
         try {
             // Validate inputs
             if (file.isEmpty()) {
-                return createErrorResponse("File is empty", HttpStatus.BAD_REQUEST);
+                return createErrorResponse("HARDCODED_File is empty", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
             }
             
             // Get template to validate scene number and get scene data
             ManualTemplate template = templateDao.getTemplate(templateId);
             if (template == null) {
-                return createErrorResponse("Template not found", HttpStatus.NOT_FOUND);
+                return createErrorResponse("HARDCODED_Template not found", HttpStatus.NOT_FOUND); // TODO: Internationalize this message
             }
             
             if (sceneNumber < 1 || sceneNumber > template.getScenes().size()) {
-                return createErrorResponse("Invalid scene number", HttpStatus.BAD_REQUEST);
+                return createErrorResponse("HARDCODED_Invalid scene number", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
             }
             
             // Get scene data from template
@@ -153,7 +153,7 @@ public class SceneSubmissionController {
             // Prepare response
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Scene uploaded successfully");
+            response.put("message", "HARDCODED_Scene uploaded successfully"); // TODO: Internationalize this message
             response.put("sceneSubmission", sceneSubmission);
             response.put("similarityScore", sceneSubmission.getSimilarityScore());
             response.put("aiSuggestions", sceneSubmission.getAiSuggestions());
@@ -162,7 +162,7 @@ public class SceneSubmissionController {
             
         } catch (Exception e) {
             System.err.println("Error uploading scene: " + e.getMessage());
-            return createErrorResponse("Failed to upload scene: " + e.getMessage(), 
+            return createErrorResponse("HARDCODED_Failed to upload scene: " + e.getMessage(), // TODO: Internationalize this message 
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -207,7 +207,7 @@ public class SceneSubmissionController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            return createErrorResponse("Failed to get scene submissions: " + e.getMessage(), 
+            return createErrorResponse("HARDCODED_Failed to get scene submissions: " + e.getMessage(), // TODO: Internationalize this message 
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -224,7 +224,7 @@ public class SceneSubmissionController {
             DocumentSnapshot videoDoc = videoDocRef.get().get();
             
             if (!videoDoc.exists()) {
-                return createErrorResponse("No submission found for this template", HttpStatus.NOT_FOUND);
+                return createErrorResponse("HARDCODED_No submission found for this template", HttpStatus.NOT_FOUND); // TODO: Internationalize this message
             }
             
             Map<String, Object> videoData = new HashMap<>(videoDoc.getData());
@@ -277,7 +277,7 @@ public class SceneSubmissionController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            return createErrorResponse("Failed to get submitted video: " + e.getMessage(), 
+            return createErrorResponse("HARDCODED_Failed to get submitted video: " + e.getMessage(), // TODO: Internationalize this message 
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -292,7 +292,7 @@ public class SceneSubmissionController {
             SceneSubmission submission = sceneSubmissionDao.findById(sceneId);
             
             if (submission == null) {
-                return createErrorResponse("Scene submission not found", HttpStatus.NOT_FOUND);
+                return createErrorResponse("HARDCODED_Scene submission not found", HttpStatus.NOT_FOUND); // TODO: Internationalize this message
             }
             
             Map<String, Object> response = new HashMap<>();
@@ -302,7 +302,7 @@ public class SceneSubmissionController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            return createErrorResponse("Failed to get scene submission: " + e.getMessage(), 
+            return createErrorResponse("HARDCODED_Failed to get scene submission: " + e.getMessage(), // TODO: Internationalize this message 
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -320,11 +320,11 @@ public class SceneSubmissionController {
             // Get original submission
             SceneSubmission originalSubmission = sceneSubmissionDao.findById(sceneId);
             if (originalSubmission == null) {
-                return createErrorResponse("Original scene submission not found", HttpStatus.NOT_FOUND);
+                return createErrorResponse("HARDCODED_Original scene submission not found", HttpStatus.NOT_FOUND); // TODO: Internationalize this message
             }
             
             if (!"rejected".equals(originalSubmission.getStatus())) {
-                return createErrorResponse("Can only resubmit rejected scenes", HttpStatus.BAD_REQUEST);
+                return createErrorResponse("HARDCODED_Can only resubmit rejected scenes", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
             }
             
             // Create new submission using upload logic
@@ -332,7 +332,7 @@ public class SceneSubmissionController {
                 originalSubmission.getSceneNumber(), originalSubmission.getSceneTitle());
             
         } catch (Exception e) {
-            return createErrorResponse("Failed to resubmit scene: " + e.getMessage(), 
+            return createErrorResponse("HARDCODED_Failed to resubmit scene: " + e.getMessage(), // TODO: Internationalize this message 
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -388,7 +388,7 @@ public class SceneSubmissionController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            return createErrorResponse("Failed to get user progress: " + e.getMessage(), 
+            return createErrorResponse("HARDCODED_Failed to get user progress: " + e.getMessage(), // TODO: Internationalize this message 
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -516,7 +516,7 @@ public class SceneSubmissionController {
             Map<String, Object> fallbackMetrics = new HashMap<>();
             fallbackMetrics.put("overallQuality", 0.7);
             fallbackMetrics.put("qualityRating", "Good");
-            fallbackMetrics.put("error", "Partial analysis failure");
+            fallbackMetrics.put("error", "HARDCODED_Partial analysis failure"); // TODO: Internationalize this message
             sceneSubmission.setQualityMetrics(fallbackMetrics);
         }
     }

@@ -46,13 +46,13 @@ public class ContentCreatorVideoController {
             @RequestHeader(value = "Accept-Language", required = false, defaultValue = "en") String acceptLanguage
     ) throws ExecutionException, InterruptedException {
         if (file == null || file.isEmpty() || !StringUtils.hasText(templateId) || !StringUtils.hasText(userId)) {
-            return ResponseEntity.badRequest().body("Missing required parameters.");
+            return ResponseEntity.badRequest().body("HARDCODED_Missing required parameters."); // TODO: Internationalize this message
         }
         try {
             // Check if Firebase is available
             if (firebaseApp == null) {
                 return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body("Firebase Storage is not available. Please check configuration.");
+                    .body("HARDCODED_Firebase Storage is not available. Please check configuration."); // TODO: Internationalize this message
             }
             
             // Upload new video to GCS
@@ -141,7 +141,7 @@ public class ContentCreatorVideoController {
                     String notifId = UUID.randomUUID().toString();
                     Map<String, Object> notif = new HashMap<>();
                     notif.put("type", "new_submission");
-                    notif.put("message", "New video submission received for your template by user: " + userId);
+                    notif.put("message", "HARDCODED_New video submission received for your template by user: " + userId); // TODO: Internationalize this message
                     notif.put("templateId", templateId);
                     notif.put("submittedBy", userId);
                     notif.put("timestamp", System.currentTimeMillis());
@@ -151,7 +151,7 @@ public class ContentCreatorVideoController {
             }
 
             Map<String, Object> response = new HashMap<>();
-            response.put("message", "Video uploaded and processed.");
+            response.put("message", "HARDCODED_Video uploaded and processed."); // TODO: Internationalize this message
             response.put("videoId", newVideoId);
             response.put("videoUrl", videoUrl);
             response.put("similarityScore", similarityScore);
@@ -159,7 +159,7 @@ public class ContentCreatorVideoController {
             response.put("publishStatus", "pending");
             return ResponseEntity.ok(response);
         } catch (IOException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to upload/process video: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("HARDCODED_Failed to upload/process video: " + e.getMessage()); // TODO: Internationalize this message
         }
     }
     

@@ -38,7 +38,7 @@ public class AuthController {
             if (token == null || token.isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Token is required");
+                response.put("message", "HARDCODED_Token is required"); // TODO: Internationalize this message
                 return ResponseEntity.badRequest().body(response);
             }
 
@@ -46,13 +46,13 @@ public class AuthController {
             // For now, just return success for any non-empty token
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Token is valid");
+            response.put("message", "HARDCODED_Token is valid"); // TODO: Internationalize this message
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Token validation failed: " + e.getMessage());
+            response.put("message", "HARDCODED_Token validation failed: " + e.getMessage()); // TODO: Internationalize this message
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -68,14 +68,14 @@ public class AuthController {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
                 response.put("message", i18nService.getMessage("registration.failed", language));
-                response.put("error", "Username already exists");
+                response.put("error", "HARDCODED_Username already exists"); // TODO: Internationalize this message
                 return ResponseEntity.badRequest().body(response);
             }
             if (userDao.findByEmailAndRole(user.getEmail(), user.getRole()) != null) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
                 response.put("message", i18nService.getMessage("registration.failed", language));
-                response.put("error", "Email already exists for this role");
+                response.put("error", "HARDCODED_Email already exists for this role"); // TODO: Internationalize this message
                 return ResponseEntity.badRequest().body(response);
             }
             
@@ -163,7 +163,7 @@ public class AuthController {
             if (!"content_manager".equals(user.getRole()) && (platform == null || !"miniprogram".equals(platform))) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Content creators should use the mini app for access");
+                response.put("message", "HARDCODED_Content creators should use the mini app for access"); // TODO: Internationalize this message
                 return ResponseEntity.badRequest().body(response);
             }
             
@@ -172,7 +172,7 @@ public class AuthController {
             if (!"content_creator".equals(user.getRole()) && platform != null && "miniprogram".equals(platform)) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Content managers should use the web dashboard for access");
+                response.put("message", "HARDCODED_Content managers should use the web dashboard for access"); // TODO: Internationalize this message
                 return ResponseEntity.badRequest().body(response);
             }
             
@@ -216,14 +216,14 @@ public class AuthController {
             if (invite == null) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Invite not found");
+                response.put("message", "HARDCODED_Invite not found"); // TODO: Internationalize this message
                 return ResponseEntity.notFound().build();
             }
 
             if (!invite.isValid()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", invite.isExpired() ? "Invite has expired" : "Invite is not valid");
+                response.put("message", invite.isExpired() ? "HARDCODED_Invite has expired" : "HARDCODED_Invite is not valid"); // TODO: Internationalize this message
                 return ResponseEntity.badRequest().body(response);
             }
 
@@ -239,7 +239,7 @@ public class AuthController {
         } catch (Exception e) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Failed to validate invite: " + e.getMessage());
+            response.put("message", "HARDCODED_Failed to validate invite: " + e.getMessage()); // TODO: Internationalize this message
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -274,19 +274,19 @@ public class AuthController {
                 if (phone == null || phone.trim().isEmpty()) {
                     Map<String, Object> response = new HashMap<>();
                     response.put("success", false);
-                    response.put("message", "Phone number is required for content creators");
+                    response.put("message", "HARDCODED_Phone number is required for content creators"); // TODO: Internationalize this message
                     return ResponseEntity.badRequest().body(response);
                 }
                 if (province == null || province.trim().isEmpty()) {
                     Map<String, Object> response = new HashMap<>();
                     response.put("success", false);
-                    response.put("message", "Province is required for content creators");
+                    response.put("message", "HARDCODED_Province is required for content creators"); // TODO: Internationalize this message
                     return ResponseEntity.badRequest().body(response);
                 }
                 if (city == null || city.trim().isEmpty()) {
                     Map<String, Object> response = new HashMap<>();
                     response.put("success", false);
-                    response.put("message", "City is required for content creators");
+                    response.put("message", "HARDCODED_City is required for content creators"); // TODO: Internationalize this message
                     return ResponseEntity.badRequest().body(response);
                 }
             }
@@ -294,7 +294,7 @@ public class AuthController {
             if (role != null && role.equals("content_manager") && (email == null || email.trim().isEmpty())) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Email is required for content managers");
+                response.put("message", "HARDCODED_Email is required for content managers"); // TODO: Internationalize this message
                 return ResponseEntity.badRequest().body(response);
             }
 
@@ -303,7 +303,7 @@ public class AuthController {
             if (invite == null || !invite.isValid()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Invalid or expired invite");
+                response.put("message", "HARDCODED_Invalid or expired invite"); // TODO: Internationalize this message
                 return ResponseEntity.badRequest().body(response);
             }
 
@@ -313,7 +313,7 @@ public class AuthController {
             if (userDao.findByUsername(username) != null) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "Username already exists");
+                response.put("message", "HARDCODED_Username already exists"); // TODO: Internationalize this message
                 return ResponseEntity.badRequest().body(response);
             }
 
@@ -322,7 +322,7 @@ public class AuthController {
                 if (userDao.findByPhone(phone) != null) {
                     Map<String, Object> response = new HashMap<>();
                     response.put("success", false);
-                    response.put("message", "Phone number already exists");
+                    response.put("message", "HARDCODED_Phone number already exists"); // TODO: Internationalize this message
                     return ResponseEntity.badRequest().body(response);
                 }
             }
@@ -333,7 +333,7 @@ public class AuthController {
                 if (userDao.findByEmailAndRole(email, invite.getRole()) != null) {
                     Map<String, Object> response = new HashMap<>();
                     response.put("success", false);
-                    response.put("message", "Email already exists for this role");
+                    response.put("message", "HARDCODED_Email already exists for this role"); // TODO: Internationalize this message
                     return ResponseEntity.badRequest().body(response);
                 }
             }
@@ -388,7 +388,7 @@ public class AuthController {
                     group.setManagerId(invite.getManagerId());
                     group.setManagerName(invite.getManagerName());
                     group.setMemberIds(new java.util.ArrayList<>());
-                    group.setDescription("Group created from invite: " + invite.getGroupName());
+                    group.setDescription("HARDCODED_Group created from invite: " + invite.getGroupName()); // TODO: Internationalize this message
                     group.setCreatedAt(new java.util.Date());
                     group.setUpdatedAt(new java.util.Date());
                     group.setActive(true);

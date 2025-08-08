@@ -70,7 +70,7 @@ public class SceneReviewController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            return createErrorResponse("Failed to get pending submissions: " + e.getMessage(), 
+            return createErrorResponse("HARDCODED_Failed to get pending submissions: " + e.getMessage(), // TODO: Internationalize this message 
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -116,7 +116,7 @@ public class SceneReviewController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            return createErrorResponse("Failed to get template submissions: " + e.getMessage(), 
+            return createErrorResponse("HARDCODED_Failed to get template submissions: " + e.getMessage(), // TODO: Internationalize this message 
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -136,17 +136,17 @@ public class SceneReviewController {
         try {
             SceneSubmission submission = sceneSubmissionDao.findById(sceneId);
             if (submission == null) {
-                return createErrorResponse("Scene submission not found", HttpStatus.NOT_FOUND);
+                return createErrorResponse("HARDCODED_Scene submission not found", HttpStatus.NOT_FOUND); // TODO: Internationalize this message
             }
             
             if (!"pending".equals(submission.getStatus())) {
-                return createErrorResponse("Can only override pending submissions", HttpStatus.BAD_REQUEST);
+                return createErrorResponse("HARDCODED_Can only override pending submissions", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
             }
             
             // Get required override reason
             String overrideReason = (String) requestBody.get("overrideReason");
             if (overrideReason == null || overrideReason.trim().isEmpty()) {
-                return createErrorResponse("Override reason is required", HttpStatus.BAD_REQUEST);
+                return createErrorResponse("HARDCODED_Override reason is required", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
             }
             
             // Optional feedback (presence indicates rejection)
@@ -186,7 +186,7 @@ public class SceneReviewController {
                 
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", true);
-                response.put("message", "Scene manually approved");
+                response.put("message", "HARDCODED_Scene manually approved"); // TODO: Internationalize this message
                 response.put("sceneSubmission", submission);
                 response.put("isManualOverride", true);
                 response.put("action", "approved");
@@ -226,7 +226,7 @@ public class SceneReviewController {
                 
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", true);
-                response.put("message", "Scene rejected with feedback");
+                response.put("message", "HARDCODED_Scene rejected with feedback"); // TODO: Internationalize this message
                 response.put("sceneSubmission", submission);
                 response.put("isManualOverride", true);
                 response.put("action", "rejected");
@@ -239,7 +239,7 @@ public class SceneReviewController {
             }
             
         } catch (Exception e) {
-            return createErrorResponse("Failed to manually override scene: " + e.getMessage(), 
+            return createErrorResponse("HARDCODED_Failed to manually override scene: " + e.getMessage(), // TODO: Internationalize this message 
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -257,11 +257,11 @@ public class SceneReviewController {
             String reviewerId = (String) requestBody.get("reviewerId");
             
             if (sceneIds == null || sceneIds.isEmpty()) {
-                return createErrorResponse("Scene IDs are required", HttpStatus.BAD_REQUEST);
+                return createErrorResponse("HARDCODED_Scene IDs are required", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
             }
             
             if (reviewerId == null) {
-                return createErrorResponse("Reviewer ID is required", HttpStatus.BAD_REQUEST);
+                return createErrorResponse("HARDCODED_Reviewer ID is required", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
             }
             
             // Update all scenes to approved status
@@ -292,7 +292,7 @@ public class SceneReviewController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            return createErrorResponse("Failed to bulk approve scenes: " + e.getMessage(), 
+            return createErrorResponse("HARDCODED_Failed to bulk approve scenes: " + e.getMessage(), // TODO: Internationalize this message 
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -332,7 +332,7 @@ public class SceneReviewController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            return createErrorResponse("Failed to get review stats: " + e.getMessage(), 
+            return createErrorResponse("HARDCODED_Failed to get review stats: " + e.getMessage(), // TODO: Internationalize this message 
                 HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
