@@ -1,35 +1,34 @@
-# Use an official OpenJDK runtime as a parent image
-FROM eclipse-temurin:17-jdk
+# ---------- Build stage ----------
+FROM maven:3.9-eclipse-temurin-17 AS build
+WORKDIR /workspace
 
-# Install FFmpeg and other system dependencies
-RUN apt-get update && \
-    apt-get install -y \
-    ffmpeg \
-    curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+# Cache deps first
+COPY pom.xml .
+RUN mvn -B -DskipTests dependency:go-offline
 
-# Set the working directory
+# Now copy sources and build
+COPY src ./src
+# If you rely on tests in CI only, skipping tests here speeds up deploys
+RUN mvn -B -DskipTests clean package
+
+# ---------- Runtime stage ----------
+FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
-# Copy the Maven wrapper and pom.xml
-COPY .mvn/ .mvn
-COPY mvnw pom.xml ./
+# Install ffmpeg for your VideoCompilationService
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
 
-# Download dependencies (this step is cached unless pom.xml changes)
-RUN ./mvnw dependency:go-offline
+# Non-root user
+RUN useradd -r -u 1001 appuser
+COPY --from=build /workspace/target/*.jar /app/app.jar
+RUN chown -R appuser:appuser /app
+USER appuser
 
-# Copy the rest of the app source code
-COPY . .
-
-# Build the application (skip tests for faster build)
-RUN ./mvnw clean package -DskipTests
-
-# Expose port 8080 (Spring Boot default)
+# Spring Boot default is 8080, but Render passes PORT
 EXPOSE 8080
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
 
-# Set environment variables for memory optimization
-ENV JAVA_OPTS="-Xmx512m -Xms256m"
-
-# Run the Spring Boot app using the built JAR (more efficient than Maven)
-CMD ["sh", "-c", "java $JAVA_OPTS -jar target/*.jar"]
+# Bind to Render's PORT if provided, else 8080
+CMD ["sh", "-c", "exec java $JAVA_OPTS -Dserver.port=${PORT:-8080} -jar /app/app.jar"]

@@ -1,32 +1,36 @@
-# Maven
+# ===== Maven / build outputs =====
 target/
-!target/*.jar
 *.log
 
-# IDE
-.idea/
-*.iml
-.vscode/
+# If you use the Maven wrapper locally, these aren’t needed in the image
+.mvn/wrapper/maven-wrapper.jar
+mvnw
+mvnw.cmd
 
-# OS
+# ===== IDE / editor =====
+.idea/
+.vscode/
+*.iml
+
+# ===== OS cruft =====
 .DS_Store
 Thumbs.db
 
-# Git
+# ===== Git =====
 .git/
 .gitignore
 
-# Documentation
+# ===== Docs (not needed in image) =====
 README.md
 *.md
 
-# Test files
-src/test/
+# ===== Tests (optional) =====
+# Uncomment if you’re not running tests inside the Docker build
+# src/test/
 
-# Docker
-Dockerfile
-.dockerignore
+# ===== Node (not used here, safe to ignore) =====
+node_modules/
 
-# Local config files
+# ===== Local config =====
 *.local
 application-local.properties
