@@ -3,11 +3,7 @@ package com.example.demo.ai.template;
 import com.example.demo.model.SceneSegment;
 import com.example.demo.util.FirebaseCredentialsUtil;
 import com.google.auth.oauth2.GoogleCredentials;
-import com.google.cloud.storage.Blob;
-import com.google.cloud.storage.Storage;
-import com.google.cloud.storage.StorageOptions;
 import com.google.cloud.videointelligence.v1.*;
-import com.google.protobuf.ByteString;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -40,27 +36,12 @@ public class SceneDetectionServiceImpl implements SceneDetectionService {
                 .build();
             
             try (VideoIntelligenceServiceClient client = VideoIntelligenceServiceClient.create(settings)) {
-                // Extract object name from GCS URL
-                String objectName = videoUrl.replace("https://storage.googleapis.com/" + bucketName + "/", "");
+                // Normalize to a GCS URI for direct processing (faster, no bytes download)
+                String gcsUri = toGcsUri(videoUrl, bucketName);
 
-                // Load video from Google Cloud Storage with same credentials
-                Storage storage = StorageOptions.newBuilder()
-                    .setCredentials(credentials)
-                    .build()
-                    .getService();
-                
-                Blob blob = storage.get(bucketName, objectName);
-
-                if (blob == null || !blob.exists()) {
-                    throw new IOException("Video not found in Cloud Storage: " + objectName);
-                }
-
-                byte[] videoBytes = blob.getContent();
-                ByteString inputVideo = ByteString.copyFrom(videoBytes);
-
-                // Build the request for Video Intelligence API
+                // Build the request for Video Intelligence API using GCS URI
                 AnnotateVideoRequest request = AnnotateVideoRequest.newBuilder()
-                    .setInputContent(inputVideo)
+                    .setInputUri(gcsUri)
                     .addFeatures(Feature.SHOT_CHANGE_DETECTION)
                     .addFeatures(Feature.LABEL_DETECTION)
                     .addFeatures(Feature.PERSON_DETECTION)
@@ -88,7 +69,7 @@ public class SceneDetectionServiceImpl implements SceneDetectionService {
 
                         // Extract labels for this scene
                         List<String> sceneLabels = new ArrayList<>();
-                        for (LabelAnnotation labelAnnotation : annotationResult.getSegmentLabelAnnotationsList()) {
+                        for (LabelAnnotation labelAnnotation : annotationResult.getShotLabelAnnotationsList()) {
                             for (LabelSegment labelSegment : labelAnnotation.getSegmentsList()) {
                                 VideoSegment labelVideoSegment = labelSegment.getSegment();
                                 
@@ -128,6 +109,22 @@ public class SceneDetectionServiceImpl implements SceneDetectionService {
         }
     }
 
+    private String toGcsUri(String input, String defaultBucket) {
+        if (input == null || input.isBlank()) return input;
+        if (input.startsWith("gs://")) return input;
+        String httpsPrefix = "https://storage.googleapis.com/";
+        if (input.startsWith(httpsPrefix)) {
+            // https://storage.googleapis.com/<bucket>/<object>
+            return "gs://" + input.substring(httpsPrefix.length());
+        }
+        // If caller passed just an object path, attach default bucket
+        if (!input.contains("://")) {
+            return "gs://" + defaultBucket + "/" + input.replaceFirst("^/", "");
+        }
+        // Fallback: return as-is (the API may reject non-GCS URIs)
+        return input;
+    }
+
     private boolean isTimeOverlap(VideoSegment segment1, VideoSegment segment2) {
         long start1 = segment1.getStartTimeOffset().getSeconds();
         long end1 = segment1.getEndTimeOffset().getSeconds();
@@ -136,4 +133,24 @@ public class SceneDetectionServiceImpl implements SceneDetectionService {
         
         return start1 <= end2 && start2 <= end1;
     }
+
+    /*
+     * =========================
+     * TODO (Post-MVP Enhancements)
+     * =========================
+     * 1) Use shot-level labels directly (annotationResult.getShotLabelAnnotationsList())
+     *    instead of segment-level + overlap, for cleaner label-to-shot mapping.
+     *    DONE: Now using shot-level labels in detectScenes method.
+     * 2) Switch time overlap and duration math to nanosecond precision to avoid
+     *    boundary errors on very short shots.
+     * 3) Provide VideoContext with LabelDetectionConfig set to SHOT_MODE and a
+     *    stable model (e.g., "builtin/stable") for reproducibility.
+     * 4) Add request timeouts/retries (exponential backoff on RESOURCE_EXHAUSTED).
+     * 5) (Optional) Keep top-K labels by confidence to reduce noise in UI.
+     * 6) (Optional) Count person tracks and surface a simple integer for analytics.
+     * 7) Add structured logs: video duration, shot count, VI latency, bucket/region.
+     * 8) Prefer regional endpoints matching bucket location to reduce latency.
+     */
+    // Change Log:
+    // - Updated label extraction loop to use shot-level labels (getShotLabelAnnotationsList) instead of segment-level labels.
 }
