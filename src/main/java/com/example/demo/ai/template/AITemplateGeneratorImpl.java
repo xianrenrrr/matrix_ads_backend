@@ -8,6 +8,7 @@ import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSegment;
 import com.example.demo.model.Video;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -32,6 +33,9 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
     
     @Autowired
     private VideoSummaryService videoSummaryService;
+    
+    @Value("${ai.template.useObjectOverlay:true}")
+    private boolean useObjectOverlay;
 
     @Override
     public ManualTemplate generateTemplate(Video video) {
@@ -112,54 +116,115 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
     private Scene processScene(SceneSegment segment, int sceneNumber, String videoUrl, String language) {
         Scene scene = new Scene();
         scene.setSceneNumber(sceneNumber);
-        scene.setSceneTitle(String.format("Scene %d", sceneNumber));
-        scene.setStartTime(segment.getStartTime());
-        scene.setEndTime(segment.getEndTime());
-        scene.setSceneDurationInSeconds(segment.getEndTime().minus(segment.getStartTime()).getSeconds());
-        scene.setPresenceOfPerson(segment.isPersonPresent());
-        scene.setScriptLine(String.join(", ", segment.getLabels()));
+        scene.setSceneTitle("Scene " + sceneNumber);
+        
+        // Mark as AI-generated scene
+        scene.setSceneSource("ai");
 
-        try {
-            // Step 2a: Extract keyframe at scene midpoint
-            System.out.printf("Extracting keyframe for scene %d...%n", sceneNumber);
-            String keyframeUrl = keyframeExtractionService.extractKeyframe(
-                videoUrl, segment.getStartTime(), segment.getEndTime()
-            );
-            
-            if (keyframeUrl != null) {
-                scene.setKeyframeUrl(keyframeUrl);
-                scene.setExampleFrame(keyframeUrl); // Also set the existing field
-
-                // Step 2b: Create 3x3 block grid from keyframe
-                System.out.printf("Creating block grid for scene %d...%n", sceneNumber);
-                Map<String, String> blockImageUrls = blockGridService.createBlockGrid(keyframeUrl);
-                scene.setBlockImageUrls(blockImageUrls);
-
-                if (!blockImageUrls.isEmpty()) {
-                    // Step 2c: Describe each block using GPT-4o
-                    System.out.printf("Describing blocks for scene %d...%n", sceneNumber);
-                    Map<String, String> blockDescriptions = blockDescriptionService.describeBlocks(blockImageUrls, language);
-                    scene.setBlockDescriptions(blockDescriptions);
-
-                    // Set screen grid overlay based on described blocks
-                    scene.setScreenGridOverlay(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9)); // All 9 blocks
-                    scene.setScreenGridOverlayLabels(new ArrayList<>(blockDescriptions.values()));
-                }
+        // Cache start/end and compute duration safely
+        var start = segment.getStartTime();
+        var end = segment.getEndTime();
+        scene.setStartTime(start);
+        scene.setEndTime(end);
+        long durationSec = 0L;
+        if (start != null && end != null) {
+            try {
+                durationSec = Math.max(0L, end.minus(start).getSeconds());
+            } catch (Exception ignored) {
+                durationSec = 0L;
             }
-
-            // Set some intelligent defaults based on analysis
-            scene.setDeviceOrientation("Phone (Portrait 9:16)");
-            scene.setPersonPosition(segment.isPersonPresent() ? "Center" : "No Preference");
-            scene.setPreferredGender("No Preference");
-            scene.setMovementInstructions("Static");
-            scene.setBackgroundInstructions("Use similar background as shown in example frame");
-            scene.setSpecificCameraInstructions("Follow the framing shown in the example");
-            scene.setAudioNotes("Clear speech, match the tone of the scene");
-
-        } catch (Exception e) {
-            System.err.printf("Error processing scene %d: %s%n", sceneNumber, e.getMessage());
-            // Continue with basic scene info even if advanced processing fails
         }
+        scene.setSceneDurationInSeconds(durationSec);
+
+        // Person/labels (null-safe)
+        scene.setPresenceOfPerson(segment.isPersonPresent());
+        var labels = segment.getLabels();
+        scene.setScriptLine(labels == null || labels.isEmpty() ? "" : String.join(", ", labels));
+        
+        // Check if we should use object overlay for this AI scene
+        boolean shouldUseObjectOverlay = useObjectOverlay && 
+                                         segment.getOverlayObjects() != null && 
+                                         !segment.getOverlayObjects().isEmpty();
+        
+        if (shouldUseObjectOverlay) {
+            // Use object overlay mode
+            System.out.printf("Scene %d: Using object overlay with %d objects%n", 
+                            sceneNumber, segment.getOverlayObjects().size());
+            scene.setOverlayType("objects");
+            scene.setOverlayObjects(segment.getOverlayObjects());
+            
+            // Still extract keyframe for display, but skip grid processing
+            try {
+                if (start != null && end != null && end.compareTo(start) > 0) {
+                    System.out.printf("Extracting keyframe for scene %d (object overlay mode)...%n", sceneNumber);
+                    String keyframeUrl = keyframeExtractionService.extractKeyframe(videoUrl, start, end);
+                    if (keyframeUrl != null && !keyframeUrl.isBlank()) {
+                        scene.setKeyframeUrl(keyframeUrl);
+                        scene.setExampleFrame(keyframeUrl);
+                    }
+                }
+            } catch (Exception e) {
+                System.err.printf("Error extracting keyframe for scene %d: %s%n", sceneNumber, e.getMessage());
+            }
+        } else {
+            // Fall back to grid overlay mode
+            System.out.printf("Scene %d: Using grid overlay (objects=%s, flag=%s)%n", 
+                            sceneNumber, 
+                            segment.getOverlayObjects() != null ? segment.getOverlayObjects().size() : "null",
+                            useObjectOverlay);
+            scene.setOverlayType("grid");
+
+            try {
+                // Step 2a: Extract keyframe at scene midpoint (only if we have a non-zero interval)
+                if (start != null && end != null && end.compareTo(start) > 0) {
+                    System.out.printf("Extracting keyframe for scene %d...%n", sceneNumber);
+                    String keyframeUrl = keyframeExtractionService.extractKeyframe(videoUrl, start, end);
+
+                    if (keyframeUrl != null && !keyframeUrl.isBlank()) {
+                        scene.setKeyframeUrl(keyframeUrl);
+                        scene.setExampleFrame(keyframeUrl); // existing field
+
+                        // Step 2b: Create 3x3 block grid from keyframe
+                        System.out.printf("Creating block grid for scene %d...%n", sceneNumber);
+                        Map<String, String> blockImageUrls = blockGridService.createBlockGrid(keyframeUrl);
+                        scene.setBlockImageUrls(blockImageUrls);
+
+                        if (blockImageUrls != null && !blockImageUrls.isEmpty()) {
+                            // Step 2c: Describe each block
+                            System.out.printf("Describing blocks for scene %d...%n", sceneNumber);
+                            Map<String, String> blockDescriptions = blockDescriptionService.describeBlocks(blockImageUrls, language);
+                            scene.setBlockDescriptions(blockDescriptions);
+
+                            // Screen grid overlay: always 1..9 in order
+                            scene.setScreenGridOverlay(java.util.List.of(1,2,3,4,5,6,7,8,9));
+
+                            // Overlay labels aligned by block index 1..9 when available
+                            if (blockDescriptions != null && !blockDescriptions.isEmpty()) {
+                                java.util.List<String> overlayLabels = new java.util.ArrayList<>(9);
+                                for (int i = 1; i <= 9; i++) {
+                                    String key = String.valueOf(i);
+                                    String desc = blockDescriptions.get(key);
+                                    overlayLabels.add(desc == null ? "" : desc);
+                                }
+                                scene.setScreenGridOverlayLabels(overlayLabels);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                System.err.printf("Error processing grid for scene %d: %s%n", sceneNumber, e.getMessage());
+                // Continue with basic scene info even if advanced processing fails
+            }
+        }
+
+        // Intelligent defaults based on analysis
+        scene.setDeviceOrientation("Phone (Portrait 9:16)");
+        scene.setPersonPosition(segment.isPersonPresent() ? "Center" : "No Preference");
+        scene.setPreferredGender("No Preference");
+        scene.setMovementInstructions("Static");
+        scene.setBackgroundInstructions("Use similar background as shown in example frame");
+        scene.setSpecificCameraInstructions("Follow the framing shown in the example");
+        scene.setAudioNotes("Clear speech, match the tone of the scene");
 
         return scene;
     }
@@ -203,3 +268,4 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
         return template;
     }
 }
+// Change Log: Added dual scene system tags (sceneSource, overlayType); AI scenes prefer object overlay with fallback to 9-grid

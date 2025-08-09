@@ -28,6 +28,50 @@ public class Scene {
     private String keyframeUrl;
     private Map<String, String> blockImageUrls;
     private Map<String, String> blockDescriptions;
+    
+    // Dual scene system fields (add-only, non-breaking)
+    private String sceneSource;  // "manual" | "ai" - how the scene was created
+    private String overlayType;  // "grid" | "objects" - how to render guidance
+    private List<ObjectOverlay> overlayObjects;  // only when overlayType="objects"
+    
+    // Inner class for object overlay data
+    public static class ObjectOverlay {
+        private String label;
+        private float confidence;
+        private float x;  // normalized [0,1], top-left corner
+        private float y;  // normalized [0,1], top-left corner
+        private float w;  // normalized [0,1], width
+        private float h;  // normalized [0,1], height
+        
+        public ObjectOverlay() {}
+        
+        public ObjectOverlay(String label, float confidence, float x, float y, float w, float h) {
+            this.label = label;
+            this.confidence = confidence;
+            this.x = x;
+            this.y = y;
+            this.w = w;
+            this.h = h;
+        }
+        
+        public String getLabel() { return label; }
+        public void setLabel(String label) { this.label = label; }
+        
+        public float getConfidence() { return confidence; }
+        public void setConfidence(float confidence) { this.confidence = confidence; }
+        
+        public float getX() { return x; }
+        public void setX(float x) { this.x = x; }
+        
+        public float getY() { return y; }
+        public void setY(float y) { this.y = y; }
+        
+        public float getW() { return w; }
+        public void setW(float w) { this.w = w; }
+        
+        public float getH() { return h; }
+        public void setH(float h) { this.h = h; }
+    }
 
     public Scene() {
     }
@@ -236,4 +280,30 @@ public class Scene {
     public void setBlockDescriptions(Map<String, String> blockDescriptions) {
         this.blockDescriptions = blockDescriptions;
     }
+    
+    // Getters and setters for dual scene system fields
+    public String getSceneSource() {
+        return sceneSource;
+    }
+    
+    public void setSceneSource(String sceneSource) {
+        this.sceneSource = sceneSource;
+    }
+    
+    public String getOverlayType() {
+        return overlayType;
+    }
+    
+    public void setOverlayType(String overlayType) {
+        this.overlayType = overlayType;
+    }
+    
+    public List<ObjectOverlay> getOverlayObjects() {
+        return overlayObjects;
+    }
+    
+    public void setOverlayObjects(List<ObjectOverlay> overlayObjects) {
+        this.overlayObjects = overlayObjects;
+    }
 }
+// Change Log: Added dual scene system fields (sceneSource, overlayType, overlayObjects) for object overlay support

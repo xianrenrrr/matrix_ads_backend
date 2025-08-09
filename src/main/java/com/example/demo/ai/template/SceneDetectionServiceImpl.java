@@ -1,6 +1,7 @@
 package com.example.demo.ai.template;
 
 import com.example.demo.model.SceneSegment;
+import com.example.demo.model.Scene.ObjectOverlay;
 import com.example.demo.util.FirebaseCredentialsUtil;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.videointelligence.v1.*;
@@ -9,9 +10,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 @Service
 public class SceneDetectionServiceImpl implements SceneDetectionService {
@@ -45,6 +46,7 @@ public class SceneDetectionServiceImpl implements SceneDetectionService {
                     .addFeatures(Feature.SHOT_CHANGE_DETECTION)
                     .addFeatures(Feature.LABEL_DETECTION)
                     .addFeatures(Feature.PERSON_DETECTION)
+                    .addFeatures(Feature.OBJECT_TRACKING)  // ADD: Object tracking for overlay
                     .build();
 
                 System.out.println("Sending request to Video Intelligence API");
@@ -94,6 +96,13 @@ public class SceneDetectionServiceImpl implements SceneDetectionService {
                             if (personPresent) break;
                         }
                         segment.setPersonPresent(personPresent);
+                        
+                        // Extract object overlays for this shot
+                        List<ObjectOverlay> shotOverlays = extractObjectOverlaysForShot(
+                            shot, annotationResult.getObjectAnnotationsList());
+                        if (!shotOverlays.isEmpty()) {
+                            segment.setOverlayObjects(shotOverlays);
+                        }
 
                         sceneSegments.add(segment);
                     }
@@ -134,6 +143,87 @@ public class SceneDetectionServiceImpl implements SceneDetectionService {
         return start1 <= end2 && start2 <= end1;
     }
 
+    /**
+     * Extract object overlays for a specific shot from object tracking annotations.
+     * Finds the frame closest to the shot midpoint and extracts up to 5 high-confidence objects.
+     */
+    private List<ObjectOverlay> extractObjectOverlaysForShot(VideoSegment shot, 
+                                                             List<ObjectTrackingAnnotation> objectAnnotations) {
+        if (objectAnnotations == null || objectAnnotations.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // Calculate shot midpoint in seconds with nanosecond precision
+        double shotStartSec = shot.getStartTimeOffset().getSeconds() + 
+                              shot.getStartTimeOffset().getNanos() / 1_000_000_000.0;
+        double shotEndSec = shot.getEndTimeOffset().getSeconds() + 
+                            shot.getEndTimeOffset().getNanos() / 1_000_000_000.0;
+        double shotMidpointSec = (shotStartSec + shotEndSec) / 2.0;
+        
+        Map<String, ObjectOverlay> bestOverlays = new HashMap<>();  // De-duplicate by label
+        
+        for (ObjectTrackingAnnotation objAnnotation : objectAnnotations) {
+            String label = objAnnotation.getEntity().getDescription();
+            if (label == null || label.isBlank()) continue;
+            
+            // Find the frame closest to shot midpoint
+            ObjectTrackingFrame closestFrame = null;
+            double minTimeDiff = Double.MAX_VALUE;
+            
+            for (ObjectTrackingFrame frame : objAnnotation.getFramesList()) {
+                double frameTimeSec = frame.getTimeOffset().getSeconds() + 
+                                     frame.getTimeOffset().getNanos() / 1_000_000_000.0;
+                
+                // Check if frame is within the shot boundaries
+                if (frameTimeSec >= shotStartSec && frameTimeSec <= shotEndSec) {
+                    double timeDiff = Math.abs(frameTimeSec - shotMidpointSec);
+                    if (timeDiff < minTimeDiff) {
+                        minTimeDiff = timeDiff;
+                        closestFrame = frame;
+                    }
+                }
+            }
+            
+            if (closestFrame != null) {
+                NormalizedBoundingBox bbox = closestFrame.getNormalizedBoundingBox();
+                float confidence = objAnnotation.getConfidence();
+                
+                // Filter out low confidence detections
+                if (confidence < 0.5f) continue;
+                
+                // Extract and clamp normalized coordinates
+                float left = Math.max(0, Math.min(1, bbox.getLeft()));
+                float top = Math.max(0, Math.min(1, bbox.getTop()));
+                float right = Math.max(0, Math.min(1, bbox.getRight()));
+                float bottom = Math.max(0, Math.min(1, bbox.getBottom()));
+                
+                float width = right - left;
+                float height = bottom - top;
+                
+                // Skip degenerate boxes
+                if (width <= 0 || height <= 0) continue;
+                
+                ObjectOverlay overlay = new ObjectOverlay(label, confidence, left, top, width, height);
+                
+                // Keep highest confidence for each label (de-duplication)
+                ObjectOverlay existing = bestOverlays.get(label);
+                if (existing == null || confidence > existing.getConfidence()) {
+                    bestOverlays.put(label, overlay);
+                }
+            }
+        }
+        
+        // Sort by confidence * area descending, cap to 5
+        return bestOverlays.values().stream()
+            .sorted((a, b) -> {
+                float scoreA = a.getConfidence() * a.getW() * a.getH();
+                float scoreB = b.getConfidence() * b.getW() * b.getH();
+                return Float.compare(scoreB, scoreA);  // Descending
+            })
+            .limit(5)
+            .collect(Collectors.toList());
+    }
+    
     /*
      * =========================
      * TODO (Post-MVP Enhancements)
@@ -153,4 +243,6 @@ public class SceneDetectionServiceImpl implements SceneDetectionService {
      */
     // Change Log:
     // - Updated label extraction loop to use shot-level labels (getShotLabelAnnotationsList) instead of segment-level labels.
+    // - Enabled VI OBJECT_TRACKING in the same annotate request
+    // - Derived per-shot object overlays from the frame closest to the shot midpoint
 }

@@ -154,6 +154,14 @@ public class ContentManager {
         
         manualTemplate.setUserId(userId);
         
+        // Mark all scenes as manual with grid overlay
+        if (manualTemplate.getScenes() != null) {
+            for (com.example.demo.model.Scene scene : manualTemplate.getScenes()) {
+                scene.setSceneSource("manual");
+                scene.setOverlayType("grid");
+            }
+        }
+        
         try {
             // Create the template
             String templateId = templateDao.createTemplate(manualTemplate);
@@ -240,6 +248,19 @@ public class ContentManager {
             @RequestBody ManualTemplate updatedTemplate) {
         try {
             updatedTemplate.setId(templateId); // Ensure ID matches path parameter
+            
+            // Mark all scenes as manual with grid overlay for updates
+            if (updatedTemplate.getScenes() != null) {
+                for (com.example.demo.model.Scene scene : updatedTemplate.getScenes()) {
+                    if (scene.getSceneSource() == null) {
+                        scene.setSceneSource("manual");
+                    }
+                    if (scene.getOverlayType() == null) {
+                        scene.setOverlayType("grid");
+                    }
+                }
+            }
+            
             boolean updated = templateDao.updateTemplate(templateId, updatedTemplate);
             
             if (updated) {
@@ -341,4 +362,5 @@ public class ContentManager {
         }
     }
 }
+// Change Log: Manual scenes always set sceneSource="manual" and overlayType="grid" for dual scene system
 

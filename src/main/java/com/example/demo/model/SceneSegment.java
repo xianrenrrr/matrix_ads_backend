@@ -2,12 +2,14 @@ package com.example.demo.model;
 
 import java.time.Duration;
 import java.util.List;
+import com.example.demo.model.Scene.ObjectOverlay;
 
 public class SceneSegment {
     private Long startTimeMs;
     private Long endTimeMs;
     private List<String> labels;
     private boolean personPresent;
+    private List<ObjectOverlay> overlayObjects;  // Transport layer for object overlays (nullable)
 
     public SceneSegment() {
     }
@@ -66,4 +68,13 @@ public class SceneSegment {
     public void setPersonPresent(boolean personPresent) {
         this.personPresent = personPresent;
     }
+    
+    public List<ObjectOverlay> getOverlayObjects() {
+        return overlayObjects;
+    }
+    
+    public void setOverlayObjects(List<ObjectOverlay> overlayObjects) {
+        this.overlayObjects = overlayObjects;
+    }
 }
+// Change Log: Added overlayObjects field for transporting object overlay data from detection to generation
