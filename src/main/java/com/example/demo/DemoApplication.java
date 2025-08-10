@@ -14,13 +14,8 @@ public class DemoApplication {
   @Value("${NAME:World}")
   String name;
 
-  @RestController
-  class HelloworldController {
-    @GetMapping("/")
-    String hello() {
-      return "Hello " + name + "!";
-    }
-  }
+  // Removed HelloworldController to avoid ambiguous mapping with HealthController
+  // Root endpoint now handled by HealthController
 
   public static void main(String[] args) {
     SpringApplication.run(DemoApplication.class, args);
