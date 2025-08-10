@@ -38,3 +38,4 @@ serviceAccountKey.json
 application-dev.properties
 application-local.properties
 *.env
+config/application-local.properties

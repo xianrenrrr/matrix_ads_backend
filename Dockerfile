@@ -15,9 +15,9 @@ RUN mvn -B -DskipTests clean package
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
-# Install ffmpeg for your VideoCompilationService
+# Install ffmpeg and curl for health checks
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg \
+ && apt-get install -y --no-install-recommends ffmpeg curl \
  && rm -rf /var/lib/apt/lists/*
 
 # Non-root user
@@ -29,6 +29,10 @@ USER appuser
 # Spring Boot default is 8080, but Render passes PORT
 EXPOSE 8080
 ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+
+# Health check for better deployment monitoring
+HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-8080}/actuator/health || exit 1
 
 # Bind to Render's PORT if provided, else 8080
 CMD ["sh", "-c", "exec java $JAVA_OPTS -Dserver.port=${PORT:-8080} -jar /app/app.jar"]
