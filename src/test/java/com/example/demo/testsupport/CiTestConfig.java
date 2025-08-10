@@ -134,13 +134,6 @@ public class CiTestConfig {
         return Mockito.mock(WorkflowAutomationService.class);
     }
 
-    @Bean
-    @Primary
-    public AIApprovalThresholdService aiApprovalThresholdService() {
-        AIApprovalThresholdService service = Mockito.mock(AIApprovalThresholdService.class);
-        // AIApprovalThresholdService methods will be mocked per test as needed
-        return service;
-    }
 
     @Bean
     @Primary
@@ -210,22 +203,11 @@ public class CiTestConfig {
         return Mockito.mock(CompiledVideoDao.class);
     }
 
-    @Bean
-    @Primary
-    public GroupDao groupDao() {
-        return Mockito.mock(GroupDao.class);
-    }
 
     @Bean
     @Primary
     public InviteDao inviteDao() {
         return Mockito.mock(InviteDao.class);
-    }
-
-    @Bean
-    @Primary
-    public AIApprovalThresholdDao aiApprovalThresholdDao() {
-        return Mockito.mock(AIApprovalThresholdDao.class);
     }
 
     // Helper methods
