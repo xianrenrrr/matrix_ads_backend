@@ -62,19 +62,23 @@ public class AITemplateControllerTest {
         // Test template creation endpoint
         String requestBody = """
             {
-                "templateTitle": "AI Generated Template",
-                "scenes": [
-                    {
-                        "sceneNumber": 1,
-                        "sceneTitle": "Opening Scene",
-                        "sceneDescription": "Opening shot with person"
-                    },
-                    {
-                        "sceneNumber": 2,
-                        "sceneTitle": "Product Display",
-                        "sceneDescription": "Product showcase"
-                    }
-                ]
+                "userId": "testUser123",
+                "manualTemplate": {
+                    "templateTitle": "AI Generated Template",
+                    "scenes": [
+                        {
+                            "sceneNumber": 1,
+                            "sceneTitle": "Opening Scene",
+                            "sceneDescription": "Opening shot with person"
+                        },
+                        {
+                            "sceneNumber": 2,
+                            "sceneTitle": "Product Display",
+                            "sceneDescription": "Product showcase"
+                        }
+                    ]
+                },
+                "selectedGroupIds": []
             }
             """;
         
@@ -97,13 +101,17 @@ public class AITemplateControllerTest {
         
         String requestBody = """
             {
-                "templateTitle": "Test Template with Scene Detection",
-                "scenes": [
-                    {
-                        "sceneNumber": 1,
-                        "sceneTitle": "Scene 1"
-                    }
-                ]
+                "userId": "testUser456", 
+                "manualTemplate": {
+                    "templateTitle": "Test Template with Scene Detection",
+                    "scenes": [
+                        {
+                            "sceneNumber": 1,
+                            "sceneTitle": "Scene 1"
+                        }
+                    ]
+                },
+                "selectedGroupIds": []
             }
             """;
         
@@ -118,9 +126,9 @@ public class AITemplateControllerTest {
     @Test
     public void testAIApprovalThreshold() throws Exception {
         // Test the AI approval threshold endpoint
-        mockMvc.perform(post("/api/ai-approval/template123/threshold")
+        mockMvc.perform(post("/api/ai-approval/threshold")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"threshold\": 85.0}")
+                .content("{\"templateId\": \"template123\", \"managerId\": \"manager123\", \"threshold\": 85.0}")
                 .header("Authorization", "manager123"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success", is(true)))

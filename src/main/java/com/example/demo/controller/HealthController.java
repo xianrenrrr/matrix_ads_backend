@@ -23,6 +23,12 @@ public class HealthController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/actuator/health")
+    public ResponseEntity<Map<String, Object>> actuatorHealth() {
+        // Render expects /actuator/health, so provide the same response
+        return health();
+    }
+
     @GetMapping("/")
     public ResponseEntity<Map<String, String>> root() {
         Map<String, String> response = new HashMap<>();
