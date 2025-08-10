@@ -21,7 +21,7 @@ public class HealthEndpointTest {
 
     @Test
     public void testHealthEndpoint() throws Exception {
-        mockMvc.perform(get("/actuator/health"))
+        mockMvc.perform(get("/health"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status", is("UP")));
     }
