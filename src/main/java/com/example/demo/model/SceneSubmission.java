@@ -48,7 +48,7 @@ public class SceneSubmission {
     public SceneSubmission() {
         this.submittedAt = new Date();
         this.lastUpdatedAt = new Date();
-        this.status = "pending";
+        this.status = STATUS_PENDING;
         this.resubmissionCount = 0;
     }
     
@@ -145,9 +145,17 @@ public class SceneSubmission {
     public Map<String, Object> getTemplateSceneData() { return templateSceneData; }
     public void setTemplateSceneData(Map<String, Object> templateSceneData) { this.templateSceneData = templateSceneData; }
     
+    // Status constants
+    public static final String STATUS_PENDING = "pending";
+    public static final String STATUS_APPROVED = "approved";
+    public static final String STATUS_REJECTED = "rejected";
+    public static final String STATUS_RESUBMITTED = "resubmitted";
+    
     // Utility Methods
-    public boolean isPending() { return "pending".equals(status); }
-    public boolean isApproved() { return "approved".equals(status); }
+    public boolean isPending() { return STATUS_PENDING.equals(status); }
+    public boolean isApproved() { return STATUS_APPROVED.equals(status); }
+    public boolean isRejected() { return STATUS_REJECTED.equals(status); }
+    public boolean isResubmitted() { return STATUS_RESUBMITTED.equals(status); }
     
     public void incrementResubmissionCount() {
         this.resubmissionCount++;
@@ -155,7 +163,7 @@ public class SceneSubmission {
     }
     
     public void approve(String reviewerId) {
-        this.status = "approved";
+        this.status = STATUS_APPROVED;
         this.reviewedBy = reviewerId;
         this.reviewedAt = new Date();
         this.lastUpdatedAt = new Date();
@@ -163,7 +171,7 @@ public class SceneSubmission {
     
     public void reject(String reviewerId, List<String> feedback) {
         // Keep status as "pending" when rejected - allows resubmission
-        this.status = "pending";  
+        this.status = STATUS_PENDING;  
         this.reviewedBy = reviewerId;
         this.reviewedAt = new Date();
         this.feedback = feedback;

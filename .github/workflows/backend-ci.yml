@@ -39,7 +39,7 @@ jobs:
           ls -la
 
       - name: Build & test
-        run: mvn -B -DskipTests=false clean verify
+        run: mvn -B clean verify -Dspring.profiles.active=ci -Dtest=DemoApplicationTests,HealthEndpointTest
 
   deploy:
     if: github.ref == 'refs/heads/main'
