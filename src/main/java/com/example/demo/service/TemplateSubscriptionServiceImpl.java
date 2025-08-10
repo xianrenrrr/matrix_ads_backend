@@ -1,8 +1,10 @@
 package com.example.demo.service;
 
-import com.example.demo.dao.GroupDao;
+// import com.example.demo.dao.GroupDao; // TODO: Remove after migration to InviteDao
 import com.example.demo.dao.UserDao;
-import com.example.demo.model.Group;
+import com.example.demo.dao.InviteDao;
+// import com.example.demo.model.Group; // TODO: Remove after migration to InviteDao
+import com.example.demo.model.Invite;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -12,7 +14,7 @@ import java.util.*;
 public class TemplateSubscriptionServiceImpl implements TemplateSubscriptionService {
     
     @Autowired
-    private GroupDao groupDao;
+    private InviteDao inviteDao; // Using InviteDao instead of GroupDao
     
     @Autowired
     private UserDao userDao;
@@ -29,7 +31,7 @@ public class TemplateSubscriptionServiceImpl implements TemplateSubscriptionServ
         for (String groupId : groupIds) {
             try {
                 String cleanGroupId = groupId.trim();
-                Group group = groupDao.findById(cleanGroupId);
+                Invite group = inviteDao.findById(cleanGroupId); // Now using Invite as Group
                 
                 if (group != null && group.getMemberIds() != null && !group.getMemberIds().isEmpty()) {
                     int groupMemberCount = 0;
@@ -82,7 +84,7 @@ public class TemplateSubscriptionServiceImpl implements TemplateSubscriptionServ
         for (String groupId : groupIds) {
             try {
                 String cleanGroupId = groupId.trim();
-                Group group = groupDao.findById(cleanGroupId);
+                Invite group = inviteDao.findById(cleanGroupId); // Now using Invite as Group
                 
                 if (group != null && group.getMemberIds() != null) {
                     int groupMemberCount = 0;

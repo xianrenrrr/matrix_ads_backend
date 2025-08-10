@@ -36,6 +36,20 @@ public class InviteDaoImpl implements InviteDao {
     }
 
     @Override
+    public void update(Invite invite) {
+        try {
+            if (invite.getId() == null || invite.getId().isEmpty()) {
+                throw new IllegalArgumentException("Invite ID cannot be null or empty for update");
+            }
+            CollectionReference invitesRef = db.collection(COLLECTION_NAME);
+            ApiFuture<WriteResult> result = invitesRef.document(invite.getId()).set(invite);
+            result.get(); // Wait for completion
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Failed to update invite", e);
+        }
+    }
+
+    @Override
     public Invite findByToken(String token) {
         try {
             CollectionReference invitesRef = db.collection(COLLECTION_NAME);

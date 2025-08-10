@@ -2,10 +2,8 @@ package com.example.demo.controller;
 
 import com.example.demo.dao.UserDao;
 import com.example.demo.dao.InviteDao;
-import com.example.demo.dao.GroupDao;
 import com.example.demo.model.User;
 import com.example.demo.model.Invite;
-import com.example.demo.model.Group;
 import com.example.demo.service.I18nService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -24,8 +22,9 @@ public class AuthController {
     @Autowired
     private InviteDao inviteDao;
     
-    @Autowired
-    private GroupDao groupDao;
+    // TODO: GroupDao will be removed and functionality moved to InviteDao
+    // @Autowired
+    // private GroupDao groupDao;
     
     @Autowired
     private I18nService i18nService;
@@ -220,10 +219,20 @@ public class AuthController {
                 return ResponseEntity.notFound().build();
             }
 
-            if (!invite.isValid()) {
+            // For permanent groups (expiresAt is null), only check if status is active
+            // For temporary invites (expiresAt is set), use full validation including expiration
+            boolean isValidInvite = invite.getExpiresAt() == null ? 
+                "active".equals(invite.getStatus()) : 
+                invite.isValid();
+                
+            if (!isValidInvite) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", invite.isExpired() ? "HARDCODED_Invite has expired" : "HARDCODED_Invite is not valid"); // TODO: Internationalize this message
+                if (invite.getExpiresAt() == null) {
+                    response.put("message", "HARDCODED_Group is not active"); // TODO: Internationalize this message
+                } else {
+                    response.put("message", invite.isExpired() ? "HARDCODED_Invite has expired" : "HARDCODED_Invite is not valid"); // TODO: Internationalize this message
+                }
                 return ResponseEntity.badRequest().body(response);
             }
 
@@ -300,10 +309,23 @@ public class AuthController {
 
             // Validate invite
             Invite invite = inviteDao.findByToken(inviteToken);
-            if (invite == null || !invite.isValid()) {
+            
+            // For permanent groups (expiresAt is null), only check if status is active
+            // For temporary invites (expiresAt is set), use full validation including expiration
+            boolean isValidInvite = invite != null && (invite.getExpiresAt() == null ? 
+                "active".equals(invite.getStatus()) : 
+                invite.isValid());
+                
+            if (!isValidInvite) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "HARDCODED_Invalid or expired invite"); // TODO: Internationalize this message
+                if (invite == null) {
+                    response.put("message", "HARDCODED_Invite not found"); // TODO: Internationalize this message
+                } else if (invite.getExpiresAt() == null) {
+                    response.put("message", "HARDCODED_Group is not active"); // TODO: Internationalize this message
+                } else {
+                    response.put("message", "HARDCODED_Invalid or expired invite"); // TODO: Internationalize this message
+                }
                 return ResponseEntity.badRequest().body(response);
             }
 
@@ -378,38 +400,12 @@ public class AuthController {
             if (invite.getGroupName() != null && !invite.getGroupName().trim().isEmpty()) {
                 System.out.println("DEBUG: Group name found, proceeding with group creation/joining");
                 
-                // Find or create the group
-                Group group = groupDao.findByNameAndManagerId(invite.getGroupName(), invite.getManagerId());
-                if (group == null) {
-                    System.out.println("DEBUG: Group not found, creating new group: " + invite.getGroupName());
-                    // Create new group
-                    group = new Group();
-                    group.setGroupName(invite.getGroupName());
-                    group.setManagerId(invite.getManagerId());
-                    group.setManagerName(invite.getManagerName());
-                    group.setMemberIds(new java.util.ArrayList<>());
-                    group.setDescription("HARDCODED_Group created from invite: " + invite.getGroupName()); // TODO: Internationalize this message
-                    group.setCreatedAt(new java.util.Date());
-                    group.setUpdatedAt(new java.util.Date());
-                    group.setActive(true);
-                    groupDao.save(group);
-                    System.out.println("DEBUG: Group saved with ID: " + group.getId());
-                    
-                    // Update invite with the new group ID
-                    invite.setGroupId(group.getId());
-                } else {
-                    System.out.println("DEBUG: Existing group found with ID: " + group.getId());
-                }
+                // TODO: Group management will be handled directly in Invite model
+                // For now, we'll track membership in the invite itself
+                System.out.println("DEBUG: Group functionality temporarily disabled during refactor");
                 
-                // Add user to the group
-                if (!group.isMember(user.getId())) {
-                    System.out.println("DEBUG: Adding user " + user.getId() + " to group " + group.getId());
-                    group.addMember(user.getId());
-                    groupDao.update(group);
-                    System.out.println("DEBUG: User added to group successfully");
-                } else {
-                    System.out.println("DEBUG: User " + user.getId() + " already in group " + group.getId());
-                }
+                // TODO: Add member tracking to Invite model
+                // TODO: Remove Group model dependency
             } else {
                 System.out.println("DEBUG: No group name found in invite, skipping group creation");
             }

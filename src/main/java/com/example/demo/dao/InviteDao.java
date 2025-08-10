@@ -5,6 +5,7 @@ import java.util.List;
 
 public interface InviteDao {
     void save(Invite invite);
+    void update(Invite invite);
     Invite findByToken(String token);
     Invite findById(String id);
     List<Invite> findByManagerId(String managerId);

@@ -2,10 +2,10 @@ package com.example.demo.controller.contentmanager;
 
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.UserDao;
-import com.example.demo.dao.GroupDao;
+// import com.example.demo.dao.GroupDao; // TODO: Remove after migration to Invite-based groups
 import com.example.demo.dao.SceneSubmissionDao;
 import com.example.demo.model.ManualTemplate;
-import com.example.demo.model.Group;
+// import com.example.demo.model.Group; // TODO: Remove after migration to Invite-based groups
 import com.example.demo.model.SceneSubmission;
 import com.example.demo.service.TemplateSubscriptionService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -133,16 +133,16 @@ public class ContentManager {
     }
     private final TemplateDao templateDao;
     private final UserDao userDao;
-    private final GroupDao groupDao;
+    // private final GroupDao groupDao; // TODO: Remove after migration to InviteDao
     
     @Autowired
     private TemplateSubscriptionService templateSubscriptionService;
 
     @Autowired
-    public ContentManager(TemplateDao templateDao, UserDao userDao, GroupDao groupDao) {
+    public ContentManager(TemplateDao templateDao, UserDao userDao) { // TODO: Remove GroupDao parameter
         this.templateDao = templateDao;
         this.userDao = userDao;
-        this.groupDao = groupDao;
+        // this.groupDao = groupDao; // TODO: Remove after migration to InviteDao
     }
     
 
@@ -339,28 +339,12 @@ public class ContentManager {
         public void setRole(String role) { this.role = role; }
     }
 
-        // Get groups managed by a user
-    @GetMapping("/groups/manager/{managerId}")
-    public ResponseEntity<List<Map<String, Object>>> getGroupsByManager(@PathVariable String managerId) {
-        try {
-            List<Group> groups = groupDao.findByManagerId(managerId);
-            List<Map<String, Object>> groupSummaries = new ArrayList<>();
-            
-            for (Group group : groups) {
-                Map<String, Object> summary = new HashMap<>();
-                summary.put("id", group.getId());
-                summary.put("groupName", group.getGroupName());
-                summary.put("memberCount", group.getMemberIds() != null ? group.getMemberIds().size() : 0);
-                summary.put("description", group.getDescription());
-                summary.put("createdAt", group.getCreatedAt());
-                groupSummaries.add(summary);
-            }
-            
-            return ResponseEntity.ok(groupSummaries);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
+        // TODO: Get groups managed by a user - will be reimplemented using InviteDao
+    // @GetMapping("/groups/manager/{managerId}")
+    // public ResponseEntity<List<Map<String, Object>>> getGroupsByManager(@PathVariable String managerId) {
+        // TODO: Temporarily disabled during Group model removal
+        // Will be reimplemented to fetch from Invite model instead
+    // }
 }
 // Change Log: Manual scenes always set sceneSource="manual" and overlayType="grid" for dual scene system
 
