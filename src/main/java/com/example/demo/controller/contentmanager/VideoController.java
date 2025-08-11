@@ -11,7 +11,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import com.example.demo.ai.template.AITemplateGenerator;
-import com.example.demo.ai.template.DefaultAITemplateGenerator;
 
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -21,9 +20,6 @@ import java.util.concurrent.ExecutionException;
 public class VideoController {
     @Autowired
     private AITemplateGenerator aiTemplateGenerator;
-    @Autowired
-    private DefaultAITemplateGenerator defaultAITemplateGenerator;
-    private boolean useDefaultAITemplateGenerator = false;
     private String detectLanguage(String acceptLanguageHeader) {
         if (acceptLanguageHeader == null || acceptLanguageHeader.isEmpty()) {
             return "en";
@@ -41,9 +37,6 @@ public class VideoController {
     private ManualTemplate generateAITemplate(Video video, String language) {
         // Use AI template generator to create template
         System.out.println("Generating AI template for video ID: " + video.getId() + " in language: " + language);
-        if (useDefaultAITemplateGenerator) {
-            return defaultAITemplateGenerator.generateTemplate(video, language);
-        }
         return aiTemplateGenerator.generateTemplate(video, language);
     }
     
