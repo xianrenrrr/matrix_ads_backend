@@ -116,7 +116,6 @@ public class TemplateDaoImpl implements TemplateDao {
             }
             templates.addAll(templatesBatch);
         }
-        System.out.println("Templates: " + templates);
         return templates;
     }
 
