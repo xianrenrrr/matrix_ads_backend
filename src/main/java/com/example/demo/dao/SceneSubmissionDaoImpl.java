@@ -256,25 +256,6 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
     }
     
     @Override
-    public void updateMultipleStatuses(List<String> sceneIds, String newStatus, String reviewerId) throws ExecutionException, InterruptedException {
-        // Use batch write for better performance
-        WriteBatch batch = db.batch();
-        
-        for (String sceneId : sceneIds) {
-            DocumentReference docRef = db.collection(COLLECTION_NAME).document(sceneId);
-            Map<String, Object> updates = new HashMap<>();
-            updates.put("status", newStatus);
-            updates.put("reviewedBy", reviewerId);
-            updates.put("reviewedAt", new Date());
-            updates.put("lastUpdatedAt", new Date());
-            
-            batch.update(docRef, updates);
-        }
-        
-        batch.commit().get();
-    }
-    
-    @Override
     public void deleteScenesByTemplateId(String templateId) throws ExecutionException, InterruptedException {
         List<SceneSubmission> scenes = findByTemplateId(templateId);
         WriteBatch batch = db.batch();

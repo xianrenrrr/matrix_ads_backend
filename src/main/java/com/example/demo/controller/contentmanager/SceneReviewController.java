@@ -9,7 +9,6 @@ import com.example.demo.service.VideoCompilationService;
 import com.example.demo.service.WorkflowAutomationService;
 import com.google.cloud.firestore.Firestore;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -226,87 +225,6 @@ public class SceneReviewController {
             }
     }
     
-    /**
-     * Bulk approve multiple scenes
-     * POST /content-manager/scenes/bulk-approve
-     */
-    @PostMapping("/bulk-approve")
-    public ResponseEntity<Map<String, Object>> bulkApproveScenes(
-            @RequestBody Map<String, Object> requestBody) throws Exception {
-        
-        List<String> sceneIds = (List<String>) requestBody.get("sceneIds");
-        String reviewerId = (String) requestBody.get("reviewerId");
-        
-        if (sceneIds == null || sceneIds.isEmpty()) {
-            throw new IllegalArgumentException("Scene IDs are required");
-        }
-        
-        if (reviewerId == null) {
-            throw new IllegalArgumentException("Reviewer ID is required");
-        }
-            
-            // Update all scenes to approved status
-            sceneSubmissionDao.updateMultipleStatuses(sceneIds, "approved", reviewerId);
-            
-            // Check for compilation triggers
-            Set<String> compilationTriggered = new HashSet<>();
-            for (String sceneId : sceneIds) {
-                SceneSubmission submission = sceneSubmissionDao.findById(sceneId);
-                if (submission != null) {
-                    String key = submission.getTemplateId() + ":" + submission.getUserId();
-                    if (!compilationTriggered.contains(key)) {
-                        boolean triggered = checkAndTriggerCompilation(
-                            submission.getTemplateId(), submission.getUserId(), reviewerId);
-                        if (triggered) {
-                            compilationTriggered.add(key);
-                        }
-                    }
-                }
-            }
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", String.format("Approved %d scenes", sceneIds.size()));
-            response.put("approvedCount", sceneIds.size());
-            response.put("compilationsTriggered", compilationTriggered.size());
-            
-        return ResponseEntity.ok(response);
-    }
-    
-    /**
-     * Get review statistics for a manager
-     * GET /content-manager/scenes/stats/{reviewerId}
-     */
-    @GetMapping("/stats/{reviewerId}")
-    public ResponseEntity<Map<String, Object>> getReviewStats(@PathVariable String reviewerId) throws Exception {
-        List<SceneSubmission> reviewedSubmissions = sceneSubmissionDao.findSubmissionsByReviewer(reviewerId);
-        
-        int totalReviewed = reviewedSubmissions.size();
-        int approved = (int) reviewedSubmissions.stream().filter(s -> "approved".equals(s.getStatus())).count();
-        int rejected = (int) reviewedSubmissions.stream().filter(s -> "rejected".equals(s.getStatus())).count();
-        
-        // Calculate average similarity score
-        double avgSimilarity = reviewedSubmissions.stream()
-            .filter(s -> s.getSimilarityScore() != null)
-            .mapToDouble(SceneSubmission::getSimilarityScore)
-            .average()
-            .orElse(0.0);
-        
-        Map<String, Object> stats = new HashMap<>();
-        stats.put("reviewerId", reviewerId);
-        stats.put("totalReviewed", totalReviewed);
-        stats.put("approved", approved);
-        stats.put("rejected", rejected);
-        stats.put("approvalRate", totalReviewed > 0 ? (double) approved / totalReviewed * 100 : 0);
-        stats.put("averageSimilarityScore", avgSimilarity);
-        
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", true);
-        response.put("stats", stats);
-        
-        return ResponseEntity.ok(response);
-    }
-    
     // Helper Methods
     
     @SuppressWarnings("unchecked")
@@ -452,12 +370,5 @@ public class SceneReviewController {
         } else {
             System.err.println("SubmittedVideo not found for update: " + compositeVideoId);
         }
-    }
-    
-    private ResponseEntity<Map<String, Object>> createErrorResponse(String message, HttpStatus status) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", false);
-        response.put("message", message);
-        return ResponseEntity.status(status).body(response);
     }
 }

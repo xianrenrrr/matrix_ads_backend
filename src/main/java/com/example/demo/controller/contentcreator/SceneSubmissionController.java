@@ -5,21 +5,17 @@ import com.example.demo.dao.TemplateDao;
 import com.example.demo.model.SceneSubmission;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.service.FirebaseStorageService;
-import com.example.demo.ai.EditSuggestionService;
-import com.example.demo.ai.comparison.VideoComparisonIntegrationService;
 import com.example.demo.ai.scene.SceneAnalysisService;
 import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.DocumentReference;
 import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.FieldValue;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
-import java.util.concurrent.ExecutionException;
 
 /**
  * Content Creator Scene Submission Controller
@@ -37,12 +33,6 @@ public class SceneSubmissionController {
     
     @Autowired(required = false)
     private FirebaseStorageService firebaseStorageService;
-    
-    @Autowired
-    private EditSuggestionService editSuggestionService;
-    
-    @Autowired
-    private VideoComparisonIntegrationService videoComparisonService;
     
     @Autowired
     private SceneAnalysisService sceneAnalysisService;
@@ -258,94 +248,6 @@ public class SceneSubmissionController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Get specific scene submission details
-     * GET /content-creator/scenes/{sceneId}
-     */
-    @GetMapping("/{sceneId}")
-    public ResponseEntity<Map<String, Object>> getSceneSubmission(@PathVariable String sceneId) throws Exception {
-        SceneSubmission submission = sceneSubmissionDao.findById(sceneId);
-        
-        if (submission == null) {
-            throw new NoSuchElementException("Scene submission not found with ID: " + sceneId);
-        }
-        
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", true);
-        response.put("sceneSubmission", submission);
-        
-        return ResponseEntity.ok(response);
-    }
-    
-    /**
-     * Resubmit a rejected scene
-     * POST /content-creator/scenes/{sceneId}/resubmit
-     */
-    @PostMapping("/{sceneId}/resubmit")
-    public ResponseEntity<Map<String, Object>> resubmitScene(
-            @PathVariable String sceneId,
-            @RequestParam("file") MultipartFile file) throws Exception {
-        
-        // Get original submission
-        SceneSubmission originalSubmission = sceneSubmissionDao.findById(sceneId);
-        if (originalSubmission == null) {
-            throw new NoSuchElementException("Original scene submission not found with ID: " + sceneId);
-        }
-        
-        if (!"rejected".equals(originalSubmission.getStatus())) {
-            throw new IllegalArgumentException("Can only resubmit rejected scenes");
-        }
-        
-        // Create new submission using upload logic
-        return uploadScene(file, originalSubmission.getTemplateId(), originalSubmission.getUserId(), 
-            originalSubmission.getSceneNumber(), originalSubmission.getSceneTitle());
-    }
-    
-    /**
-     * Get scene progress for user across all templates
-     * GET /content-creator/scenes/user/{userId}/progress
-     */
-    @GetMapping("/user/{userId}/progress")
-    public ResponseEntity<Map<String, Object>> getUserSceneProgress(@PathVariable String userId) throws Exception {
-        List<SceneSubmission> allSubmissions = sceneSubmissionDao.findByUserId(userId);
-            
-            // Group by template ID
-            Map<String, List<SceneSubmission>> submissionsByTemplate = new HashMap<>();
-            for (SceneSubmission submission : allSubmissions) {
-                submissionsByTemplate.computeIfAbsent(submission.getTemplateId(), k -> new ArrayList<>())
-                    .add(submission);
-            }
-            
-            // Calculate progress for each template
-            Map<String, Map<String, Object>> templateProgress = new HashMap<>();
-            for (Map.Entry<String, List<SceneSubmission>> entry : submissionsByTemplate.entrySet()) {
-                String templateId = entry.getKey();
-                List<SceneSubmission> submissions = entry.getValue();
-                
-                ManualTemplate template = templateDao.getTemplate(templateId);
-                int totalScenes = template != null ? template.getScenes().size() : 0;
-                
-                int approved = (int) submissions.stream().filter(s -> "approved".equals(s.getStatus())).count();
-                int pending = (int) submissions.stream().filter(s -> "pending".equals(s.getStatus())).count();
-                int rejected = (int) submissions.stream().filter(s -> "rejected".equals(s.getStatus())).count();
-                
-                templateProgress.put(templateId, createProgressMap(totalScenes, submissions.size(), 
-                    approved, pending, rejected));
-            }
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("userId", userId);
-            response.put("totalSubmissions", allSubmissions.size());
-            response.put("templateProgress", templateProgress);
-            response.put("recentSubmissions", allSubmissions.stream()
-                .sorted((s1, s2) -> s2.getSubmittedAt().compareTo(s1.getSubmittedAt()))
-                .limit(10)
-                .toArray());
-            
-        return ResponseEntity.ok(response);
-    }
-    
     // Helper Methods
     
     @SuppressWarnings("unchecked")
@@ -485,12 +387,5 @@ public class SceneSubmissionController {
             return template.getScenes().size();
         }
         return 0; // Default to 0 if template not found
-    }
-    
-    private ResponseEntity<Map<String, Object>> createErrorResponse(String message, HttpStatus status) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", false);
-        response.put("message", message);
-        return ResponseEntity.status(status).body(response);
     }
 }

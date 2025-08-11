@@ -228,14 +228,4 @@ public class VideoController {
 
         return ResponseEntity.ok(savedVideo);
     }
-
-    @GetMapping("/{videoId}")
-    public ResponseEntity<Video> getVideoById(@PathVariable String videoId) throws Exception {
-        Video video = videoDao.getVideoById(videoId);
-        if (video != null) {
-            return ResponseEntity.ok(video);
-        } else {
-            throw new NoSuchElementException("Video not found with ID: " + videoId);
-        }
-    }
 }

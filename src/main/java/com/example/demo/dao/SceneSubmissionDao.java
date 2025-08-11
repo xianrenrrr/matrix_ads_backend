@@ -54,7 +54,6 @@ public interface SceneSubmissionDao {
     List<SceneSubmission> findTopPerformingScenes(String templateId, int limit) throws ExecutionException, InterruptedException;
     
     // Bulk Operations
-    void updateMultipleStatuses(List<String> sceneIds, String newStatus, String reviewerId) throws ExecutionException, InterruptedException;
     void deleteScenesByTemplateId(String templateId) throws ExecutionException, InterruptedException;
     void deleteScenesByUserId(String userId) throws ExecutionException, InterruptedException;
 }
