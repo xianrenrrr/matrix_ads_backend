@@ -200,7 +200,6 @@ public class ContentManager {
     public ResponseEntity<List<TemplateSummary>> getTemplatesByUserId(@PathVariable String userId) {
         try {
             List<ManualTemplate> templates = templateDao.getTemplatesByUserId(userId);
-            System.out.println("Templates: " + templates);
             List<TemplateSummary> summaries = templates.stream()
                 .map(t -> new TemplateSummary(t.getId(), t.getTemplateTitle()))
                 .toList();
