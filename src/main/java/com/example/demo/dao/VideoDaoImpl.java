@@ -9,8 +9,6 @@ import org.springframework.stereotype.Repository;
 
 
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
@@ -37,17 +35,6 @@ public class VideoDaoImpl implements VideoDao {
         return video;
     }
 
-    @Override
-    public List<Video> getVideosByUserId(String userId) throws ExecutionException, InterruptedException {
-        ApiFuture<QuerySnapshot> future = db.collection("exampleVideos").whereEqualTo("userId", userId).get();
-        List<QueryDocumentSnapshot> documents = future.get().getDocuments();
-        List<Video> videos = new ArrayList<>();
-        for (QueryDocumentSnapshot document : documents) {
-            Video video = document.toObject(Video.class);
-            videos.add(video);
-        }
-        return videos;
-    }
 
     @Override
     public Video getVideoById(String videoId) throws ExecutionException, InterruptedException {

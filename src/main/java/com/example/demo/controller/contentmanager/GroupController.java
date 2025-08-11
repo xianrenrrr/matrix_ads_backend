@@ -4,6 +4,8 @@ import com.example.demo.dao.InviteDao;
 import com.example.demo.dao.UserDao;
 import com.example.demo.model.Invite;
 import com.example.demo.model.User;
+import com.example.demo.api.ApiResponse;
+import com.example.demo.service.I18nService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,40 +23,39 @@ public class GroupController {
 
     @Autowired
     private UserDao userDao;
+    
+    @Autowired
+    private I18nService i18nService;
 
     // 1. Create Group/Invite
     @PostMapping("/create")
-    public ResponseEntity<Map<String, Object>> createGroup(@RequestBody Map<String, Object> requestBody) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> createGroup(@RequestBody Map<String, Object> requestBody,
+                                                                        @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             String managerId = (String) requestBody.get("managerId");
             String groupName = (String) requestBody.get("groupName");
             String description = (String) requestBody.get("description");
 
             // Validate required fields
             if (managerId == null || groupName == null || groupName.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "message", "Missing required fields: managerId and groupName"
-                ));
+                String message = i18nService.getMessage("bad.request", language);
+                return ResponseEntity.badRequest().body(ApiResponse.fail(message, "Missing required fields: managerId and groupName"));
             }
 
             // Verify manager exists and has correct role
             User manager = userDao.findById(managerId);
             if (manager == null || !"content_manager".equals(manager.getRole())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
-                    "success", false,
-                    "message", "Invalid manager or insufficient permissions"
-                ));
+                String message = i18nService.getMessage("forbidden", language);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.fail(message, "Invalid manager or insufficient permissions"));
             }
 
             // Check if group name already exists for this manager
             List<Invite> existingGroups = inviteDao.findByManagerId(managerId);
             for (Invite existing : existingGroups) {
                 if (groupName.equals(existing.getGroupName()) && "active".equals(existing.getStatus())) {
-                    return ResponseEntity.badRequest().body(Map.of(
-                        "success", false,
-                        "message", "Group with this name already exists"
-                    ));
+                    String message = i18nService.getMessage("bad.request", language);
+                    return ResponseEntity.badRequest().body(ApiResponse.fail(message, "Group with this name already exists"));
                 }
             }
 
@@ -87,35 +88,36 @@ public class GroupController {
             String qrCodeUrl = generateQRCodeUrl(token);
             String inviteUrl = generateInviteUrl(token);
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "Group created successfully");
-            response.put("id", group.getId());
-            response.put("groupName", group.getGroupName());
-            response.put("description", group.getDescription());
-            response.put("managerId", group.getManagerId());
-            response.put("token", group.getToken());
-            response.put("qrCodeUrl", qrCodeUrl);
-            response.put("inviteUrl", inviteUrl);
-            response.put("memberCount", group.getMemberCount());
-            response.put("aiApprovalThreshold", group.getAiApprovalThreshold());
-            response.put("aiAutoApprovalEnabled", group.isAiAutoApprovalEnabled());
-            response.put("createdAt", group.getCreatedAt());
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("id", group.getId());
+            responseData.put("groupName", group.getGroupName());
+            responseData.put("description", group.getDescription());
+            responseData.put("managerId", group.getManagerId());
+            responseData.put("token", group.getToken());
+            responseData.put("qrCodeUrl", qrCodeUrl);
+            responseData.put("inviteUrl", inviteUrl);
+            responseData.put("memberCount", group.getMemberCount());
+            responseData.put("aiApprovalThreshold", group.getAiApprovalThreshold());
+            responseData.put("aiAutoApprovalEnabled", group.isAiAutoApprovalEnabled());
+            responseData.put("createdAt", group.getCreatedAt());
 
-            return ResponseEntity.ok(response);
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, responseData));
 
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
-                "success", false,
-                "message", "Failed to create group: " + e.getMessage()
-            ));
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to create group: " + e.getMessage()));
         }
     }
 
     // 2. List Manager's Groups
     @GetMapping("/manager/{managerId}")
-    public ResponseEntity<List<Map<String, Object>>> getGroupsByManager(@PathVariable String managerId) {
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getGroupsByManager(@PathVariable String managerId,
+                                                                                      @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             List<Invite> groups = inviteDao.findByManagerId(managerId);
             List<Map<String, Object>> groupSummaries = new ArrayList<>();
 
@@ -135,84 +137,93 @@ public class GroupController {
                 }
             }
 
-            return ResponseEntity.ok(groupSummaries);
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, groupSummaries));
 
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ArrayList<>());
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, e.getMessage()));
         }
     }
 
     // 3. Get Group QR Code
     @GetMapping("/{groupId}/qrcode")
-    public ResponseEntity<Map<String, Object>> getGroupQRCode(@PathVariable String groupId) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getGroupQRCode(@PathVariable String groupId,
+                                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             Invite group = inviteDao.findById(groupId);
             if (group == null || !"active".equals(group.getStatus())) {
-                return ResponseEntity.notFound().build();
+                String message = i18nService.getMessage("group.not_found", language);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
             }
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("groupId", group.getId());
-            response.put("groupName", group.getGroupName());
-            response.put("token", group.getToken());
-            response.put("qrCodeUrl", generateQRCodeUrl(group.getToken()));
-            response.put("inviteUrl", generateInviteUrl(group.getToken()));
-            response.put("miniProgramPath", "pages/invite/invite?token=" + group.getToken());
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("groupId", group.getId());
+            responseData.put("groupName", group.getGroupName());
+            responseData.put("token", group.getToken());
+            responseData.put("qrCodeUrl", generateQRCodeUrl(group.getToken()));
+            responseData.put("inviteUrl", generateInviteUrl(group.getToken()));
+            responseData.put("miniProgramPath", "pages/invite/invite?token=" + group.getToken());
 
-            return ResponseEntity.ok(response);
+            String message = i18nService.getMessage("qr.generated", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, responseData));
 
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
-                "success", false,
-                "message", "Failed to get QR code: " + e.getMessage()
-            ));
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to get QR code: " + e.getMessage()));
         }
     }
 
     // 4. Delete Group
     @DeleteMapping("/{groupId}")
-    public ResponseEntity<Map<String, Object>> deleteGroup(@PathVariable String groupId) {
+    public ResponseEntity<ApiResponse<Void>> deleteGroup(@PathVariable String groupId,
+                                                         @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             Invite group = inviteDao.findById(groupId);
             if (group == null) {
-                return ResponseEntity.notFound().build();
+                String message = i18nService.getMessage("group.not_found", language);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
             }
 
             inviteDao.delete(groupId);
 
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Group deleted successfully"
-            ));
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message));
 
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
-                "success", false,
-                "message", "Failed to delete group: " + e.getMessage()
-            ));
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to delete group: " + e.getMessage()));
         }
     }
 
     // 5. Add Member to Group
     @PostMapping("/{groupId}/members")
-    public ResponseEntity<Map<String, Object>> addMember(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> addMember(
             @PathVariable String groupId,
-            @RequestBody Map<String, Object> requestBody) {
+            @RequestBody Map<String, Object> requestBody,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             String userId = (String) requestBody.get("userId");
             String userEmail = (String) requestBody.get("userEmail");
 
             if (userId == null && userEmail == null) {
-                return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "message", "Either userId or userEmail is required"
-                ));
+                String message = i18nService.getMessage("bad.request", language);
+                return ResponseEntity.badRequest().body(ApiResponse.fail(message, "Either userId or userEmail is required"));
             }
 
             Invite group = inviteDao.findById(groupId);
             if (group == null || !"active".equals(group.getStatus())) {
-                return ResponseEntity.notFound().build();
+                String message = i18nService.getMessage("group.not_found", language);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
             }
 
             // Find user by ID or email
@@ -224,65 +235,67 @@ public class GroupController {
             }
 
             if (user == null) {
-                return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "message", "User not found"
-                ));
+                String message = i18nService.getMessage("user.not.found", language);
+                return ResponseEntity.badRequest().body(ApiResponse.fail(message));
             }
 
             // Add member to group
             group.addMember(user.getId());
             inviteDao.update(group);
 
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Member added successfully",
-                "memberCount", group.getMemberCount()
-            ));
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("memberCount", group.getMemberCount());
+            String message = i18nService.getMessage("user.joined.group", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, responseData));
 
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
-                "success", false,
-                "message", "Failed to add member: " + e.getMessage()
-            ));
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to add member: " + e.getMessage()));
         }
     }
 
     // 6. Remove Member from Group
     @DeleteMapping("/{groupId}/members/{userId}")
-    public ResponseEntity<Map<String, Object>> removeMember(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> removeMember(
             @PathVariable String groupId,
-            @PathVariable String userId) {
+            @PathVariable String userId,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             Invite group = inviteDao.findById(groupId);
             if (group == null || !"active".equals(group.getStatus())) {
-                return ResponseEntity.notFound().build();
+                String message = i18nService.getMessage("group.not_found", language);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
             }
 
             group.removeMember(userId);
             inviteDao.update(group);
 
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Member removed successfully",
-                "memberCount", group.getMemberCount()
-            ));
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("memberCount", group.getMemberCount());
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, responseData));
 
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
-                "success", false,
-                "message", "Failed to remove member: " + e.getMessage()
-            ));
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to remove member: " + e.getMessage()));
         }
     }
 
     // 7. Get Group Members
     @GetMapping("/{groupId}/members")
-    public ResponseEntity<List<Map<String, Object>>> getGroupMembers(@PathVariable String groupId) {
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getGroupMembers(@PathVariable String groupId,
+                                                                                   @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             Invite group = inviteDao.findById(groupId);
             if (group == null || !"active".equals(group.getStatus())) {
-                return ResponseEntity.notFound().build();
+                String message = i18nService.getMessage("group.not_found", language);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
             }
 
             List<Map<String, Object>> members = new ArrayList<>();
@@ -298,22 +311,29 @@ public class GroupController {
                 }
             }
 
-            return ResponseEntity.ok(members);
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, members));
 
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ArrayList<>());
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, e.getMessage()));
         }
     }
 
     // 8. Update Group AI Settings
     @PutMapping("/{groupId}/ai-settings")
-    public ResponseEntity<Map<String, Object>> updateGroupAISettings(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateGroupAISettings(
             @PathVariable String groupId,
-            @RequestBody Map<String, Object> aiSettings) {
+            @RequestBody Map<String, Object> aiSettings,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             Invite group = inviteDao.findById(groupId);
             if (group == null || !"active".equals(group.getStatus())) {
-                return ResponseEntity.notFound().build();
+                String message = i18nService.getMessage("group.not_found", language);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
             }
 
             // Update AI settings
@@ -338,48 +358,51 @@ public class GroupController {
 
             inviteDao.update(group);
 
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "AI settings updated successfully",
-                "aiApprovalThreshold", group.getAiApprovalThreshold(),
-                "aiAutoApprovalEnabled", group.isAiAutoApprovalEnabled(),
-                "allowManualOverride", group.isAllowManualOverride()
-            ));
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("aiApprovalThreshold", group.getAiApprovalThreshold());
+            responseData.put("aiAutoApprovalEnabled", group.isAiAutoApprovalEnabled());
+            responseData.put("allowManualOverride", group.isAllowManualOverride());
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, responseData));
 
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
-                "success", false,
-                "message", "Failed to update AI settings: " + e.getMessage()
-            ));
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to update AI settings: " + e.getMessage()));
         }
     }
 
     // 9. Get Group AI Settings
     @GetMapping("/{groupId}/ai-settings")
-    public ResponseEntity<Map<String, Object>> getGroupAISettings(@PathVariable String groupId) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getGroupAISettings(@PathVariable String groupId,
+                                                                               @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             Invite group = inviteDao.findById(groupId);
             if (group == null || !"active".equals(group.getStatus())) {
-                return ResponseEntity.notFound().build();
+                String message = i18nService.getMessage("group.not_found", language);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
             }
 
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "groupId", group.getId(),
-                "groupName", group.getGroupName(),
-                "aiSettings", Map.of(
-                    "aiApprovalThreshold", group.getAiApprovalThreshold(),
-                    "aiAutoApprovalEnabled", group.isAiAutoApprovalEnabled(),
-                    "allowManualOverride", group.isAllowManualOverride(),
-                    "sceneThresholds", group.getSceneThresholds()
-                )
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("groupId", group.getId());
+            responseData.put("groupName", group.getGroupName());
+            responseData.put("aiSettings", Map.of(
+                "aiApprovalThreshold", group.getAiApprovalThreshold(),
+                "aiAutoApprovalEnabled", group.isAiAutoApprovalEnabled(),
+                "allowManualOverride", group.isAllowManualOverride(),
+                "sceneThresholds", group.getSceneThresholds()
             ));
 
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, responseData));
+
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
-                "success", false,
-                "message", "Failed to get AI settings: " + e.getMessage()
-            ));
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to get AI settings: " + e.getMessage()));
         }
     }
 

@@ -12,7 +12,7 @@ import java.util.*;
 public class TemplateSubscriptionServiceImpl implements TemplateSubscriptionService {
     
     @Autowired
-    private InviteDao inviteDao; // Using InviteDao instead of GroupDao
+    private InviteDao inviteDao;
     
     @Autowired
     private UserDao userDao;

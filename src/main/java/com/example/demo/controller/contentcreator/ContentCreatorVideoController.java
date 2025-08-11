@@ -15,6 +15,8 @@ import com.example.demo.dao.TemplateDao;
 import com.example.demo.model.Video;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.ai.EditSuggestionService;
+import com.example.demo.api.ApiResponse;
+import com.example.demo.service.I18nService;
 
 import java.io.IOException;
 import java.util.*;
@@ -37,22 +39,28 @@ public class ContentCreatorVideoController {
     
     @Autowired(required = false)
     private FirebaseApp firebaseApp;
+    
+    @Autowired
+    private I18nService i18nService;
 
     @PostMapping("/upload")
-    public ResponseEntity<?> uploadContentCreatorVideo(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> uploadContentCreatorVideo(
             @RequestParam("file") MultipartFile file,
             @RequestParam("templateId") String templateId,
             @RequestParam("userId") String userId,
             @RequestHeader(value = "Accept-Language", required = false, defaultValue = "en") String acceptLanguage
     ) throws ExecutionException, InterruptedException {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         if (file == null || file.isEmpty() || !StringUtils.hasText(templateId) || !StringUtils.hasText(userId)) {
-            return ResponseEntity.badRequest().body("HARDCODED_Missing required parameters."); // TODO: Internationalize this message
+            String message = i18nService.getMessage("bad.request", language);
+            return ResponseEntity.badRequest().body(ApiResponse.fail(message, "Missing required parameters"));
         }
         try {
             // Check if Firebase is available
             if (firebaseApp == null) {
+                String message = i18nService.getMessage("server.error", language);
                 return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body("HARDCODED_Firebase Storage is not available. Please check configuration."); // TODO: Internationalize this message
+                    .body(ApiResponse.fail(message, "Firebase Storage is not available. Please check configuration."));
             }
             
             // Upload new video to GCS
@@ -90,8 +98,7 @@ public class ContentCreatorVideoController {
                                 // Calculate similarity
                                 similarityScore = calculateSimilarity(userScenes, exampleScenes);
                                 
-                                // Detect language from header
-                                String language = detectLanguage(acceptLanguage);
+                                // Language already detected above
                                 
                                 // Generate suggestions
                                 suggestions = generateSuggestions(exampleScenes.get(0), userScenes.get(0), similarityScore, language);
@@ -150,16 +157,19 @@ public class ContentCreatorVideoController {
                 }
             }
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "HARDCODED_Video uploaded and processed."); // TODO: Internationalize this message
-            response.put("videoId", newVideoId);
-            response.put("videoUrl", videoUrl);
-            response.put("similarityScore", similarityScore);
-            response.put("suggestions", suggestions);
-            response.put("publishStatus", "pending");
-            return ResponseEntity.ok(response);
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("videoId", newVideoId);
+            responseData.put("videoUrl", videoUrl);
+            responseData.put("similarityScore", similarityScore);
+            responseData.put("suggestions", suggestions);
+            responseData.put("publishStatus", "pending");
+            
+            String message = i18nService.getMessage("video.uploaded", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, responseData));
         } catch (IOException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("HARDCODED_Failed to upload/process video: " + e.getMessage()); // TODO: Internationalize this message
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to upload/process video: " + e.getMessage()));
         }
     }
     
@@ -171,19 +181,6 @@ public class ContentCreatorVideoController {
         return 0.70 + (Math.random() * 0.25); // Random between 70-95%
     }
     
-    private String detectLanguage(String acceptLanguageHeader) {
-        if (acceptLanguageHeader == null || acceptLanguageHeader.isEmpty()) {
-            return "en";
-        }
-        String[] languages = acceptLanguageHeader.split(",");
-        for (String lang : languages) {
-            String cleanLang = lang.trim().split(";")[0].toLowerCase();
-            if (cleanLang.startsWith("zh")) {
-                return "zh";
-            }
-        }
-        return "en";
-    }
     
     private List<String> generateSuggestions(Map<String, String> exampleScene, Map<String, String> userScene, double similarity, String language) {
         try {

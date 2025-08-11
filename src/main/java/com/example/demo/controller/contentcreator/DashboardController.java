@@ -2,6 +2,8 @@ package com.example.demo.controller.contentcreator;
 
 import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
+import com.example.demo.api.ApiResponse;
+import com.example.demo.service.I18nService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,10 +19,15 @@ public class DashboardController {
     @Autowired
     private Firestore db;
     
+    @Autowired
+    private I18nService i18nService;
+    
     // Get dashboard statistics for content creator
     @GetMapping("/users/{userId}/dashboard")
-    public ResponseEntity<Map<String, Object>> getDashboardStats(@PathVariable String userId) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getDashboardStats(@PathVariable String userId,
+                                                                               @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             Map<String, Object> stats = new HashMap<>();
             
             // Get subscribed templates count
@@ -52,15 +59,15 @@ public class DashboardController {
             stats.put("availableTemplates", subscribedTemplatesCount);
             stats.put("recordedVideos", submittedVideosCount);
             stats.put("publishedVideos", publishedVideosCount);
-            stats.put("success", true);
             
-            return ResponseEntity.ok(stats);
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, stats));
             
         } catch (InterruptedException | ExecutionException e) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("message", "Failed to fetch dashboard stats: " + e.getMessage());
-            return ResponseEntity.internalServerError().body(errorResponse);
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.fail(message, "Failed to fetch dashboard stats: " + e.getMessage()));
         }
     }
     

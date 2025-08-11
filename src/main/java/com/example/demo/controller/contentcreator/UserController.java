@@ -1,10 +1,12 @@
 package com.example.demo.controller.contentcreator;
 
 import com.example.demo.model.ManualTemplate;
-
 import com.example.demo.dao.UserDao;
+import com.example.demo.api.ApiResponse;
+import com.example.demo.service.I18nService;
 import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
@@ -18,13 +20,17 @@ public class UserController {
     
     @Autowired
     private UserDao userDao;
+    
+    @Autowired
+    private I18nService i18nService;
 
 
     // Get subscribed templates (Content Creator)
     @GetMapping("/users/{userId}/subscribed-templates")
-    public ResponseEntity<List<ManualTemplate>> getSubscribedTemplates(@PathVariable String userId) throws ExecutionException, InterruptedException {
+    public ResponseEntity<ApiResponse<List<ManualTemplate>>> getSubscribedTemplates(@PathVariable String userId,
+                                                                                     @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws ExecutionException, InterruptedException {
         try {
-            
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             // Get user's subscribed templates using UserDao
             Map<String, Boolean> subscribedTemplatesMap = userDao.getSubscribedTemplates(userId);
             
@@ -51,11 +57,15 @@ public class UserController {
                 }
             }
             
-            return ResponseEntity.ok(templates);
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, templates));
             
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.internalServerError().build();
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, e.getMessage()));
         }
     }
 
@@ -66,16 +76,23 @@ public class UserController {
     
         // Get template details (Content Creator)
         @GetMapping("/templates/{templateId}")
-        public ResponseEntity<ManualTemplate> getTemplateByIdForContentCreator(@PathVariable String templateId) {
+        public ResponseEntity<ApiResponse<ManualTemplate>> getTemplateByIdForContentCreator(@PathVariable String templateId,
+                                                                                              @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
             try {
+                String language = i18nService.detectLanguageFromHeader(acceptLanguage);
                 ManualTemplate template = templateDao.getTemplate(templateId);
                 if (template != null) {
-                    return ResponseEntity.ok(template);
+                    String message = i18nService.getMessage("operation.success", language);
+                    return ResponseEntity.ok(ApiResponse.ok(message, template));
                 } else {
-                    return ResponseEntity.notFound().build();
+                    String message = i18nService.getMessage("template.not.found", language);
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
                 }
             } catch (Exception e) {
-                return ResponseEntity.internalServerError().build();
+                String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+                String message = i18nService.getMessage("server.error", language);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(ApiResponse.fail(message, e.getMessage()));
             }
         }
 }

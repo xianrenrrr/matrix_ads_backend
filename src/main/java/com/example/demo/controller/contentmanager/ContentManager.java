@@ -6,6 +6,8 @@ import com.example.demo.dao.SceneSubmissionDao;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.SceneSubmission;
 import com.example.demo.service.TemplateSubscriptionService;
+import com.example.demo.api.ApiResponse;
+import com.example.demo.service.I18nService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,21 +23,24 @@ public class ContentManager {
     
     @Autowired
     private SceneSubmissionDao sceneSubmissionDao;
+    
+    @Autowired
+    private I18nService i18nService;
 
 
     // --- Get single submitted video by composite ID ---
     @GetMapping("/submitted-videos/{compositeVideoId}")
-    public ResponseEntity<Map<String, Object>> getSubmittedVideo(@PathVariable String compositeVideoId) throws Exception {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getSubmittedVideo(@PathVariable String compositeVideoId,
+                                                                              @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             // Get video document from submittedVideos collection
             com.google.cloud.firestore.DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
             com.google.cloud.firestore.DocumentSnapshot videoDoc = videoDocRef.get().get();
             
             if (!videoDoc.exists()) {
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("success", false);
-                errorResponse.put("message", "HARDCODED_Submitted video not found"); // TODO: Internationalize this message
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+                String message = i18nService.getMessage("video.not.found", language);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
             }
             
             Map<String, Object> videoData = new HashMap<>(videoDoc.getData());
@@ -81,21 +86,22 @@ public class ContentManager {
             }
             
             videoData.put("id", compositeVideoId); // Add document ID
-            videoData.put("success", true);
             
-            return ResponseEntity.ok(videoData);
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, videoData));
             
         } catch (Exception e) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("message", "HARDCODED_Failed to get submitted video: " + e.getMessage()); // TODO: Internationalize this message
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to get submitted video: " + e.getMessage()));
         }
     }
 
     // --- Submissions grouped by status ---
     @GetMapping("/submissions")
-    public ResponseEntity<Map<String, List<Map<String, Object>>>> getAllSubmissions() throws Exception {
+    public ResponseEntity<ApiResponse<Map<String, List<Map<String, Object>>>>> getAllSubmissions(@RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         com.google.cloud.firestore.CollectionReference submissionsRef = db.collection("submittedVideos");
         com.google.api.core.ApiFuture<com.google.cloud.firestore.QuerySnapshot> querySnapshot = submissionsRef.get();
         List<Map<String, Object>> pending = new ArrayList<>();
@@ -127,7 +133,9 @@ public class ContentManager {
         result.put("approved", approved);
         result.put("published", published);
         result.put("rejected", rejected);
-        return ResponseEntity.ok(result);
+        
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, result));
     }
     private final TemplateDao templateDao;
     private final UserDao userDao;
@@ -143,7 +151,9 @@ public class ContentManager {
     
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> createTemplate(@RequestBody com.example.demo.model.CreateTemplateRequest request) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> createTemplate(@RequestBody com.example.demo.model.CreateTemplateRequest request,
+                                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         String userId = request.getUserId();
         ManualTemplate manualTemplate = request.getManualTemplate();
         List<String> selectedGroupIds = request.getSelectedGroupIds();
@@ -177,35 +187,41 @@ public class ContentManager {
             }
             
             // Prepare response with assignment details
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("template", manualTemplate);
-            response.put("templateId", templateId);
-            response.put("assignedGroups", assignedGroupNames);
-            response.put("totalMembersAssigned", totalMembersAssigned);
-            response.put("message", "HARDCODED_Template created successfully" + // TODO: Internationalize this message 
-                (totalMembersAssigned > 0 ? " and assigned to " + totalMembersAssigned + " content creators across " + assignedGroupNames.size() + " groups" : ""));
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("template", manualTemplate);
+            responseData.put("templateId", templateId);
+            responseData.put("assignedGroups", assignedGroupNames);
+            responseData.put("totalMembersAssigned", totalMembersAssigned);
             
-            return new ResponseEntity<>(response, HttpStatus.CREATED);
+            String message = i18nService.getMessage("template.created", language);
+            if (totalMembersAssigned > 0) {
+                message += " and assigned to " + totalMembersAssigned + " content creators across " + assignedGroupNames.size() + " groups";
+            }
+            
+            return new ResponseEntity<>(ApiResponse.ok(message, responseData), HttpStatus.CREATED);
             
         } catch (Exception e) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("message", "HARDCODED_Failed to create template: " + e.getMessage()); // TODO: Internationalize this message
-            return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+            String message = i18nService.getMessage("server.error", language);
+            return new ResponseEntity<>(ApiResponse.fail(message, "Failed to create template: " + e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<List<TemplateSummary>> getTemplatesByUserId(@PathVariable String userId) {
+    public ResponseEntity<ApiResponse<List<TemplateSummary>>> getTemplatesByUserId(@PathVariable String userId,
+                                                                                      @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             List<ManualTemplate> templates = templateDao.getTemplatesByUserId(userId);
             List<TemplateSummary> summaries = templates.stream()
                 .map(t -> new TemplateSummary(t.getId(), t.getTemplateTitle()))
                 .toList();
-            return ResponseEntity.ok(summaries);
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, summaries));
         } catch (InterruptedException | ExecutionException e) {
-            return ResponseEntity.internalServerError().build();
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to get templates: " + e.getMessage()));
         }
     }
 
@@ -224,24 +240,33 @@ public class ContentManager {
     }
 
     @GetMapping("/{templateId}")
-    public ResponseEntity<ManualTemplate> getTemplateById(@PathVariable String templateId) {
+    public ResponseEntity<ApiResponse<ManualTemplate>> getTemplateById(@PathVariable String templateId,
+                                                                        @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             ManualTemplate template = templateDao.getTemplate(templateId);
             if (template != null) {
-                return ResponseEntity.ok(template);
+                String message = i18nService.getMessage("operation.success", language);
+                return ResponseEntity.ok(ApiResponse.ok(message, template));
             } else {
-                return ResponseEntity.notFound().build();
+                String message = i18nService.getMessage("template.not.found", language);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
             }
         } catch (InterruptedException | ExecutionException e) {
-            return ResponseEntity.internalServerError().build();
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to get template: " + e.getMessage()));
         }
     }
 
     @PutMapping("/{templateId}")
-    public ResponseEntity<Map<String, Object>> updateTemplate(
+    public ResponseEntity<ApiResponse<ManualTemplate>> updateTemplate(
             @PathVariable String templateId, 
-            @RequestBody ManualTemplate updatedTemplate) {
+            @RequestBody ManualTemplate updatedTemplate,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             updatedTemplate.setId(templateId); // Ensure ID matches path parameter
             
             // Mark all scenes as manual with grid overlay for updates
@@ -259,54 +284,64 @@ public class ContentManager {
             boolean updated = templateDao.updateTemplate(templateId, updatedTemplate);
             
             if (updated) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", true);
-                response.put("message", "HARDCODED_Template updated successfully"); // TODO: Internationalize this message
-                response.put("template", updatedTemplate);
-                return ResponseEntity.ok(response);
+                String message = i18nService.getMessage("template.updated", language);
+                return ResponseEntity.ok(ApiResponse.ok(message, updatedTemplate));
             } else {
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("success", false);
-                errorResponse.put("message", "HARDCODED_Template not found"); // TODO: Internationalize this message
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+                String message = i18nService.getMessage("template.not.found", language);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
             }
         } catch (Exception e) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("message", "HARDCODED_Failed to update template: " + e.getMessage()); // TODO: Internationalize this message
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to update template: " + e.getMessage()));
         }
     }
 
     @DeleteMapping("/{templateId}")
-    public ResponseEntity<Void> deleteTemplate(@PathVariable String templateId, @RequestParam String userId) {
+    public ResponseEntity<ApiResponse<String>> deleteTemplate(@PathVariable String templateId, 
+                                                               @RequestParam String userId,
+                                                               @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             boolean deleted = templateDao.deleteTemplate(templateId);
             if (deleted) {
                 userDao.removeCreatedTemplate(userId, templateId); // Remove templateId from created_template field in user doc
-                return ResponseEntity.noContent().build();
+                String message = i18nService.getMessage("template.deleted", language);
+                return ResponseEntity.ok(ApiResponse.ok(message, "Template deleted successfully"));
             } else {
-                return ResponseEntity.notFound().build();
+                String message = i18nService.getMessage("template.not.found", language);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
             }
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().build();
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to delete template: " + e.getMessage()));
         }
     }
 
 
     // Get user information by ID
     @GetMapping("/users/{userId}")
-    public ResponseEntity<UserInfo> getUserById(@PathVariable String userId) {
+    public ResponseEntity<ApiResponse<UserInfo>> getUserById(@PathVariable String userId,
+                                                              @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
         try {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
             com.example.demo.model.User user = userDao.findById(userId);
             if (user != null) {
                 UserInfo userInfo = new UserInfo(user.getId(), user.getUsername(), user.getEmail(), user.getRole());
-                return ResponseEntity.ok(userInfo);
+                String message = i18nService.getMessage("operation.success", language);
+                return ResponseEntity.ok(ApiResponse.ok(message, userInfo));
             } else {
-                return ResponseEntity.notFound().build();
+                String message = i18nService.getMessage("user.not.found", language);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
             }
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            String message = i18nService.getMessage("server.error", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(message, "Failed to get user: " + e.getMessage()));
         }
     }
 

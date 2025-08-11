@@ -5,6 +5,8 @@ import com.example.demo.dao.VideoDao;
 import com.example.demo.model.Video;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.service.TemplateSubscriptionService;
+import com.example.demo.service.I18nService;
+import com.example.demo.api.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +16,7 @@ import com.example.demo.ai.template.AITemplateGenerator;
 
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import com.google.cloud.firestore.Firestore;
 
 @RestController
 @RequestMapping("/content-manager/videos")
@@ -48,6 +51,10 @@ public class VideoController {
 
     @Autowired(required = false)
     private com.example.demo.service.FirebaseStorageService firebaseStorageService;
+    
+    @Autowired
+    private I18nService i18nService;
+
 
     @Autowired(required = false)
     private com.google.cloud.firestore.Firestore db;
@@ -56,10 +63,15 @@ public class VideoController {
     private TemplateSubscriptionService templateSubscriptionService;
 
     @PostMapping("/{videoId}/approve")
-    public ResponseEntity<String> approveVideo(@PathVariable String videoId) throws Exception {
+    public ResponseEntity<ApiResponse<String>> approveVideo(@PathVariable String videoId,
+                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
         com.google.cloud.firestore.DocumentSnapshot videoSnap = videoRef.get().get();
-        if (!videoSnap.exists()) return ResponseEntity.notFound().build();
+        if (!videoSnap.exists()) {
+            String message = i18nService.getMessage("video.not.found", language);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
+        }
         String creatorId = (String) videoSnap.get("uploadedBy");
         videoRef.update("publishStatus", "approved");
         // Send notification to creator
@@ -71,14 +83,21 @@ public class VideoController {
         notif.put("timestamp", System.currentTimeMillis());
         notif.put("read", false);
         userRef.update("notifications." + notifId, notif);
-        return ResponseEntity.ok("Video approved and creator notified.");
+        String message = i18nService.getMessage("video.approved", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, "Video approved and creator notified."));
     }
 
     @PostMapping("/{videoId}/reject")
-    public ResponseEntity<String> rejectVideo(@PathVariable String videoId, @RequestBody java.util.Map<String, String> body) throws Exception {
+    public ResponseEntity<ApiResponse<String>> rejectVideo(@PathVariable String videoId, 
+                                                           @RequestBody java.util.Map<String, String> body,
+                                                           @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
         com.google.cloud.firestore.DocumentSnapshot videoSnap = videoRef.get().get();
-        if (!videoSnap.exists()) return ResponseEntity.notFound().build();
+        if (!videoSnap.exists()) {
+            String message = i18nService.getMessage("video.not.found", language);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
+        }
         String creatorId = (String) videoSnap.get("uploadedBy");
         String reason = body.getOrDefault("reason", "No reason provided");
         String suggestion = body.getOrDefault("suggestion", "");
@@ -92,18 +111,26 @@ public class VideoController {
         notif.put("timestamp", System.currentTimeMillis());
         notif.put("read", false);
         userRef.update("notifications." + notifId, notif);
-        return ResponseEntity.ok("Video rejected and creator notified.");
+        String message = i18nService.getMessage("video.rejected", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, "Video rejected and creator notified."));
     }
 
     @PostMapping("/{videoId}/publish")
-    public ResponseEntity<String> publishVideo(@PathVariable String videoId, @RequestParam String publisherId) throws Exception {
+    public ResponseEntity<ApiResponse<String>> publishVideo(@PathVariable String videoId, 
+                                                            @RequestParam String publisherId,
+                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
         com.google.cloud.firestore.DocumentSnapshot videoSnap = videoRef.get().get();
-        if (!videoSnap.exists()) return ResponseEntity.notFound().build();
+        if (!videoSnap.exists()) {
+            String message = i18nService.getMessage("video.not.found", language);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
+        }
         
         String currentStatus = (String) videoSnap.get("publishStatus");
         if (!"approved".equals(currentStatus)) {
-            return ResponseEntity.badRequest().body("Can only publish approved videos");
+            String message = i18nService.getMessage("bad.request", language);
+            return ResponseEntity.badRequest().body(ApiResponse.fail(message, "Can only publish approved videos"));
         }
         
         String creatorId = (String) videoSnap.get("uploadedBy");
@@ -118,7 +145,8 @@ public class VideoController {
         notif.put("timestamp", System.currentTimeMillis());
         notif.put("read", false);
         userRef.update("notifications." + notifId, notif);
-        return ResponseEntity.ok("Video published and creator notified.");
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, "Video published and creator notified."));
     }
 
     @PostMapping("/upload")
@@ -216,16 +244,6 @@ public class VideoController {
             System.out.println("===========================");
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-
-    @GetMapping("/user/{userId}")
-    public ResponseEntity<List<Video>> getVideosByUserId(@PathVariable String userId) {
-        try {
-            List<Video> videos = videoDao.getVideosByUserId(userId);
-            return ResponseEntity.ok(videos);
-        } catch (InterruptedException | ExecutionException e) {
-            return ResponseEntity.internalServerError().build();
         }
     }
 

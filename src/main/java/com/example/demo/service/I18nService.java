@@ -43,6 +43,19 @@ public class I18nService {
         zhMessages.put("operation.success", "操作成功");
         zhMessages.put("operation.failed", "操作失败");
         
+        // Auth and Invite messages
+        zhMessages.put("token.required", "令牌是必需的");
+        zhMessages.put("token.valid", "令牌有效");
+        zhMessages.put("token.validation.failed", "令牌验证失败");
+        zhMessages.put("username.exists", "用户名已存在");
+        zhMessages.put("email.exists", "该角色的电子邮件已存在");
+        zhMessages.put("invite.not_found", "邀请未找到");
+        zhMessages.put("group.inactive", "群组未激活");
+        zhMessages.put("group.not_found", "群组不存在");
+        zhMessages.put("user.creation.failed", "用户创建失败");
+        zhMessages.put("user.joined.group", "用户已加入群组");
+        zhMessages.put("registration.error", "注册过程中出现错误");
+        
         // English Messages
         Map<String, String> enMessages = new HashMap<>();
         enMessages.put("login.success", "Login successful");
@@ -71,6 +84,19 @@ public class I18nService {
         enMessages.put("video.rejected", "Video rejected");
         enMessages.put("operation.success", "Operation successful");
         enMessages.put("operation.failed", "Operation failed");
+        
+        // Auth and Invite messages  
+        enMessages.put("token.required", "Token is required");
+        enMessages.put("token.valid", "Token is valid");
+        enMessages.put("token.validation.failed", "Token validation failed");
+        enMessages.put("username.exists", "Username already exists");
+        enMessages.put("email.exists", "Email already exists for this role");
+        enMessages.put("invite.not_found", "Invite not found");
+        enMessages.put("group.inactive", "Group is not active");
+        enMessages.put("group.not_found", "Group not found");
+        enMessages.put("user.creation.failed", "User creation failed");
+        enMessages.put("user.joined.group", "User joined group successfully");
+        enMessages.put("registration.error", "Error occurred during registration");
         
         messages.put("zh", zhMessages);
         messages.put("en", enMessages);
