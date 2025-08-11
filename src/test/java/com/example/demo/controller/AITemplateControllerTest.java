@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.hamcrest.Matchers.*;
 
@@ -124,14 +125,30 @@ public class AITemplateControllerTest {
     }
 
     @Test
-    public void testAIApprovalThreshold() throws Exception {
-        // Test the AI approval threshold endpoint
-        mockMvc.perform(post("/api/ai-approval/threshold")
+    public void testGroupAISettings() throws Exception {
+        // Test the group AI settings endpoint
+        // Note: In a real test, you would first create a group and get its ID
+        // For this test, we're using a mock group ID
+        String groupId = "test-group-id";
+        
+        String requestBody = """
+            {
+                "aiApprovalThreshold": 0.85,
+                "aiAutoApprovalEnabled": true,
+                "allowManualOverride": true
+            }
+            """;
+        
+        // Test updating AI settings for a group
+        mockMvc.perform(put("/content-manager/groups/" + groupId + "/ai-settings")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"templateId\": \"template123\", \"managerId\": \"manager123\", \"threshold\": 85.0}")
+                .content(requestBody)
                 .header("Authorization", "manager123"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success", is(true)))
-            .andExpect(jsonPath("$.data.threshold", is(85.0)));
+            .andExpect(jsonPath("$.message", is("AI settings updated successfully")))
+            .andExpect(jsonPath("$.aiApprovalThreshold", is(0.85)))
+            .andExpect(jsonPath("$.aiAutoApprovalEnabled", is(true)))
+            .andExpect(jsonPath("$.allowManualOverride", is(true)));
     }
 }
