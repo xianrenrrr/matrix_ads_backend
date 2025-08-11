@@ -49,19 +49,16 @@ public class ContentCreatorVideoController {
             @RequestParam("templateId") String templateId,
             @RequestParam("userId") String userId,
             @RequestHeader(value = "Accept-Language", required = false, defaultValue = "en") String acceptLanguage
-    ) throws ExecutionException, InterruptedException {
+    ) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         if (file == null || file.isEmpty() || !StringUtils.hasText(templateId) || !StringUtils.hasText(userId)) {
-            String message = i18nService.getMessage("bad.request", language);
-            return ResponseEntity.badRequest().body(ApiResponse.fail(message, "Missing required parameters"));
+            throw new IllegalArgumentException("Missing required parameters");
         }
-        try {
-            // Check if Firebase is available
-            if (firebaseApp == null) {
-                String message = i18nService.getMessage("server.error", language);
-                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(ApiResponse.fail(message, "Firebase Storage is not available. Please check configuration."));
-            }
+        
+        // Check if Firebase is available
+        if (firebaseApp == null) {
+            throw new IllegalStateException("Firebase Storage is not available. Please check configuration.");
+        }
             
             // Upload new video to GCS
             String newVideoId = UUID.randomUUID().toString();
@@ -69,49 +66,44 @@ public class ContentCreatorVideoController {
             StorageClient.getInstance(firebaseApp).bucket().create(newObjectName, file.getInputStream(), file.getContentType());
             String videoUrl = String.format("https://storage.googleapis.com/%s/%s", StorageClient.getInstance(firebaseApp).bucket().getName(), newObjectName);
 
-            // Perform similarity analysis immediately after upload
-            double similarityScore = 0.0;
-            List<String> suggestions = new ArrayList<>();
-            
-            try {
-                // Get template and example video for comparison
-                if (templateDao != null) {
-                    ManualTemplate template = templateDao.getTemplate(templateId);
-                    if (template != null && template.getVideoId() != null) {
-                        Video exampleVideo = videoDao.getVideoById(template.getVideoId());
-                        if (exampleVideo != null) {
-                            System.out.println("Running similarity analysis for uploaded video");
-                            System.out.println("Comparing with example video: " + exampleVideo.getUrl());
-                            
-                            // Create a temporary video object for the submitted video
-                            Video submittedVideo = new Video();
-                            submittedVideo.setId(newVideoId);
-                            submittedVideo.setUrl(videoUrl);
-                            submittedVideo.setTemplateId(templateId);
-                            
-                            // TODO: Replace empty lists with real scene extraction from videos
-                            // Use VideoComparisonIntegrationService.getUserVideoScenesById() to get actual scene data
-                            List<Map<String, String>> userScenes = new ArrayList<>();
-                            List<Map<String, String>> exampleScenes = new ArrayList<>();
-                            
-                            if (userScenes != null && !userScenes.isEmpty() && exampleScenes != null && !exampleScenes.isEmpty()) {
-                                // Calculate similarity
-                                similarityScore = calculateSimilarity(userScenes, exampleScenes);
-                                
-                                // Language already detected above
-                                
-                                // Generate suggestions
-                                suggestions = generateSuggestions(exampleScenes.get(0), userScenes.get(0), similarityScore, language);
-                                
-                                System.out.println("Similarity analysis complete: " + similarityScore);
-                            }
-                        }
+        // Perform similarity analysis immediately after upload
+        double similarityScore = 0.0;
+        List<String> suggestions = new ArrayList<>();
+        
+        // Get template and example video for comparison
+        if (templateDao != null) {
+            ManualTemplate template = templateDao.getTemplate(templateId);
+            if (template != null && template.getVideoId() != null) {
+                Video exampleVideo = videoDao.getVideoById(template.getVideoId());
+                if (exampleVideo != null) {
+                    System.out.println("Running similarity analysis for uploaded video");
+                    System.out.println("Comparing with example video: " + exampleVideo.getUrl());
+                    
+                    // Create a temporary video object for the submitted video
+                    Video submittedVideo = new Video();
+                    submittedVideo.setId(newVideoId);
+                    submittedVideo.setUrl(videoUrl);
+                    submittedVideo.setTemplateId(templateId);
+                    
+                    // TODO: Replace empty lists with real scene extraction from videos
+                    // Use VideoComparisonIntegrationService.getUserVideoScenesById() to get actual scene data
+                    List<Map<String, String>> userScenes = new ArrayList<>();
+                    List<Map<String, String>> exampleScenes = new ArrayList<>();
+                    
+                    if (userScenes != null && !userScenes.isEmpty() && exampleScenes != null && !exampleScenes.isEmpty()) {
+                        // Calculate similarity
+                        similarityScore = calculateSimilarity(userScenes, exampleScenes);
+                        
+                        // Language already detected above
+                        
+                        // Generate suggestions
+                        suggestions = generateSuggestions(exampleScenes.get(0), userScenes.get(0), similarityScore, language);
+                        
+                        System.out.println("Similarity analysis complete: " + similarityScore);
                     }
                 }
-            } catch (Exception e) {
-                System.err.println("Error during similarity analysis: " + e.getMessage());
-                // Continue with upload even if analysis fails
             }
+        }
 
             // Store metadata in submittedVideos/{videoId}
             Map<String, Object> feedback = new HashMap<>();
@@ -164,13 +156,8 @@ public class ContentCreatorVideoController {
             responseData.put("suggestions", suggestions);
             responseData.put("publishStatus", "pending");
             
-            String message = i18nService.getMessage("video.uploaded", language);
-            return ResponseEntity.ok(ApiResponse.ok(message, responseData));
-        } catch (IOException e) {
-            String message = i18nService.getMessage("server.error", language);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.fail(message, "Failed to upload/process video: " + e.getMessage()));
-        }
+        String message = i18nService.getMessage("video.uploaded", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }
     
     private double calculateSimilarity(List<Map<String, String>> userScenes, List<Map<String, String>> exampleScenes) {
@@ -182,25 +169,20 @@ public class ContentCreatorVideoController {
     }
     
     
-    private List<String> generateSuggestions(Map<String, String> exampleScene, Map<String, String> userScene, double similarity, String language) {
-        try {
-            EditSuggestionService.EditSuggestionRequest request = new EditSuggestionService.EditSuggestionRequest();
-            request.setTemplateDescriptions(exampleScene);
-            request.setUserDescriptions(userScene);
-            
-            // Create mock similarity scores
-            Map<String, Double> scores = new HashMap<>();
-            for (String key : exampleScene.keySet()) {
-                scores.put(key, similarity + (Math.random() * 0.2 - 0.1)); // Add some variance
-            }
-            request.setSimilarityScores(scores);
-            
-            EditSuggestionService.EditSuggestionResponse response = editSuggestionService.generateSuggestions(request, language);
-            return response.getSuggestions();
-        } catch (Exception e) {
-            System.err.println("Error generating suggestions: " + e.getMessage());
-            return List.of("Unable to generate suggestions at this time");
+    private List<String> generateSuggestions(Map<String, String> exampleScene, Map<String, String> userScene, double similarity, String language) throws Exception {
+        EditSuggestionService.EditSuggestionRequest request = new EditSuggestionService.EditSuggestionRequest();
+        request.setTemplateDescriptions(exampleScene);
+        request.setUserDescriptions(userScene);
+        
+        // Create mock similarity scores
+        Map<String, Double> scores = new HashMap<>();
+        for (String key : exampleScene.keySet()) {
+            scores.put(key, similarity + (Math.random() * 0.2 - 0.1)); // Add some variance
         }
+        request.setSimilarityScores(scores);
+        
+        EditSuggestionService.EditSuggestionResponse response = editSuggestionService.generateSuggestions(request, language);
+        return response.getSuggestions();
     }
 
 }

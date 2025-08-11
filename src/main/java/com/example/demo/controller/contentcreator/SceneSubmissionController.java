@@ -60,23 +60,22 @@ public class SceneSubmissionController {
             @RequestParam("templateId") String templateId,
             @RequestParam("userId") String userId,
             @RequestParam("sceneNumber") int sceneNumber,
-            @RequestParam(value = "sceneTitle", required = false) String sceneTitle) {
+            @RequestParam(value = "sceneTitle", required = false) String sceneTitle) throws Exception {
         
-        try {
-            // Validate inputs
-            if (file.isEmpty()) {
-                return createErrorResponse("HARDCODED_File is empty", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
-            }
-            
-            // Get template to validate scene number and get scene data
-            ManualTemplate template = templateDao.getTemplate(templateId);
-            if (template == null) {
-                return createErrorResponse("HARDCODED_Template not found", HttpStatus.NOT_FOUND); // TODO: Internationalize this message
-            }
-            
-            if (sceneNumber < 1 || sceneNumber > template.getScenes().size()) {
-                return createErrorResponse("HARDCODED_Invalid scene number", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
-            }
+        // Validate inputs
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("File is empty");
+        }
+        
+        // Get template to validate scene number and get scene data
+        ManualTemplate template = templateDao.getTemplate(templateId);
+        if (template == null) {
+            throw new NoSuchElementException("Template not found with ID: " + templateId);
+        }
+        
+        if (sceneNumber < 1 || sceneNumber > template.getScenes().size()) {
+            throw new IllegalArgumentException("Invalid scene number: " + sceneNumber);
+        }
             
             // Get scene data from template
             com.example.demo.model.Scene templateScene = template.getScenes().get(sceneNumber - 1);
@@ -142,29 +141,18 @@ public class SceneSubmissionController {
             String sceneId = sceneSubmissionDao.save(sceneSubmission);
             sceneSubmission.setId(sceneId);
             
-            // Save/update scene in submittedVideos collection
-            try {
-                updateSubmittedVideoWithScene(compositeVideoId, templateId, userId, sceneSubmission);
-            } catch (Exception e) {
-                System.err.println("Error updating submittedVideos: " + e.getMessage());
-                // Continue even if this fails - the scene is still saved in sceneSubmissions
-            }
-            
-            // Prepare response
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "HARDCODED_Scene uploaded successfully"); // TODO: Internationalize this message
-            response.put("sceneSubmission", sceneSubmission);
-            response.put("similarityScore", sceneSubmission.getSimilarityScore());
-            response.put("aiSuggestions", sceneSubmission.getAiSuggestions());
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            System.err.println("Error uploading scene: " + e.getMessage());
-            return createErrorResponse("HARDCODED_Failed to upload scene: " + e.getMessage(), // TODO: Internationalize this message 
-                HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        // Save/update scene in submittedVideos collection
+        updateSubmittedVideoWithScene(compositeVideoId, templateId, userId, sceneSubmission);
+        
+        // Prepare response
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", "HARDCODED_Scene uploaded successfully"); // TODO: Internationalize this message
+        response.put("sceneSubmission", sceneSubmission);
+        response.put("similarityScore", sceneSubmission.getSimilarityScore());
+        response.put("aiSuggestions", sceneSubmission.getAiSuggestions());
+        
+        return ResponseEntity.ok(response);
     }
     
     /**
@@ -174,10 +162,9 @@ public class SceneSubmissionController {
     @GetMapping("/template/{templateId}/user/{userId}")
     public ResponseEntity<Map<String, Object>> getSceneSubmissions(
             @PathVariable String templateId,
-            @PathVariable String userId) {
+            @PathVariable String userId) throws Exception {
         
-        try {
-            List<SceneSubmission> submissions = sceneSubmissionDao.findByTemplateIdAndUserId(templateId, userId);
+        List<SceneSubmission> submissions = sceneSubmissionDao.findByTemplateIdAndUserId(templateId, userId);
             
             // Get template to know total scenes expected
             ManualTemplate template = templateDao.getTemplate(templateId);
@@ -204,12 +191,7 @@ public class SceneSubmissionController {
             response.put("progress", createProgressMap(totalScenes, submittedCount, approvedCount, pendingCount, rejectedCount));
             response.put("isReadyForCompilation", approvedCount == totalScenes && totalScenes > 0);
             
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            return createErrorResponse("HARDCODED_Failed to get scene submissions: " + e.getMessage(), // TODO: Internationalize this message 
-                HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return ResponseEntity.ok(response);
     }
     
     /**
@@ -217,15 +199,14 @@ public class SceneSubmissionController {
      * GET /content-creator/scenes/submitted-videos/{compositeVideoId}
      */
     @GetMapping("/submitted-videos/{compositeVideoId}")
-    public ResponseEntity<Map<String, Object>> getSubmittedVideo(@PathVariable String compositeVideoId) {
-        try {
-            // Get video document from submittedVideos collection
-            DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
-            DocumentSnapshot videoDoc = videoDocRef.get().get();
-            
-            if (!videoDoc.exists()) {
-                return createErrorResponse("HARDCODED_No submission found for this template", HttpStatus.NOT_FOUND); // TODO: Internationalize this message
-            }
+    public ResponseEntity<Map<String, Object>> getSubmittedVideo(@PathVariable String compositeVideoId) throws Exception {
+        // Get video document from submittedVideos collection
+        DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
+        DocumentSnapshot videoDoc = videoDocRef.get().get();
+        
+        if (!videoDoc.exists()) {
+            throw new NoSuchElementException("No submission found for ID: " + compositeVideoId);
+        }
             
             Map<String, Object> videoData = new HashMap<>(videoDoc.getData());
             
@@ -274,12 +255,7 @@ public class SceneSubmissionController {
             response.put("success", true);
             response.putAll(videoData);
             
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            return createErrorResponse("HARDCODED_Failed to get submitted video: " + e.getMessage(), // TODO: Internationalize this message 
-                HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -287,24 +263,18 @@ public class SceneSubmissionController {
      * GET /content-creator/scenes/{sceneId}
      */
     @GetMapping("/{sceneId}")
-    public ResponseEntity<Map<String, Object>> getSceneSubmission(@PathVariable String sceneId) {
-        try {
-            SceneSubmission submission = sceneSubmissionDao.findById(sceneId);
-            
-            if (submission == null) {
-                return createErrorResponse("HARDCODED_Scene submission not found", HttpStatus.NOT_FOUND); // TODO: Internationalize this message
-            }
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("sceneSubmission", submission);
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            return createErrorResponse("HARDCODED_Failed to get scene submission: " + e.getMessage(), // TODO: Internationalize this message 
-                HttpStatus.INTERNAL_SERVER_ERROR);
+    public ResponseEntity<Map<String, Object>> getSceneSubmission(@PathVariable String sceneId) throws Exception {
+        SceneSubmission submission = sceneSubmissionDao.findById(sceneId);
+        
+        if (submission == null) {
+            throw new NoSuchElementException("Scene submission not found with ID: " + sceneId);
         }
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("sceneSubmission", submission);
+        
+        return ResponseEntity.ok(response);
     }
     
     /**
@@ -314,27 +284,21 @@ public class SceneSubmissionController {
     @PostMapping("/{sceneId}/resubmit")
     public ResponseEntity<Map<String, Object>> resubmitScene(
             @PathVariable String sceneId,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam("file") MultipartFile file) throws Exception {
         
-        try {
-            // Get original submission
-            SceneSubmission originalSubmission = sceneSubmissionDao.findById(sceneId);
-            if (originalSubmission == null) {
-                return createErrorResponse("HARDCODED_Original scene submission not found", HttpStatus.NOT_FOUND); // TODO: Internationalize this message
-            }
-            
-            if (!"rejected".equals(originalSubmission.getStatus())) {
-                return createErrorResponse("HARDCODED_Can only resubmit rejected scenes", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
-            }
-            
-            // Create new submission using upload logic
-            return uploadScene(file, originalSubmission.getTemplateId(), originalSubmission.getUserId(), 
-                originalSubmission.getSceneNumber(), originalSubmission.getSceneTitle());
-            
-        } catch (Exception e) {
-            return createErrorResponse("HARDCODED_Failed to resubmit scene: " + e.getMessage(), // TODO: Internationalize this message 
-                HttpStatus.INTERNAL_SERVER_ERROR);
+        // Get original submission
+        SceneSubmission originalSubmission = sceneSubmissionDao.findById(sceneId);
+        if (originalSubmission == null) {
+            throw new NoSuchElementException("Original scene submission not found with ID: " + sceneId);
         }
+        
+        if (!"rejected".equals(originalSubmission.getStatus())) {
+            throw new IllegalArgumentException("Can only resubmit rejected scenes");
+        }
+        
+        // Create new submission using upload logic
+        return uploadScene(file, originalSubmission.getTemplateId(), originalSubmission.getUserId(), 
+            originalSubmission.getSceneNumber(), originalSubmission.getSceneTitle());
     }
     
     /**
@@ -342,9 +306,8 @@ public class SceneSubmissionController {
      * GET /content-creator/scenes/user/{userId}/progress
      */
     @GetMapping("/user/{userId}/progress")
-    public ResponseEntity<Map<String, Object>> getUserSceneProgress(@PathVariable String userId) {
-        try {
-            List<SceneSubmission> allSubmissions = sceneSubmissionDao.findByUserId(userId);
+    public ResponseEntity<Map<String, Object>> getUserSceneProgress(@PathVariable String userId) throws Exception {
+        List<SceneSubmission> allSubmissions = sceneSubmissionDao.findByUserId(userId);
             
             // Group by template ID
             Map<String, List<SceneSubmission>> submissionsByTemplate = new HashMap<>();
@@ -359,20 +322,15 @@ public class SceneSubmissionController {
                 String templateId = entry.getKey();
                 List<SceneSubmission> submissions = entry.getValue();
                 
-                try {
-                    ManualTemplate template = templateDao.getTemplate(templateId);
-                    int totalScenes = template != null ? template.getScenes().size() : 0;
-                    
-                    int approved = (int) submissions.stream().filter(s -> "approved".equals(s.getStatus())).count();
-                    int pending = (int) submissions.stream().filter(s -> "pending".equals(s.getStatus())).count();
-                    int rejected = (int) submissions.stream().filter(s -> "rejected".equals(s.getStatus())).count();
-                    
-                    templateProgress.put(templateId, createProgressMap(totalScenes, submissions.size(), 
-                        approved, pending, rejected));
-                        
-                } catch (Exception e) {
-                    System.err.println("Error calculating progress for template " + templateId + ": " + e.getMessage());
-                }
+                ManualTemplate template = templateDao.getTemplate(templateId);
+                int totalScenes = template != null ? template.getScenes().size() : 0;
+                
+                int approved = (int) submissions.stream().filter(s -> "approved".equals(s.getStatus())).count();
+                int pending = (int) submissions.stream().filter(s -> "pending".equals(s.getStatus())).count();
+                int rejected = (int) submissions.stream().filter(s -> "rejected".equals(s.getStatus())).count();
+                
+                templateProgress.put(templateId, createProgressMap(totalScenes, submissions.size(), 
+                    approved, pending, rejected));
             }
             
             Map<String, Object> response = new HashMap<>();
@@ -385,18 +343,13 @@ public class SceneSubmissionController {
                 .limit(10)
                 .toArray());
             
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            return createErrorResponse("HARDCODED_Failed to get user progress: " + e.getMessage(), // TODO: Internationalize this message 
-                HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return ResponseEntity.ok(response);
     }
     
     // Helper Methods
     
     @SuppressWarnings("unchecked")
-    private void updateSubmittedVideoWithScene(String compositeVideoId, String templateId, String userId, SceneSubmission sceneSubmission) throws ExecutionException, InterruptedException {
+    private void updateSubmittedVideoWithScene(String compositeVideoId, String templateId, String userId, SceneSubmission sceneSubmission) throws Exception {
         DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
         DocumentSnapshot videoDoc = videoDocRef.get().get();
         
@@ -484,41 +437,26 @@ public class SceneSubmissionController {
         }
     }
     
-    private void performAIAnalysis(SceneSubmission sceneSubmission, com.example.demo.model.Scene templateScene) {
-        try {
-            // Perform comprehensive AI analysis using the enhanced scene analysis service
-            Map<String, Object> qualityMetrics = sceneAnalysisService.analyzeSceneQuality(sceneSubmission);
-            sceneSubmission.setQualityMetrics(qualityMetrics);
-            
-            // Compare scene to template
-            Map<String, Object> sceneMap = new HashMap<>();
-            sceneMap.put("sceneTitle", templateScene.getSceneTitle());
-            sceneMap.put("scriptLine", templateScene.getScriptLine());
-            sceneMap.put("sceneDuration", templateScene.getSceneDurationInSeconds());
-            double similarityScore = sceneAnalysisService.compareSceneToTemplate(sceneSubmission, sceneMap);
-            sceneSubmission.setSimilarityScore(similarityScore);
-            
-            // Generate AI suggestions based on analysis
-            List<String> suggestions = sceneAnalysisService.generateSceneImprovementSuggestions(sceneSubmission, similarityScore);
-            sceneSubmission.setAiSuggestions(suggestions);
-            
-            System.out.println("AI Analysis completed for scene " + sceneSubmission.getSceneNumber() + 
-                " - Similarity: " + Math.round(similarityScore * 100) + "%, Quality: " + 
-                qualityMetrics.getOrDefault("qualityRating", "Unknown"));
-            
-        } catch (Exception e) {
-            System.err.println("Error performing AI analysis: " + e.getMessage());
-            // Set fallback values
-            sceneSubmission.setSimilarityScore(0.75);
-            sceneSubmission.setAiSuggestions(Arrays.asList("AI analysis temporarily unavailable - please try again later"));
-            
-            // Basic quality metrics as fallback
-            Map<String, Object> fallbackMetrics = new HashMap<>();
-            fallbackMetrics.put("overallQuality", 0.7);
-            fallbackMetrics.put("qualityRating", "Good");
-            fallbackMetrics.put("error", "HARDCODED_Partial analysis failure"); // TODO: Internationalize this message
-            sceneSubmission.setQualityMetrics(fallbackMetrics);
-        }
+    private void performAIAnalysis(SceneSubmission sceneSubmission, com.example.demo.model.Scene templateScene) throws Exception {
+        // Perform comprehensive AI analysis using the enhanced scene analysis service
+        Map<String, Object> qualityMetrics = sceneAnalysisService.analyzeSceneQuality(sceneSubmission);
+        sceneSubmission.setQualityMetrics(qualityMetrics);
+        
+        // Compare scene to template
+        Map<String, Object> sceneMap = new HashMap<>();
+        sceneMap.put("sceneTitle", templateScene.getSceneTitle());
+        sceneMap.put("scriptLine", templateScene.getScriptLine());
+        sceneMap.put("sceneDuration", templateScene.getSceneDurationInSeconds());
+        double similarityScore = sceneAnalysisService.compareSceneToTemplate(sceneSubmission, sceneMap);
+        sceneSubmission.setSimilarityScore(similarityScore);
+        
+        // Generate AI suggestions based on analysis
+        List<String> suggestions = sceneAnalysisService.generateSceneImprovementSuggestions(sceneSubmission, similarityScore);
+        sceneSubmission.setAiSuggestions(suggestions);
+        
+        System.out.println("AI Analysis completed for scene " + sceneSubmission.getSceneNumber() + 
+            " - Similarity: " + Math.round(similarityScore * 100) + "%, Quality: " + 
+            qualityMetrics.getOrDefault("qualityRating", "Unknown"));
     }
     
     private Map<String, Object> createProgressMap(int totalScenes, int submitted, int approved, int pending, int rejected) {
@@ -541,14 +479,10 @@ public class SceneSubmissionController {
         return "mp4";
     }
     
-    private int getTemplateTotalScenes(String templateId) {
-        try {
-            ManualTemplate template = templateDao.getTemplate(templateId);
-            if (template != null && template.getScenes() != null) {
-                return template.getScenes().size();
-            }
-        } catch (Exception e) {
-            System.err.println("Error getting template total scenes for " + templateId + ": " + e.getMessage());
+    private int getTemplateTotalScenes(String templateId) throws Exception {
+        ManualTemplate template = templateDao.getTemplate(templateId);
+        if (template != null && template.getScenes() != null) {
+            return template.getScenes().size();
         }
         return 0; // Default to 0 if template not found
     }

@@ -28,45 +28,33 @@ public class UserController {
     // Get subscribed templates (Content Creator)
     @GetMapping("/users/{userId}/subscribed-templates")
     public ResponseEntity<ApiResponse<List<ManualTemplate>>> getSubscribedTemplates(@PathVariable String userId,
-                                                                                     @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws ExecutionException, InterruptedException {
-        try {
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            // Get user's subscribed templates using UserDao
-            Map<String, Boolean> subscribedTemplatesMap = userDao.getSubscribedTemplates(userId);
-            
-            List<ManualTemplate> templates = new ArrayList<>();
-            
-            // Get template details for each subscribed template
-            for (String templateId : subscribedTemplatesMap.keySet()) {
-                if (Boolean.TRUE.equals(subscribedTemplatesMap.get(templateId))) {
-                    try {
-                        DocumentReference templateRef = db.collection("templates").document(templateId);
-                        DocumentSnapshot templateSnap = templateRef.get().get();
-                        if (templateSnap.exists()) {
-                            ManualTemplate template = templateSnap.toObject(ManualTemplate.class);
-                            if (template != null) {
-                                template.setId(templateId); // Ensure ID is set
-                                templates.add(template);
-                            }
-                        } else {
-                            // Remove non-existent template from user's subscriptions
-                            userDao.removeSubscribedTemplate(userId, templateId);
-                        }
-                    } catch (Exception e) {
+                                                                                     @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        // Get user's subscribed templates using UserDao
+        Map<String, Boolean> subscribedTemplatesMap = userDao.getSubscribedTemplates(userId);
+        
+        List<ManualTemplate> templates = new ArrayList<>();
+        
+        // Get template details for each subscribed template
+        for (String templateId : subscribedTemplatesMap.keySet()) {
+            if (Boolean.TRUE.equals(subscribedTemplatesMap.get(templateId))) {
+                DocumentReference templateRef = db.collection("templates").document(templateId);
+                DocumentSnapshot templateSnap = templateRef.get().get();
+                if (templateSnap.exists()) {
+                    ManualTemplate template = templateSnap.toObject(ManualTemplate.class);
+                    if (template != null) {
+                        template.setId(templateId); // Ensure ID is set
+                        templates.add(template);
                     }
+                } else {
+                    // Remove non-existent template from user's subscriptions
+                    userDao.removeSubscribedTemplate(userId, templateId);
                 }
             }
-            
-            String message = i18nService.getMessage("operation.success", language);
-            return ResponseEntity.ok(ApiResponse.ok(message, templates));
-            
-        } catch (Exception e) {
-            e.printStackTrace();
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            String message = i18nService.getMessage("server.error", language);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.fail(message, e.getMessage()));
         }
+        
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, templates));
     }
 
 
@@ -77,22 +65,14 @@ public class UserController {
         // Get template details (Content Creator)
         @GetMapping("/templates/{templateId}")
         public ResponseEntity<ApiResponse<ManualTemplate>> getTemplateByIdForContentCreator(@PathVariable String templateId,
-                                                                                              @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
-            try {
-                String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-                ManualTemplate template = templateDao.getTemplate(templateId);
-                if (template != null) {
-                    String message = i18nService.getMessage("operation.success", language);
-                    return ResponseEntity.ok(ApiResponse.ok(message, template));
-                } else {
-                    String message = i18nService.getMessage("template.not.found", language);
-                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
-                }
-            } catch (Exception e) {
-                String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-                String message = i18nService.getMessage("server.error", language);
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .body(ApiResponse.fail(message, e.getMessage()));
+                                                                                              @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+            ManualTemplate template = templateDao.getTemplate(templateId);
+            if (template != null) {
+                String message = i18nService.getMessage("operation.success", language);
+                return ResponseEntity.ok(ApiResponse.ok(message, template));
+            } else {
+                throw new NoSuchElementException("Template not found with ID: " + templateId);
             }
         }
 }

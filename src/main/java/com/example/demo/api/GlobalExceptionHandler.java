@@ -9,6 +9,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.NoSuchElementException;
 
 /**
@@ -20,16 +21,29 @@ public class GlobalExceptionHandler {
     @Autowired
     private I18nService i18nService;
 
+    /**
+     * Extract language from Accept-Language header, default to Chinese ("zh")
+     */
+    private String getLanguageFromRequest(HttpServletRequest request) {
+        String acceptLanguage = request.getHeader("Accept-Language");
+        if (acceptLanguage != null && acceptLanguage.startsWith("en")) {
+            return "en";
+        }
+        return "zh"; // Default to Chinese for MVP
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException ex) {
-        String message = i18nService.getMessage("bad.request", "en");
+    public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException ex, HttpServletRequest request) {
+        String language = getLanguageFromRequest(request);
+        String message = i18nService.getMessage("bad.request", language);
         ApiResponse<Void> response = ApiResponse.fail(message, "Validation failed: " + ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
     @ExceptionHandler(NoSuchElementException.class)
-    public ResponseEntity<ApiResponse<Void>> handleNotFound(NoSuchElementException ex) {
-        String message = i18nService.getMessage("user.not.found", "en");
+    public ResponseEntity<ApiResponse<Void>> handleNotFound(NoSuchElementException ex, HttpServletRequest request) {
+        String language = getLanguageFromRequest(request);
+        String message = i18nService.getMessage("user.not.found", language);
         ApiResponse<Void> response = ApiResponse.fail(message, ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
@@ -43,15 +57,17 @@ public class GlobalExceptionHandler {
     // }
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
-        String message = i18nService.getMessage("bad.request", "en");
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
+        String language = getLanguageFromRequest(request);
+        String message = i18nService.getMessage("bad.request", language);
         ApiResponse<Void> response = ApiResponse.fail(message, ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleGenericException(Exception ex) {
-        String message = i18nService.getMessage("server.error", "en");
+    public ResponseEntity<ApiResponse<Void>> handleGenericException(Exception ex, HttpServletRequest request) {
+        String language = getLanguageFromRequest(request);
+        String message = i18nService.getMessage("server.error", language);
         ApiResponse<Void> response = ApiResponse.fail(message, ex.getMessage());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }

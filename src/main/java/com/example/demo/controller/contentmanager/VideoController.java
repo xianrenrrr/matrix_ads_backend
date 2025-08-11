@@ -16,6 +16,7 @@ import com.example.demo.ai.template.AITemplateGenerator;
 
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.NoSuchElementException;
 import com.google.cloud.firestore.Firestore;
 
 @RestController
@@ -69,8 +70,7 @@ public class VideoController {
         com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
         com.google.cloud.firestore.DocumentSnapshot videoSnap = videoRef.get().get();
         if (!videoSnap.exists()) {
-            String message = i18nService.getMessage("video.not.found", language);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
+            throw new NoSuchElementException("Video not found with ID: " + videoId);
         }
         String creatorId = (String) videoSnap.get("uploadedBy");
         videoRef.update("publishStatus", "approved");
@@ -95,8 +95,7 @@ public class VideoController {
         com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
         com.google.cloud.firestore.DocumentSnapshot videoSnap = videoRef.get().get();
         if (!videoSnap.exists()) {
-            String message = i18nService.getMessage("video.not.found", language);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
+            throw new NoSuchElementException("Video not found with ID: " + videoId);
         }
         String creatorId = (String) videoSnap.get("uploadedBy");
         String reason = body.getOrDefault("reason", "No reason provided");
@@ -123,14 +122,12 @@ public class VideoController {
         com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
         com.google.cloud.firestore.DocumentSnapshot videoSnap = videoRef.get().get();
         if (!videoSnap.exists()) {
-            String message = i18nService.getMessage("video.not.found", language);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
+            throw new NoSuchElementException("Video not found with ID: " + videoId);
         }
         
         String currentStatus = (String) videoSnap.get("publishStatus");
         if (!"approved".equals(currentStatus)) {
-            String message = i18nService.getMessage("bad.request", language);
-            return ResponseEntity.badRequest().body(ApiResponse.fail(message, "Can only publish approved videos"));
+            throw new IllegalArgumentException("Can only publish approved videos");
         }
         
         String creatorId = (String) videoSnap.get("uploadedBy");
@@ -156,7 +153,7 @@ public class VideoController {
                                              @RequestParam(value = "description", required = false) String description,
                                              @RequestParam(value = "templateId", required = false) String templateId,
                                              @RequestParam(value = "groupIds", required = false) String groupIdsStr,
-                                             @RequestHeader(value = "Accept-Language", required = false, defaultValue = "en") String acceptLanguage) {
+                                             @RequestHeader(value = "Accept-Language", required = false, defaultValue = "en") String acceptLanguage) throws Exception {
         System.out.println("=== VIDEO UPLOAD REQUEST ===");
         System.out.println("Accept-Language header: " + acceptLanguage);
         System.out.println("User ID: " + userId);
@@ -164,100 +161,81 @@ public class VideoController {
         System.out.println("Template ID: " + templateId);
         System.out.println("=============================");
         
-        try {
-            // Upload to Firebase Storage and extract thumbnail
-            // Generate videoId first
-            String videoId = java.util.UUID.randomUUID().toString();
-            com.example.demo.service.FirebaseStorageService.UploadResult result = firebaseStorageService.uploadVideoWithThumbnail(file, userId, videoId);
+        // Upload to Firebase Storage and extract thumbnail
+        // Generate videoId first
+        String videoId = java.util.UUID.randomUUID().toString();
+        com.example.demo.service.FirebaseStorageService.UploadResult result = firebaseStorageService.uploadVideoWithThumbnail(file, userId, videoId);
 
-            // Create video
-            Video video = new Video();
-            video.setId(videoId);
-            video.setUserId(userId);
-            video.setTitle(title != null ? title : "");
-            video.setDescription(description != null ? description : "");
-            video.setUrl(result.videoUrl);
-            video.setThumbnailUrl(result.thumbnailUrl);
-            Video savedVideo = videoDao.saveVideo(video);
-            // Create a default template if no templateId is provided
-            // Determine template creation strategy
-            try {
-                if (templateId == null) {
-                    // No templateId provided, generate a new template using AI and associate it to the video
-                    System.out.printf("No templateId provided, generating AI template for video ID: %s\n", savedVideo.getId());
-                    // Detect language from header
-                    String language = detectLanguage(acceptLanguage);
-                    System.out.println("Detected language: " + language);
-                    
-                    ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language);
-                    aiGeneratedTemplate.setUserId(userId);
-                    aiGeneratedTemplate.setVideoId(savedVideo.getId());
-                    aiGeneratedTemplate.setTemplateTitle(title != null ? title : "AI Generated Template");
-                    String savedTemplateId = templateDao.createTemplate(aiGeneratedTemplate);
-                    savedVideo.setTemplateId(savedTemplateId);
-                    videoDao.updateVideo(savedVideo);
-                    
-                    // Handle group subscription for AI-generated template
-                    if (groupIdsStr != null && !groupIdsStr.trim().isEmpty()) {
-                        List<String> groupIds = java.util.Arrays.asList(groupIdsStr.split(","));
-                        TemplateSubscriptionService.SubscriptionResult subscriptionResult = 
-                            templateSubscriptionService.batchSubscribeToTemplate(savedTemplateId, groupIds);
-                        
-                        System.out.printf("AI-generated template %s subscribed to %d users across %d groups%n", 
-                            savedTemplateId, subscriptionResult.getTotalUsersAffected(), subscriptionResult.getProcessedGroups().size());
-                    }
-                } else {
-                    // If templateId is provided, link the existing template
-                    savedVideo.setTemplateId(templateId);
-                    videoDao.updateVideo(savedVideo);
-
-                    // Update the template with video ID
-                    ManualTemplate existingTemplate = templateDao.getTemplate(templateId);
-                    if (existingTemplate != null) {
-                        existingTemplate.setVideoId(savedVideo.getId());
-                        templateDao.updateTemplate(templateId, existingTemplate);
-                    }
-                    // No need to update user or template subcollections; created_template is managed in ContentManager.
-                }
-            } catch (Exception e) {
-                System.err.println("Error creating template: " + e.getMessage());
-                throw new RuntimeException("Failed to create or update template", e);
-            }
-
-            // Log
-            System.out.println("[INFO] [uploadVideo] Uploaded video and thumbnail for user " + userId + ", videoId " + savedVideo.getId());
+        // Create video
+        Video video = new Video();
+        video.setId(videoId);
+        video.setUserId(userId);
+        video.setTitle(title != null ? title : "");
+        video.setDescription(description != null ? description : "");
+        video.setUrl(result.videoUrl);
+        video.setThumbnailUrl(result.thumbnailUrl);
+        Video savedVideo = videoDao.saveVideo(video);
+        // Create a default template if no templateId is provided
+        // Determine template creation strategy
+        if (templateId == null) {
+            // No templateId provided, generate a new template using AI and associate it to the video
+            System.out.printf("No templateId provided, generating AI template for video ID: %s\n", savedVideo.getId());
+            // Detect language from header
+            String language = detectLanguage(acceptLanguage);
+            System.out.println("Detected language: " + language);
             
-            System.out.println("=== VIDEO UPLOAD SUCCESS ===");
-            System.out.println("Video ID: " + savedVideo.getId());
-            System.out.println("Template ID: " + savedVideo.getTemplateId());
-            System.out.println("Title: " + savedVideo.getTitle());
-            System.out.println("URL: " + savedVideo.getUrl());
-            System.out.println("Returning status: 200 OK");
-            System.out.println("=============================");
+            ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language);
+            aiGeneratedTemplate.setUserId(userId);
+            aiGeneratedTemplate.setVideoId(savedVideo.getId());
+            aiGeneratedTemplate.setTemplateTitle(title != null ? title : "AI Generated Template");
+            String savedTemplateId = templateDao.createTemplate(aiGeneratedTemplate);
+            savedVideo.setTemplateId(savedTemplateId);
+            videoDao.updateVideo(savedVideo);
+            
+            // Handle group subscription for AI-generated template
+            if (groupIdsStr != null && !groupIdsStr.trim().isEmpty()) {
+                List<String> groupIds = java.util.Arrays.asList(groupIdsStr.split(","));
+                TemplateSubscriptionService.SubscriptionResult subscriptionResult = 
+                    templateSubscriptionService.batchSubscribeToTemplate(savedTemplateId, groupIds);
+                
+                System.out.printf("AI-generated template %s subscribed to %d users across %d groups%n", 
+                    savedTemplateId, subscriptionResult.getTotalUsersAffected(), subscriptionResult.getProcessedGroups().size());
+            }
+        } else {
+            // If templateId is provided, link the existing template
+            savedVideo.setTemplateId(templateId);
+            videoDao.updateVideo(savedVideo);
 
-            return ResponseEntity.ok(savedVideo);
-        } catch (Exception e) {
-            System.out.println("=== VIDEO UPLOAD ERROR ===");
-            System.out.println("Error message: " + e.getMessage());
-            System.out.println("Error class: " + e.getClass().getSimpleName());
-            System.out.println("Returning status: 500 Internal Server Error");
-            System.out.println("===========================");
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            // Update the template with video ID
+            ManualTemplate existingTemplate = templateDao.getTemplate(templateId);
+            if (existingTemplate != null) {
+                existingTemplate.setVideoId(savedVideo.getId());
+                templateDao.updateTemplate(templateId, existingTemplate);
+            }
+            // No need to update user or template subcollections; created_template is managed in ContentManager.
         }
+
+        // Log
+        System.out.println("[INFO] [uploadVideo] Uploaded video and thumbnail for user " + userId + ", videoId " + savedVideo.getId());
+        
+        System.out.println("=== VIDEO UPLOAD SUCCESS ===");
+        System.out.println("Video ID: " + savedVideo.getId());
+        System.out.println("Template ID: " + savedVideo.getTemplateId());
+        System.out.println("Title: " + savedVideo.getTitle());
+        System.out.println("URL: " + savedVideo.getUrl());
+        System.out.println("Returning status: 200 OK");
+        System.out.println("=============================");
+
+        return ResponseEntity.ok(savedVideo);
     }
 
     @GetMapping("/{videoId}")
-    public ResponseEntity<Video> getVideoById(@PathVariable String videoId) {
-        try {
-            Video video = videoDao.getVideoById(videoId);
-            if (video != null) {
-                return ResponseEntity.ok(video);
-            } else {
-                return ResponseEntity.notFound().build();
-            }
-        } catch (InterruptedException | ExecutionException e) {
-            return ResponseEntity.internalServerError().build();
+    public ResponseEntity<Video> getVideoById(@PathVariable String videoId) throws Exception {
+        Video video = videoDao.getVideoById(videoId);
+        if (video != null) {
+            return ResponseEntity.ok(video);
+        } else {
+            throw new NoSuchElementException("Video not found with ID: " + videoId);
         }
     }
 }

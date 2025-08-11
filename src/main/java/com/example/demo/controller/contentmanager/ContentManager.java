@@ -32,16 +32,14 @@ public class ContentManager {
     @GetMapping("/submitted-videos/{compositeVideoId}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getSubmittedVideo(@PathVariable String compositeVideoId,
                                                                               @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
-        try {
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            // Get video document from submittedVideos collection
-            com.google.cloud.firestore.DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
-            com.google.cloud.firestore.DocumentSnapshot videoDoc = videoDocRef.get().get();
-            
-            if (!videoDoc.exists()) {
-                String message = i18nService.getMessage("video.not.found", language);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
-            }
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        // Get video document from submittedVideos collection
+        com.google.cloud.firestore.DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
+        com.google.cloud.firestore.DocumentSnapshot videoDoc = videoDocRef.get().get();
+        
+        if (!videoDoc.exists()) {
+            throw new NoSuchElementException("Video not found with ID: " + compositeVideoId);
+        }
             
             Map<String, Object> videoData = new HashMap<>(videoDoc.getData());
             
@@ -85,17 +83,10 @@ public class ContentManager {
                 videoData.put("scenes", fullScenes);
             }
             
-            videoData.put("id", compositeVideoId); // Add document ID
-            
-            String message = i18nService.getMessage("operation.success", language);
-            return ResponseEntity.ok(ApiResponse.ok(message, videoData));
-            
-        } catch (Exception e) {
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            String message = i18nService.getMessage("server.error", language);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.fail(message, "Failed to get submitted video: " + e.getMessage()));
-        }
+        videoData.put("id", compositeVideoId); // Add document ID
+        
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, videoData));
     }
 
     // --- Submissions grouped by status ---
@@ -152,7 +143,7 @@ public class ContentManager {
 
     @PostMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> createTemplate(@RequestBody com.example.demo.model.CreateTemplateRequest request,
-                                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
+                                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         String userId = request.getUserId();
         ManualTemplate manualTemplate = request.getManualTemplate();
@@ -168,61 +159,48 @@ public class ContentManager {
             }
         }
         
-        try {
-            // Create the template
-            String templateId = templateDao.createTemplate(manualTemplate);
-            userDao.addCreatedTemplate(userId, templateId); // Add templateId to created_template field in user doc
+        // Create the template
+        String templateId = templateDao.createTemplate(manualTemplate);
+        userDao.addCreatedTemplate(userId, templateId); // Add templateId to created_template field in user doc
+        
+        // If groups are selected, assign the template to all members of those groups using batch subscription
+        int totalMembersAssigned = 0;
+        List<String> assignedGroupNames = new ArrayList<>();
+        
+        if (selectedGroupIds != null && !selectedGroupIds.isEmpty()) {
+            // Use shared batch subscription service
+            TemplateSubscriptionService.SubscriptionResult result = 
+                templateSubscriptionService.batchSubscribeToTemplate(templateId, selectedGroupIds);
             
-            // If groups are selected, assign the template to all members of those groups using batch subscription
-            int totalMembersAssigned = 0;
-            List<String> assignedGroupNames = new ArrayList<>();
-            
-            if (selectedGroupIds != null && !selectedGroupIds.isEmpty()) {
-                // Use shared batch subscription service
-                TemplateSubscriptionService.SubscriptionResult result = 
-                    templateSubscriptionService.batchSubscribeToTemplate(templateId, selectedGroupIds);
-                
-                totalMembersAssigned = result.getTotalUsersAffected();
-                assignedGroupNames = result.getProcessedGroups();
-            }
-            
-            // Prepare response with assignment details
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("template", manualTemplate);
-            responseData.put("templateId", templateId);
-            responseData.put("assignedGroups", assignedGroupNames);
-            responseData.put("totalMembersAssigned", totalMembersAssigned);
-            
-            String message = i18nService.getMessage("template.created", language);
-            if (totalMembersAssigned > 0) {
-                message += " and assigned to " + totalMembersAssigned + " content creators across " + assignedGroupNames.size() + " groups";
-            }
-            
-            return new ResponseEntity<>(ApiResponse.ok(message, responseData), HttpStatus.CREATED);
-            
-        } catch (Exception e) {
-            String message = i18nService.getMessage("server.error", language);
-            return new ResponseEntity<>(ApiResponse.fail(message, "Failed to create template: " + e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
+            totalMembersAssigned = result.getTotalUsersAffected();
+            assignedGroupNames = result.getProcessedGroups();
         }
+        
+        // Prepare response with assignment details
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("template", manualTemplate);
+        responseData.put("templateId", templateId);
+        responseData.put("assignedGroups", assignedGroupNames);
+        responseData.put("totalMembersAssigned", totalMembersAssigned);
+        
+        String message = i18nService.getMessage("template.created", language);
+        if (totalMembersAssigned > 0) {
+            message += " and assigned to " + totalMembersAssigned + " content creators across " + assignedGroupNames.size() + " groups";
+        }
+        
+        return new ResponseEntity<>(ApiResponse.ok(message, responseData), HttpStatus.CREATED);
     }
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<ApiResponse<List<TemplateSummary>>> getTemplatesByUserId(@PathVariable String userId,
-                                                                                      @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
-        try {
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            List<ManualTemplate> templates = templateDao.getTemplatesByUserId(userId);
-            List<TemplateSummary> summaries = templates.stream()
-                .map(t -> new TemplateSummary(t.getId(), t.getTemplateTitle()))
-                .toList();
-            String message = i18nService.getMessage("operation.success", language);
-            return ResponseEntity.ok(ApiResponse.ok(message, summaries));
-        } catch (InterruptedException | ExecutionException e) {
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            String message = i18nService.getMessage("server.error", language);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.fail(message, "Failed to get templates: " + e.getMessage()));
-        }
+                                                                                      @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        List<ManualTemplate> templates = templateDao.getTemplatesByUserId(userId);
+        List<TemplateSummary> summaries = templates.stream()
+            .map(t -> new TemplateSummary(t.getId(), t.getTemplateTitle()))
+            .toList();
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, summaries));
     }
 
     // DTO for summary
@@ -241,22 +219,14 @@ public class ContentManager {
 
     @GetMapping("/{templateId}")
     public ResponseEntity<ApiResponse<ManualTemplate>> getTemplateById(@PathVariable String templateId,
-                                                                        @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
-        try {
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            ManualTemplate template = templateDao.getTemplate(templateId);
-            if (template != null) {
-                String message = i18nService.getMessage("operation.success", language);
-                return ResponseEntity.ok(ApiResponse.ok(message, template));
-            } else {
-                String message = i18nService.getMessage("template.not.found", language);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
-            }
-        } catch (InterruptedException | ExecutionException e) {
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            String message = i18nService.getMessage("server.error", language);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.fail(message, "Failed to get template: " + e.getMessage()));
+                                                                        @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        ManualTemplate template = templateDao.getTemplate(templateId);
+        if (template != null) {
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, template));
+        } else {
+            throw new NoSuchElementException("Template not found with ID: " + templateId);
         }
     }
 
@@ -264,60 +234,44 @@ public class ContentManager {
     public ResponseEntity<ApiResponse<ManualTemplate>> updateTemplate(
             @PathVariable String templateId, 
             @RequestBody ManualTemplate updatedTemplate,
-            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
-        try {
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            updatedTemplate.setId(templateId); // Ensure ID matches path parameter
-            
-            // Mark all scenes as manual with grid overlay for updates
-            if (updatedTemplate.getScenes() != null) {
-                for (com.example.demo.model.Scene scene : updatedTemplate.getScenes()) {
-                    if (scene.getSceneSource() == null) {
-                        scene.setSceneSource("manual");
-                    }
-                    if (scene.getOverlayType() == null) {
-                        scene.setOverlayType("grid");
-                    }
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        updatedTemplate.setId(templateId); // Ensure ID matches path parameter
+        
+        // Mark all scenes as manual with grid overlay for updates
+        if (updatedTemplate.getScenes() != null) {
+            for (com.example.demo.model.Scene scene : updatedTemplate.getScenes()) {
+                if (scene.getSceneSource() == null) {
+                    scene.setSceneSource("manual");
+                }
+                if (scene.getOverlayType() == null) {
+                    scene.setOverlayType("grid");
                 }
             }
-            
-            boolean updated = templateDao.updateTemplate(templateId, updatedTemplate);
-            
-            if (updated) {
-                String message = i18nService.getMessage("template.updated", language);
-                return ResponseEntity.ok(ApiResponse.ok(message, updatedTemplate));
-            } else {
-                String message = i18nService.getMessage("template.not.found", language);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
-            }
-        } catch (Exception e) {
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            String message = i18nService.getMessage("server.error", language);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.fail(message, "Failed to update template: " + e.getMessage()));
+        }
+        
+        boolean updated = templateDao.updateTemplate(templateId, updatedTemplate);
+        
+        if (updated) {
+            String message = i18nService.getMessage("template.updated", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, updatedTemplate));
+        } else {
+            throw new NoSuchElementException("Template not found with ID: " + templateId);
         }
     }
 
     @DeleteMapping("/{templateId}")
     public ResponseEntity<ApiResponse<String>> deleteTemplate(@PathVariable String templateId, 
                                                                @RequestParam String userId,
-                                                               @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
-        try {
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            boolean deleted = templateDao.deleteTemplate(templateId);
-            if (deleted) {
-                userDao.removeCreatedTemplate(userId, templateId); // Remove templateId from created_template field in user doc
-                String message = i18nService.getMessage("template.deleted", language);
-                return ResponseEntity.ok(ApiResponse.ok(message, "Template deleted successfully"));
-            } else {
-                String message = i18nService.getMessage("template.not.found", language);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
-            }
-        } catch (Exception e) {
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            String message = i18nService.getMessage("server.error", language);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.fail(message, "Failed to delete template: " + e.getMessage()));
+                                                               @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        boolean deleted = templateDao.deleteTemplate(templateId);
+        if (deleted) {
+            userDao.removeCreatedTemplate(userId, templateId); // Remove templateId from created_template field in user doc
+            String message = i18nService.getMessage("template.deleted", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, "Template deleted successfully"));
+        } else {
+            throw new NoSuchElementException("Template not found with ID: " + templateId);
         }
     }
 
@@ -325,23 +279,15 @@ public class ContentManager {
     // Get user information by ID
     @GetMapping("/users/{userId}")
     public ResponseEntity<ApiResponse<UserInfo>> getUserById(@PathVariable String userId,
-                                                              @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
-        try {
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            com.example.demo.model.User user = userDao.findById(userId);
-            if (user != null) {
-                UserInfo userInfo = new UserInfo(user.getId(), user.getUsername(), user.getEmail(), user.getRole());
-                String message = i18nService.getMessage("operation.success", language);
-                return ResponseEntity.ok(ApiResponse.ok(message, userInfo));
-            } else {
-                String message = i18nService.getMessage("user.not.found", language);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail(message));
-            }
-        } catch (Exception e) {
-            String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-            String message = i18nService.getMessage("server.error", language);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.fail(message, "Failed to get user: " + e.getMessage()));
+                                                              @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        com.example.demo.model.User user = userDao.findById(userId);
+        if (user != null) {
+            UserInfo userInfo = new UserInfo(user.getId(), user.getUsername(), user.getEmail(), user.getRole());
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, userInfo));
+        } else {
+            throw new NoSuchElementException("User not found with ID: " + userId);
         }
     }
 

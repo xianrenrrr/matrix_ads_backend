@@ -47,32 +47,26 @@ public class SceneReviewController {
      * GET /content-manager/scenes/pending
      */
     @GetMapping("/pending")
-    public ResponseEntity<Map<String, Object>> getPendingSubmissions() {
-        try {
-            List<SceneSubmission> pendingSubmissions = sceneSubmissionDao.findPendingSubmissionsForReview();
-            
-            // Group by template and user for better organization
-            Map<String, Map<String, List<SceneSubmission>>> groupedSubmissions = new HashMap<>();
-            
-            for (SceneSubmission submission : pendingSubmissions) {
-                groupedSubmissions
-                    .computeIfAbsent(submission.getTemplateId(), k -> new HashMap<>())
-                    .computeIfAbsent(submission.getUserId(), k -> new ArrayList<>())
-                    .add(submission);
-            }
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("totalPending", pendingSubmissions.size());
-            response.put("pendingSubmissions", pendingSubmissions);
-            response.put("groupedSubmissions", groupedSubmissions);
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            return createErrorResponse("HARDCODED_Failed to get pending submissions: " + e.getMessage(), // TODO: Internationalize this message 
-                HttpStatus.INTERNAL_SERVER_ERROR);
+    public ResponseEntity<Map<String, Object>> getPendingSubmissions() throws Exception {
+        List<SceneSubmission> pendingSubmissions = sceneSubmissionDao.findPendingSubmissionsForReview();
+        
+        // Group by template and user for better organization
+        Map<String, Map<String, List<SceneSubmission>>> groupedSubmissions = new HashMap<>();
+        
+        for (SceneSubmission submission : pendingSubmissions) {
+            groupedSubmissions
+                .computeIfAbsent(submission.getTemplateId(), k -> new HashMap<>())
+                .computeIfAbsent(submission.getUserId(), k -> new ArrayList<>())
+                .add(submission);
         }
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("totalPending", pendingSubmissions.size());
+        response.put("pendingSubmissions", pendingSubmissions);
+        response.put("groupedSubmissions", groupedSubmissions);
+        
+        return ResponseEntity.ok(response);
     }
     
     /**
@@ -80,45 +74,39 @@ public class SceneReviewController {
      * GET /content-manager/scenes/template/{templateId}
      */
     @GetMapping("/template/{templateId}")
-    public ResponseEntity<Map<String, Object>> getTemplateSubmissions(@PathVariable String templateId) {
-        try {
-            // Get compiled scene data from submittedVideos collection (the primary source)
-            Map<String, Object> submittedVideosData = getSubmittedVideosForTemplate(templateId);
-            
-            // Calculate status counts from submittedVideos data
-            Map<String, Integer> statusCounts = new HashMap<>();
-            statusCounts.put("approved", 0);
-            statusCounts.put("pending", 0);
-            statusCounts.put("rejected", 0);
-            
-            int totalScenes = 0;
-            
-            for (Object videoDataObj : submittedVideosData.values()) {
-                if (videoDataObj instanceof Map) {
-                    Map<String, Object> videoData = (Map<String, Object>) videoDataObj;
-                    Map<String, Object> stats = (Map<String, Object>) videoData.get("sceneStats");
-                    if (stats != null) {
-                        statusCounts.merge("approved", (Integer) stats.get("approved"), Integer::sum);
-                        statusCounts.merge("pending", (Integer) stats.get("pending"), Integer::sum);
-                        statusCounts.merge("rejected", (Integer) stats.get("rejected"), Integer::sum);
-                        totalScenes += (Integer) stats.get("total");
-                    }
+    public ResponseEntity<Map<String, Object>> getTemplateSubmissions(@PathVariable String templateId) throws Exception {
+        // Get compiled scene data from submittedVideos collection (the primary source)
+        Map<String, Object> submittedVideosData = getSubmittedVideosForTemplate(templateId);
+        
+        // Calculate status counts from submittedVideos data
+        Map<String, Integer> statusCounts = new HashMap<>();
+        statusCounts.put("approved", 0);
+        statusCounts.put("pending", 0);
+        statusCounts.put("rejected", 0);
+        
+        int totalScenes = 0;
+        
+        for (Object videoDataObj : submittedVideosData.values()) {
+            if (videoDataObj instanceof Map) {
+                Map<String, Object> videoData = (Map<String, Object>) videoDataObj;
+                Map<String, Object> stats = (Map<String, Object>) videoData.get("sceneStats");
+                if (stats != null) {
+                    statusCounts.merge("approved", (Integer) stats.get("approved"), Integer::sum);
+                    statusCounts.merge("pending", (Integer) stats.get("pending"), Integer::sum);
+                    statusCounts.merge("rejected", (Integer) stats.get("rejected"), Integer::sum);
+                    totalScenes += (Integer) stats.get("total");
                 }
             }
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("templateId", templateId);
-            response.put("totalScenes", totalScenes);
-            response.put("statusCounts", statusCounts);
-            response.put("submittedVideos", submittedVideosData);
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            return createErrorResponse("HARDCODED_Failed to get template submissions: " + e.getMessage(), // TODO: Internationalize this message 
-                HttpStatus.INTERNAL_SERVER_ERROR);
         }
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("templateId", templateId);
+        response.put("totalScenes", totalScenes);
+        response.put("statusCounts", statusCounts);
+        response.put("submittedVideos", submittedVideosData);
+        
+        return ResponseEntity.ok(response);
     }
     
     // REMOVED approve and reject endpoints - consolidated into manual-override only
@@ -131,23 +119,22 @@ public class SceneReviewController {
     public ResponseEntity<Map<String, Object>> manualOverrideScene(
             @PathVariable String sceneId,
             @RequestParam String reviewerId,
-            @RequestBody Map<String, Object> requestBody) {
+            @RequestBody Map<String, Object> requestBody) throws Exception {
         
-        try {
-            SceneSubmission submission = sceneSubmissionDao.findById(sceneId);
-            if (submission == null) {
-                return createErrorResponse("HARDCODED_Scene submission not found", HttpStatus.NOT_FOUND); // TODO: Internationalize this message
-            }
-            
-            if (!"pending".equals(submission.getStatus())) {
-                return createErrorResponse("HARDCODED_Can only override pending submissions", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
-            }
-            
-            // Get required override reason
-            String overrideReason = (String) requestBody.get("overrideReason");
-            if (overrideReason == null || overrideReason.trim().isEmpty()) {
-                return createErrorResponse("HARDCODED_Override reason is required", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
-            }
+        SceneSubmission submission = sceneSubmissionDao.findById(sceneId);
+        if (submission == null) {
+            throw new NoSuchElementException("Scene submission not found with ID: " + sceneId);
+        }
+        
+        if (!"pending".equals(submission.getStatus())) {
+            throw new IllegalArgumentException("Can only override pending submissions");
+        }
+        
+        // Get required override reason
+        String overrideReason = (String) requestBody.get("overrideReason");
+        if (overrideReason == null || overrideReason.trim().isEmpty()) {
+            throw new IllegalArgumentException("Override reason is required");
+        }
             
             // Optional feedback (presence indicates rejection)
             List<String> feedback = (List<String>) requestBody.get("feedback");
@@ -237,11 +224,6 @@ public class SceneReviewController {
                 
                 return ResponseEntity.ok(response);
             }
-            
-        } catch (Exception e) {
-            return createErrorResponse("HARDCODED_Failed to manually override scene: " + e.getMessage(), // TODO: Internationalize this message 
-                HttpStatus.INTERNAL_SERVER_ERROR);
-        }
     }
     
     /**
@@ -250,19 +232,18 @@ public class SceneReviewController {
      */
     @PostMapping("/bulk-approve")
     public ResponseEntity<Map<String, Object>> bulkApproveScenes(
-            @RequestBody Map<String, Object> requestBody) {
+            @RequestBody Map<String, Object> requestBody) throws Exception {
         
-        try {
-            List<String> sceneIds = (List<String>) requestBody.get("sceneIds");
-            String reviewerId = (String) requestBody.get("reviewerId");
-            
-            if (sceneIds == null || sceneIds.isEmpty()) {
-                return createErrorResponse("HARDCODED_Scene IDs are required", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
-            }
-            
-            if (reviewerId == null) {
-                return createErrorResponse("HARDCODED_Reviewer ID is required", HttpStatus.BAD_REQUEST); // TODO: Internationalize this message
-            }
+        List<String> sceneIds = (List<String>) requestBody.get("sceneIds");
+        String reviewerId = (String) requestBody.get("reviewerId");
+        
+        if (sceneIds == null || sceneIds.isEmpty()) {
+            throw new IllegalArgumentException("Scene IDs are required");
+        }
+        
+        if (reviewerId == null) {
+            throw new IllegalArgumentException("Reviewer ID is required");
+        }
             
             // Update all scenes to approved status
             sceneSubmissionDao.updateMultipleStatuses(sceneIds, "approved", reviewerId);
@@ -289,12 +270,7 @@ public class SceneReviewController {
             response.put("approvedCount", sceneIds.size());
             response.put("compilationsTriggered", compilationTriggered.size());
             
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            return createErrorResponse("HARDCODED_Failed to bulk approve scenes: " + e.getMessage(), // TODO: Internationalize this message 
-                HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return ResponseEntity.ok(response);
     }
     
     /**
@@ -302,46 +278,39 @@ public class SceneReviewController {
      * GET /content-manager/scenes/stats/{reviewerId}
      */
     @GetMapping("/stats/{reviewerId}")
-    public ResponseEntity<Map<String, Object>> getReviewStats(@PathVariable String reviewerId) {
-        try {
-            List<SceneSubmission> reviewedSubmissions = sceneSubmissionDao.findSubmissionsByReviewer(reviewerId);
-            
-            int totalReviewed = reviewedSubmissions.size();
-            int approved = (int) reviewedSubmissions.stream().filter(s -> "approved".equals(s.getStatus())).count();
-            int rejected = (int) reviewedSubmissions.stream().filter(s -> "rejected".equals(s.getStatus())).count();
-            
-            // Calculate average similarity score
-            double avgSimilarity = reviewedSubmissions.stream()
-                .filter(s -> s.getSimilarityScore() != null)
-                .mapToDouble(SceneSubmission::getSimilarityScore)
-                .average()
-                .orElse(0.0);
-            
-            Map<String, Object> stats = new HashMap<>();
-            stats.put("reviewerId", reviewerId);
-            stats.put("totalReviewed", totalReviewed);
-            stats.put("approved", approved);
-            stats.put("rejected", rejected);
-            stats.put("approvalRate", totalReviewed > 0 ? (double) approved / totalReviewed * 100 : 0);
-            stats.put("averageSimilarityScore", avgSimilarity);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("stats", stats);
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            return createErrorResponse("HARDCODED_Failed to get review stats: " + e.getMessage(), // TODO: Internationalize this message 
-                HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+    public ResponseEntity<Map<String, Object>> getReviewStats(@PathVariable String reviewerId) throws Exception {
+        List<SceneSubmission> reviewedSubmissions = sceneSubmissionDao.findSubmissionsByReviewer(reviewerId);
+        
+        int totalReviewed = reviewedSubmissions.size();
+        int approved = (int) reviewedSubmissions.stream().filter(s -> "approved".equals(s.getStatus())).count();
+        int rejected = (int) reviewedSubmissions.stream().filter(s -> "rejected".equals(s.getStatus())).count();
+        
+        // Calculate average similarity score
+        double avgSimilarity = reviewedSubmissions.stream()
+            .filter(s -> s.getSimilarityScore() != null)
+            .mapToDouble(SceneSubmission::getSimilarityScore)
+            .average()
+            .orElse(0.0);
+        
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("reviewerId", reviewerId);
+        stats.put("totalReviewed", totalReviewed);
+        stats.put("approved", approved);
+        stats.put("rejected", rejected);
+        stats.put("approvalRate", totalReviewed > 0 ? (double) approved / totalReviewed * 100 : 0);
+        stats.put("averageSimilarityScore", avgSimilarity);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("stats", stats);
+        
+        return ResponseEntity.ok(response);
     }
     
     // Helper Methods
     
     @SuppressWarnings("unchecked")
-    private Map<String, Object> getSubmittedVideosForTemplate(String templateId) {
-        try {
+    private Map<String, Object> getSubmittedVideosForTemplate(String templateId) throws Exception {
             Map<String, Object> result = new HashMap<>();
             
             // Query submittedVideos collection for documents where templateId matches
@@ -387,16 +356,10 @@ public class SceneReviewController {
                 }
             }
             
-            return result;
-            
-        } catch (Exception e) {
-            System.err.println("Error retrieving submitted videos for template " + templateId + ": " + e.getMessage());
-            return new HashMap<>();
-        }
+        return result;
     }
     
-    private boolean checkAndTriggerCompilation(String templateId, String userId, String reviewerId) {
-        try {
+    private boolean checkAndTriggerCompilation(String templateId, String userId, String reviewerId) throws Exception {
             // Get all approved scenes for this user/template
             List<SceneSubmission> approvedScenes = sceneSubmissionDao.getApprovedScenesInOrder(templateId, userId);
             
@@ -422,20 +385,14 @@ public class SceneReviewController {
                 }
             }
             
-            return false;
-            
-        } catch (Exception e) {
-            System.err.println("Error checking compilation trigger: " + e.getMessage());
-            return false;
-        }
+        return false;
     }
     
     /**
      * Update scene status in submittedVideos collection
      */
     @SuppressWarnings("unchecked")
-    private void updateSceneStatusInSubmittedVideos(String templateId, String userId, int sceneNumber, String newStatus) {
-        try {
+    private void updateSceneStatusInSubmittedVideos(String templateId, String userId, int sceneNumber, String newStatus) throws Exception {
             // Create composite video ID
             String compositeVideoId = userId + "_" + templateId;
             
@@ -492,13 +449,8 @@ public class SceneReviewController {
                         System.out.println("Updated scene " + sceneNumber + " status to '" + newStatus + "' in submittedVideos: " + compositeVideoId);
                     }
                 }
-            } else {
-                System.err.println("SubmittedVideo not found for update: " + compositeVideoId);
-            }
-            
-        } catch (Exception e) {
-            System.err.println("Error updating scene status in submittedVideos: " + e.getMessage());
-            e.printStackTrace();
+        } else {
+            System.err.println("SubmittedVideo not found for update: " + compositeVideoId);
         }
     }
     
