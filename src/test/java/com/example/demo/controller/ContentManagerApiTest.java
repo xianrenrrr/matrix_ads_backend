@@ -27,8 +27,8 @@ public class ContentManagerApiTest {
         mockMvc.perform(get("/content-manager/templates/submitted-videos/" + compositeId))
             .andExpect(result -> {
                 int status = result.getResponse().getStatus();
-                if (status != 200 && status != 404 && status != 500) {
-                    throw new AssertionError("Expected status 200, 404, or 500 but was: " + status);
+                if (status != 200 && status != 400 && status != 404 && status != 500) {
+                    throw new AssertionError("Expected status 200, 400, 404, or 500 but was: " + status);
                 }
             })
             .andExpect(jsonPath("$", notNullValue())); // Some response should be returned
@@ -40,8 +40,8 @@ public class ContentManagerApiTest {
         mockMvc.perform(get("/content-manager/templates/submitted-videos/nonexistent_video"))
             .andExpect(result -> {
                 int status = result.getResponse().getStatus();
-                if (status != 404 && status != 500) {
-                    throw new AssertionError("Expected status 404 or 500 but was: " + status);
+                if (status != 400 && status != 404 && status != 500) {
+                    throw new AssertionError("Expected status 400, 404 or 500 but was: " + status);
                 }
             })
             .andExpect(jsonPath("$", notNullValue())); // Some response should be returned

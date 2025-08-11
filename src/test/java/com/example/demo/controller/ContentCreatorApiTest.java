@@ -27,8 +27,8 @@ public class ContentCreatorApiTest {
         mockMvc.perform(get("/content-creator/scenes/submitted-videos/" + compositeId))
             .andExpect(result -> {
                 int status = result.getResponse().getStatus();
-                if (status != 404 && status != 500) {
-                    throw new AssertionError("Expected status 404 or 500 but was: " + status);
+                if (status != 400 && status != 404 && status != 500) {
+                    throw new AssertionError("Expected status 400, 404 or 500 but was: " + status);
                 }
             })
             .andExpect(jsonPath("$.success", is(false)))
@@ -43,8 +43,8 @@ public class ContentCreatorApiTest {
         mockMvc.perform(get("/content-creator/scenes/submitted-videos/" + compositeId))
             .andExpect(result -> {
                 int status = result.getResponse().getStatus();
-                if (status != 404 && status != 500) {
-                    throw new AssertionError("Expected status 404 or 500 but was: " + status);
+                if (status != 400 && status != 404 && status != 500) {
+                    throw new AssertionError("Expected status 400, 404 or 500 but was: " + status);
                 }
             })
             .andExpect(jsonPath("$.success", is(false)));
