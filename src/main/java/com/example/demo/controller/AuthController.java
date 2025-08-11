@@ -219,20 +219,11 @@ public class AuthController {
                 return ResponseEntity.notFound().build();
             }
 
-            // For permanent groups (expiresAt is null), only check if status is active
-            // For temporary invites (expiresAt is set), use full validation including expiration
-            boolean isValidInvite = invite.getExpiresAt() == null ? 
-                "active".equals(invite.getStatus()) : 
-                invite.isValid();
-                
-            if (!isValidInvite) {
+            // Since invites are permanent now, just check if it exists and is active
+            if (!"active".equals(invite.getStatus())) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                if (invite.getExpiresAt() == null) {
-                    response.put("message", "HARDCODED_Group is not active"); // TODO: Internationalize this message
-                } else {
-                    response.put("message", invite.isExpired() ? "HARDCODED_Invite has expired" : "HARDCODED_Invite is not valid"); // TODO: Internationalize this message
-                }
+                response.put("message", "HARDCODED_Group is not active"); // TODO: Internationalize this message
                 return ResponseEntity.badRequest().body(response);
             }
 
@@ -242,7 +233,7 @@ public class AuthController {
             response.put("groupName", invite.getGroupName());
             response.put("managerName", invite.getManagerName());
             response.put("role", invite.getRole());
-            response.put("expiresAt", invite.getExpiresAt());
+            // No expiration for permanent groups
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
@@ -310,22 +301,18 @@ public class AuthController {
             // Validate invite
             Invite invite = inviteDao.findByToken(inviteToken);
             
-            // For permanent groups (expiresAt is null), only check if status is active
-            // For temporary invites (expiresAt is set), use full validation including expiration
-            boolean isValidInvite = invite != null && (invite.getExpiresAt() == null ? 
-                "active".equals(invite.getStatus()) : 
-                invite.isValid());
-                
-            if (!isValidInvite) {
+            // Since invites are permanent now, just check if it exists and is active
+            if (invite == null) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                if (invite == null) {
-                    response.put("message", "HARDCODED_Invite not found"); // TODO: Internationalize this message
-                } else if (invite.getExpiresAt() == null) {
-                    response.put("message", "HARDCODED_Group is not active"); // TODO: Internationalize this message
-                } else {
-                    response.put("message", "HARDCODED_Invalid or expired invite"); // TODO: Internationalize this message
-                }
+                response.put("message", "HARDCODED_Invite not found"); // TODO: Internationalize this message
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            if (!"active".equals(invite.getStatus())) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "HARDCODED_Group is not active"); // TODO: Internationalize this message
                 return ResponseEntity.badRequest().body(response);
             }
 

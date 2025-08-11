@@ -139,17 +139,6 @@ public class Invite {
         this.sceneThresholds = sceneThresholds;
         this.updatedAt = new Date();
     }
-
-    // Helper methods
-    public boolean isExpired() {
-        // Groups never expire if expiresAt is null
-        return expiresAt != null && new Date().after(expiresAt);
-    }
-
-    public boolean isValid() {
-        // Groups are valid if active and not expired
-        return "active".equals(status) && !isExpired();
-    }
     
     // Member management helper methods
     public boolean isMember(String userId) {

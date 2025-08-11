@@ -12,5 +12,4 @@ public interface InviteDao {
     List<Invite> findByStatus(String status);
     void delete(String id);
     void updateStatus(String id, String status);
-    List<Invite> findExpiredInvites();
 }

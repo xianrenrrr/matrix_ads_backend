@@ -134,22 +134,4 @@ public class InviteDaoImpl implements InviteDao {
             throw new RuntimeException("Failed to update invite status", e);
         }
     }
-
-    @Override
-    public List<Invite> findExpiredInvites() {
-        try {
-            CollectionReference invitesRef = db.collection(COLLECTION_NAME);
-            Query query = invitesRef.whereEqualTo("status", "pending")
-                                   .whereLessThan("expiresAt", new Date());
-            ApiFuture<QuerySnapshot> querySnapshot = query.get();
-            
-            List<Invite> expiredInvites = new ArrayList<>();
-            for (DocumentSnapshot document : querySnapshot.get().getDocuments()) {
-                expiredInvites.add(document.toObject(Invite.class));
-            }
-            return expiredInvites;
-        } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Failed to fetch expired invites", e);
-        }
-    }
 }
