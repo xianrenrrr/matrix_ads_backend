@@ -392,22 +392,15 @@ public class AuthController {
             userDao.save(user);
 
             // Handle group membership for group invites
-            System.out.println("DEBUG: Processing invite for group creation");
-            System.out.println("DEBUG: Invite ID: " + invite.getId());
-            System.out.println("DEBUG: Invite GroupName: " + invite.getGroupName());
-            System.out.println("DEBUG: Invite ManagerId: " + invite.getManagerId());
             
             if (invite.getGroupName() != null && !invite.getGroupName().trim().isEmpty()) {
-                System.out.println("DEBUG: Group name found, proceeding with group creation/joining");
                 
                 // TODO: Group management will be handled directly in Invite model
                 // For now, we'll track membership in the invite itself
-                System.out.println("DEBUG: Group functionality temporarily disabled during refactor");
                 
                 // TODO: Add member tracking to Invite model
                 // TODO: Remove Group model dependency
             } else {
-                System.out.println("DEBUG: No group name found in invite, skipping group creation");
             }
 
             // Keep invite active for group invites (don't mark as accepted)

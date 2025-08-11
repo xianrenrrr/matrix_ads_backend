@@ -2,10 +2,8 @@ package com.example.demo.controller.contentmanager;
 
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.UserDao;
-// import com.example.demo.dao.GroupDao; // TODO: Remove after migration to Invite-based groups
 import com.example.demo.dao.SceneSubmissionDao;
 import com.example.demo.model.ManualTemplate;
-// import com.example.demo.model.Group; // TODO: Remove after migration to Invite-based groups
 import com.example.demo.model.SceneSubmission;
 import com.example.demo.service.TemplateSubscriptionService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -133,16 +131,14 @@ public class ContentManager {
     }
     private final TemplateDao templateDao;
     private final UserDao userDao;
-    // private final GroupDao groupDao; // TODO: Remove after migration to InviteDao
     
     @Autowired
     private TemplateSubscriptionService templateSubscriptionService;
 
     @Autowired
-    public ContentManager(TemplateDao templateDao, UserDao userDao) { // TODO: Remove GroupDao parameter
+    public ContentManager(TemplateDao templateDao, UserDao userDao) {
         this.templateDao = templateDao;
         this.userDao = userDao;
-        // this.groupDao = groupDao; // TODO: Remove after migration to InviteDao
     }
     
 

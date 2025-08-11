@@ -1,9 +1,7 @@
 package com.example.demo.service;
 
-// import com.example.demo.dao.GroupDao; // TODO: Remove after migration to InviteDao
 import com.example.demo.dao.UserDao;
 import com.example.demo.dao.InviteDao;
-// import com.example.demo.model.Group; // TODO: Remove after migration to InviteDao
 import com.example.demo.model.Invite;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

@@ -24,11 +24,9 @@ public class UserController {
     @GetMapping("/users/{userId}/subscribed-templates")
     public ResponseEntity<List<ManualTemplate>> getSubscribedTemplates(@PathVariable String userId) throws ExecutionException, InterruptedException {
         try {
-            System.out.println("DEBUG: Getting subscribed templates for user: " + userId);
             
             // Get user's subscribed templates using UserDao
             Map<String, Boolean> subscribedTemplatesMap = userDao.getSubscribedTemplates(userId);
-            System.out.println("DEBUG: User subscribed templates map: " + subscribedTemplatesMap);
             
             List<ManualTemplate> templates = new ArrayList<>();
             
@@ -43,24 +41,19 @@ public class UserController {
                             if (template != null) {
                                 template.setId(templateId); // Ensure ID is set
                                 templates.add(template);
-                                System.out.println("DEBUG: Added template: " + templateId + " - " + template.getTemplateTitle());
                             }
                         } else {
-                            System.out.println("DEBUG: Template not found: " + templateId + " - removing from user subscriptions");
                             // Remove non-existent template from user's subscriptions
                             userDao.removeSubscribedTemplate(userId, templateId);
                         }
                     } catch (Exception e) {
-                        System.out.println("DEBUG: Error processing template " + templateId + ": " + e.getMessage());
                     }
                 }
             }
             
-            System.out.println("DEBUG: Returning " + templates.size() + " templates");
             return ResponseEntity.ok(templates);
             
         } catch (Exception e) {
-            System.out.println("DEBUG: Error getting subscribed templates: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.internalServerError().build();
         }
