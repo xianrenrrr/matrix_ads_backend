@@ -25,6 +25,12 @@ public class VideoAnalysisOrchestrator {
     @Autowired
     private FullPassAnalysisService fullPassAnalysisService;
     
+    @Autowired
+    private QualityGate qualityGate;
+    
+    @Autowired
+    private RefinementWindowService refinementWindowService;
+    
     @Value("${ai.vi.fullPass.maxSeconds:120}")
     private int fullPassMaxSeconds;
     
@@ -65,10 +71,31 @@ public class VideoAnalysisOrchestrator {
             System.out.printf("VideoAnalysisOrchestrator: Coarse pass completed with %d scenes%n", 
                              sceneSegments.size());
             
-            // Future phases will be added here:
-            // - Phase 2: Quality assessment
-            // - Phase 3: Selective refinement for low-quality scenes
-            // - Phase 4: Result merging
+            // Phase 2: Quality assessment to identify scenes needing refinement
+            QualityGate.QualityAssessment assessment = qualityGate.assessScenes(sceneSegments);
+            
+            if (!assessment.hasRefinementNeeds()) {
+                System.out.println("VideoAnalysisOrchestrator: All scenes have good quality, no refinement needed");
+                return sceneSegments;
+            }
+            
+            // Phase 3: Create refinement windows for low-quality scenes  
+            List<SegmentWindow> refinementWindows = refinementWindowService.createRefinementWindows(
+                assessment.scenesNeedingRefinement, sceneSegments);
+            
+            if (refinementWindows.isEmpty()) {
+                System.out.println("VideoAnalysisOrchestrator: No valid refinement windows, returning coarse results");
+                return sceneSegments;
+            }
+            
+            System.out.printf("VideoAnalysisOrchestrator: Created %d refinement windows for targeted analysis%n", 
+                             refinementWindows.size());
+            
+            // Phase 4: Batched refinement call will be added in next PR
+            // For now, log the windows that would be refined
+            for (SegmentWindow window : refinementWindows) {
+                System.out.printf("VideoAnalysisOrchestrator: Would refine %s%n", window);
+            }
             
             return sceneSegments;
             
