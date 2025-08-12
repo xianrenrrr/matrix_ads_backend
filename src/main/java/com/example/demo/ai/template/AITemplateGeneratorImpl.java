@@ -1,7 +1,6 @@
 package com.example.demo.ai.template;
 
 import com.example.demo.ai.orchestrator.VideoAnalysisOrchestrator;
-import com.example.demo.ai.shared.BlockDescriptionService;
 import com.example.demo.ai.shared.KeyframeExtractionService;
 import com.example.demo.ai.shared.VideoSummaryService;
 import com.example.demo.model.ManualTemplate;
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class AITemplateGeneratorImpl implements AITemplateGenerator {
@@ -23,17 +21,9 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
     @Autowired
     private VideoAnalysisOrchestrator videoAnalysisOrchestrator;
     
-    @Autowired
-    private SceneDetectionService sceneDetectionService;
     
     @Autowired
     private KeyframeExtractionService keyframeExtractionService;
-    
-    @Autowired
-    private BlockGridService blockGridService;
-    
-    @Autowired
-    private BlockDescriptionService blockDescriptionService;
     
     @Autowired
     private VideoSummaryService videoSummaryService;
@@ -73,7 +63,6 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
             System.out.printf("Step 2: Processing %d detected scenes...%n", sceneSegments.size());
             List<Scene> scenes = new ArrayList<>();
             List<String> allSceneLabels = new ArrayList<>();
-            Map<String, String> allBlockDescriptions = new HashMap<>();
 
             for (int i = 0; i < sceneSegments.size(); i++) {
                 SceneSegment segment = sceneSegments.get(i);
@@ -82,10 +71,9 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
                 Scene scene = processScene(segment, i + 1, video.getUrl(), language);
                 scenes.add(scene);
                 
-                // Collect data for summary
-                allSceneLabels.addAll(segment.getLabels());
-                if (scene.getBlockDescriptions() != null) {
-                    allBlockDescriptions.putAll(scene.getBlockDescriptions());
+                // Collect labels for summary (no more block descriptions)
+                if (segment.getLabels() != null) {
+                    allSceneLabels.addAll(segment.getLabels());
                 }
             }
 
@@ -110,9 +98,9 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
             template.setLightingRequirements("Good natural or artificial lighting");
             template.setBackgroundMusic("Soft instrumental or ambient music");
 
-            // Step 4: Generate summary (optional)
+            // Step 4: Generate summary (optional) - simplified without block descriptions
             System.out.println("Step 4: Generating video summary...");
-            String summary = videoSummaryService.generateSummary(video, allSceneLabels, allBlockDescriptions, language);
+            String summary = videoSummaryService.generateSummary(video, allSceneLabels, new HashMap<>(), language);
             System.out.printf("Generated summary: %s%n", summary);
             
             System.out.printf("AI template generation completed for video ID: %s with %d scenes%n", 
@@ -154,80 +142,35 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
         var labels = segment.getLabels();
         scene.setScriptLine(labels == null || labels.isEmpty() ? "" : String.join(", ", labels));
         
-        // Check if we should use object overlay for this AI scene
-        boolean shouldUseObjectOverlay = useObjectOverlay && 
-                                         segment.getOverlayObjects() != null && 
-                                         !segment.getOverlayObjects().isEmpty();
+        // AI scenes now always use object overlay detection from our orchestrator
+        boolean hasObjects = segment.getOverlayObjects() != null && !segment.getOverlayObjects().isEmpty();
         
-        if (shouldUseObjectOverlay) {
-            // Use object overlay mode
-            System.out.printf("Scene %d: Using object overlay with %d objects%n", 
+        if (hasObjects) {
+            // Use object overlay mode with AI-detected objects
+            System.out.printf("Scene %d: Using AI object overlay with %d objects%n", 
                             sceneNumber, segment.getOverlayObjects().size());
             scene.setOverlayType("objects");
             scene.setOverlayObjects(segment.getOverlayObjects());
-            
-            // Still extract keyframe for display, but skip grid processing
-            try {
-                if (start != null && end != null && end.compareTo(start) > 0) {
-                    System.out.printf("Extracting keyframe for scene %d (object overlay mode)...%n", sceneNumber);
-                    String keyframeUrl = keyframeExtractionService.extractKeyframe(videoUrl, start, end);
-                    if (keyframeUrl != null && !keyframeUrl.isBlank()) {
-                        scene.setKeyframeUrl(keyframeUrl);
-                        scene.setExampleFrame(keyframeUrl);
-                    }
-                }
-            } catch (Exception e) {
-                System.err.printf("Error extracting keyframe for scene %d: %s%n", sceneNumber, e.getMessage());
-            }
         } else {
-            // Fall back to grid overlay mode
-            System.out.printf("Scene %d: Using grid overlay (objects=%s, flag=%s)%n", 
-                            sceneNumber, 
-                            segment.getOverlayObjects() != null ? segment.getOverlayObjects().size() : "null",
-                            useObjectOverlay);
+            // Simple fallback when no objects detected - just keyframe guidance
+            System.out.printf("Scene %d: No objects detected, using simple keyframe guidance%n", sceneNumber);
             scene.setOverlayType("grid");
-
-            try {
-                // Step 2a: Extract keyframe at scene midpoint (only if we have a non-zero interval)
-                if (start != null && end != null && end.compareTo(start) > 0) {
-                    System.out.printf("Extracting keyframe for scene %d...%n", sceneNumber);
-                    String keyframeUrl = keyframeExtractionService.extractKeyframe(videoUrl, start, end);
-
-                    if (keyframeUrl != null && !keyframeUrl.isBlank()) {
-                        scene.setKeyframeUrl(keyframeUrl);
-                        scene.setExampleFrame(keyframeUrl); // existing field
-
-                        // Step 2b: Create 3x3 block grid from keyframe
-                        System.out.printf("Creating block grid for scene %d...%n", sceneNumber);
-                        Map<String, String> blockImageUrls = blockGridService.createBlockGrid(keyframeUrl);
-                        scene.setBlockImageUrls(blockImageUrls);
-
-                        if (blockImageUrls != null && !blockImageUrls.isEmpty()) {
-                            // Step 2c: Describe each block
-                            System.out.printf("Describing blocks for scene %d...%n", sceneNumber);
-                            Map<String, String> blockDescriptions = blockDescriptionService.describeBlocks(blockImageUrls, language);
-                            scene.setBlockDescriptions(blockDescriptions);
-
-                            // Screen grid overlay: always 1..9 in order
-                            scene.setScreenGridOverlay(java.util.List.of(1,2,3,4,5,6,7,8,9));
-
-                            // Overlay labels aligned by block index 1..9 when available
-                            if (blockDescriptions != null && !blockDescriptions.isEmpty()) {
-                                java.util.List<String> overlayLabels = new java.util.ArrayList<>(9);
-                                for (int i = 1; i <= 9; i++) {
-                                    String key = String.valueOf(i);
-                                    String desc = blockDescriptions.get(key);
-                                    overlayLabels.add(desc == null ? "" : desc);
-                                }
-                                scene.setScreenGridOverlayLabels(overlayLabels);
-                            }
-                        }
-                    }
+            // Set minimal grid overlay for compatibility
+            scene.setScreenGridOverlay(java.util.List.of(5)); // Center grid only
+        }
+        
+        // Extract keyframe for all scenes (for reference display)
+        try {
+            if (start != null && end != null && end.compareTo(start) > 0) {
+                System.out.printf("Extracting keyframe for scene %d...%n", sceneNumber);
+                String keyframeUrl = keyframeExtractionService.extractKeyframe(videoUrl, start, end);
+                if (keyframeUrl != null && !keyframeUrl.isBlank()) {
+                    scene.setKeyframeUrl(keyframeUrl);
+                    scene.setExampleFrame(keyframeUrl);
                 }
-            } catch (Exception e) {
-                System.err.printf("Error processing grid for scene %d: %s%n", sceneNumber, e.getMessage());
-                // Continue with basic scene info even if advanced processing fails
             }
+        } catch (Exception e) {
+            System.err.printf("Error extracting keyframe for scene %d: %s%n", sceneNumber, e.getMessage());
         }
 
         // Intelligent defaults based on analysis
@@ -303,4 +246,4 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
         return videoUrl;
     }
 }
-// Change Log: Added VideoAnalysisOrchestrator integration for centralized VI calls
+// Change Log: Removed block grid services, simplified to use AI object detection only

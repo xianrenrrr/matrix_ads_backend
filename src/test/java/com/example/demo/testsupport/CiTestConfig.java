@@ -2,10 +2,8 @@ package com.example.demo.testsupport;
 
 import com.example.demo.ai.comparison.EmbeddingService;
 import com.example.demo.ai.scene.SceneAnalysisService;
-import com.example.demo.ai.shared.BlockDescriptionService;
 import com.example.demo.ai.shared.KeyframeExtractionService;
 import com.example.demo.ai.shared.VideoSummaryService;
-import com.example.demo.ai.template.BlockGridService;
 import com.example.demo.ai.template.SceneDetectionService;
 import com.example.demo.dao.*;
 import com.example.demo.model.*;
@@ -52,29 +50,6 @@ public class CiTestConfig {
         return service;
     }
 
-    @Bean
-    @Primary
-    public BlockGridService blockGridService() {
-        BlockGridService service = Mockito.mock(BlockGridService.class);
-        Map<String, String> blockGrid = new HashMap<>();
-        for (int i = 1; i <= 9; i++) {
-            blockGrid.put(String.valueOf(i), "https://example.com/block" + i + ".jpg");
-        }
-        when(service.createBlockGrid(anyString())).thenReturn(blockGrid);
-        return service;
-    }
-
-    @Bean
-    @Primary
-    public BlockDescriptionService blockDescriptionService() {
-        BlockDescriptionService service = Mockito.mock(BlockDescriptionService.class);
-        Map<String, String> descriptions = new HashMap<>();
-        for (int i = 1; i <= 9; i++) {
-            descriptions.put(String.valueOf(i), "Block " + i + " description");
-        }
-        when(service.describeBlocks(any())).thenReturn(descriptions);
-        return service;
-    }
 
     @Bean
     @Primary
