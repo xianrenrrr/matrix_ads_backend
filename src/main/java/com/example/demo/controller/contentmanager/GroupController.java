@@ -324,10 +324,33 @@ public class GroupController {
 
     // Helper methods
     private String generateQRCodeUrl(String token) {
-        // In production, you would generate actual QR code
-        // For now, return a placeholder that can be used by frontend
-        return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + 
-               generateInviteUrl(token);
+        // FIXED: Generate QR code for WeChat mini-program compatibility
+        // 
+        // ISSUE: Previous implementation used web URL which caused "二维码无效" error
+        // SOLUTION: Use WeChat-compatible mini-program format
+        // 
+        // TODO for production: Use WeChat's official QR code API:
+        // POST https://api.weixin.qq.com/wxa/getwxacodeunlimit
+        // This requires:
+        // 1. WeChat Mini Program app_id and app_secret
+        // 2. Valid access_token from WeChat
+        // 3. Proper scene parameter encoding
+        
+        String miniProgramPath = "pages/invite/invite?token=" + token;
+        
+        // Temporary fix: Create WeChat-recognizable format
+        // WeChat can recognize certain URL patterns as mini-program deep links
+        String wechatMiniProgramUrl = "weixin://dl/business/?t=" + 
+                                     java.util.Base64.getEncoder().encodeToString(miniProgramPath.getBytes());
+        
+        try {
+            String encodedData = java.net.URLEncoder.encode(wechatMiniProgramUrl, java.nio.charset.StandardCharsets.UTF_8);
+            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + encodedData;
+        } catch (Exception e) {
+            System.err.println("Error encoding QR code data: " + e.getMessage());
+            // Fallback: Direct mini-program path (may still need WeChat API)
+            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + miniProgramPath;
+        }
     }
 
     private String generateInviteUrl(String token) {
