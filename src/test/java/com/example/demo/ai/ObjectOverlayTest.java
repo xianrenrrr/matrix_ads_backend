@@ -46,8 +46,8 @@ public class ObjectOverlayTest {
         assertEquals(0.95f, firstOverlay.getConfidence(), 0.01);
         assertEquals(0.2f, firstOverlay.getX(), 0.01);
         assertEquals(0.3f, firstOverlay.getY(), 0.01);
-        assertEquals(0.3f, firstOverlay.getW(), 0.01);
-        assertEquals(0.5f, firstOverlay.getH(), 0.01);
+        assertEquals(0.3f, firstOverlay.getWidth(), 0.01);
+        assertEquals(0.5f, firstOverlay.getHeight(), 0.01);
     }
     
     @Test
@@ -101,7 +101,74 @@ public class ObjectOverlayTest {
         // Verify all coordinates are within normalized range
         assertTrue(overlay.getX() >= 0.0f && overlay.getX() <= 1.0f);
         assertTrue(overlay.getY() >= 0.0f && overlay.getY() <= 1.0f);
-        assertTrue(overlay.getW() >= 0.0f && overlay.getW() <= 1.0f);
-        assertTrue(overlay.getH() >= 0.0f && overlay.getH() <= 1.0f);
+        assertTrue(overlay.getWidth() >= 0.0f && overlay.getWidth() <= 1.0f);
+        assertTrue(overlay.getHeight() >= 0.0f && overlay.getHeight() <= 1.0f);
+    }
+    
+    @Test
+    public void testObjectOverlayScoreRanges() {
+        // Test that object scores in [0..1] are preserved
+        ObjectOverlay lowScore = new ObjectOverlay("object1", 0.1f, 0.1f, 0.1f, 0.2f, 0.2f);
+        ObjectOverlay midScore = new ObjectOverlay("object2", 0.5f, 0.3f, 0.3f, 0.3f, 0.3f);
+        ObjectOverlay highScore = new ObjectOverlay("object3", 0.9f, 0.5f, 0.5f, 0.4f, 0.4f);
+        
+        // Verify confidence scores are preserved correctly
+        assertEquals(0.1f, lowScore.getConfidence(), 0.01f);
+        assertEquals(0.5f, midScore.getConfidence(), 0.01f);
+        assertEquals(0.9f, highScore.getConfidence(), 0.01f);
+        
+        // Verify boxes are clamped to [0,1]
+        assertTrue(lowScore.getX() + lowScore.getWidth() <= 1.0f);
+        assertTrue(lowScore.getY() + lowScore.getHeight() <= 1.0f);
+        assertTrue(highScore.getX() + highScore.getWidth() <= 1.0f);
+        assertTrue(highScore.getY() + highScore.getHeight() <= 1.0f);
+    }
+    
+    @Test
+    public void testDualOverlaySystemBranching() {
+        // Test that overlay types are mutually exclusive in behavior
+        
+        // Scene with object overlays
+        Scene objectScene = new Scene();
+        objectScene.setSceneNumber(1);
+        objectScene.setOverlayType("objects");
+        
+        ObjectOverlay overlay = new ObjectOverlay("product", 0.85f, 0.3f, 0.2f, 0.4f, 0.5f);
+        objectScene.setOverlayObjects(Arrays.asList(overlay));
+        
+        // Verify object mode
+        assertEquals("objects", objectScene.getOverlayType());
+        assertNotNull(objectScene.getOverlayObjects());
+        assertEquals(1, objectScene.getOverlayObjects().size());
+        
+        // Scene with grid overlay (traditional)
+        Scene gridScene = new Scene();
+        gridScene.setSceneNumber(2);
+        gridScene.setOverlayType("grid");
+        gridScene.setScreenGridOverlay(Arrays.asList(1, 2, 3)); // Mock grid blocks
+        
+        // Verify grid mode
+        assertEquals("grid", gridScene.getOverlayType());
+        assertNull(gridScene.getOverlayObjects()); // Should not have object overlays
+        assertNotNull(gridScene.getScreenGridOverlay()); // Should have grid data
+    }
+    
+    @Test
+    public void testObjectOverlayAreaCalculation() {
+        // Test area calculations used in confidence ranking
+        ObjectOverlay smallBox = new ObjectOverlay("small", 0.9f, 0.4f, 0.4f, 0.1f, 0.1f); // area = 0.01
+        ObjectOverlay largeBox = new ObjectOverlay("large", 0.6f, 0.1f, 0.1f, 0.5f, 0.8f);  // area = 0.4
+        
+        float smallArea = smallBox.getWidth() * smallBox.getHeight();
+        float largeArea = largeBox.getWidth() * largeBox.getHeight();
+        
+        assertEquals(0.01f, smallArea, 0.001f);
+        assertEquals(0.4f, largeArea, 0.001f);
+        
+        // Test confidence * area scoring used in ranking
+        float smallScore = smallBox.getConfidence() * smallArea;  // 0.9 * 0.01 = 0.009
+        float largeScore = largeBox.getConfidence() * largeArea;  // 0.6 * 0.4 = 0.24
+        
+        assertTrue(largeScore > smallScore, "Large box with good confidence should score higher than small box");
     }
 }

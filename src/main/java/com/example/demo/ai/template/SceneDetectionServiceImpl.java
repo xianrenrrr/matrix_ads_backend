@@ -22,6 +22,24 @@ public class SceneDetectionServiceImpl implements SceneDetectionService {
 
     @Value("${firebase.storage.bucket}")
     private String bucketName;
+    
+    @Value("${ai.overlay.confidenceThreshold:0.6}")
+    private float confidenceThreshold;
+    
+    @Value("${ai.overlay.maxObjects:4}")
+    private int maxObjects;
+    
+    @Value("${ai.overlay.minArea:0.02}")
+    private float minArea;
+    
+    @Value("${ai.overlay.nmsIouThreshold:0.5}")
+    private float nmsIouThreshold;
+    
+    @Value("${ai.overlay.smoothingDelta:0.15}")
+    private double smoothingDelta;
+    
+    @Value("${ai.template.includeLabelDetection:true}")
+    private boolean includeLabelDetection;
 
     @Override
     public List<SceneSegment> detectScenes(String videoUrl) {
@@ -41,13 +59,18 @@ public class SceneDetectionServiceImpl implements SceneDetectionService {
                 String gcsUri = toGcsUri(videoUrl, bucketName);
 
                 // Build the request for Video Intelligence API using GCS URI
-                AnnotateVideoRequest request = AnnotateVideoRequest.newBuilder()
+                AnnotateVideoRequest.Builder requestBuilder = AnnotateVideoRequest.newBuilder()
                     .setInputUri(gcsUri)
                     .addFeatures(Feature.SHOT_CHANGE_DETECTION)
-                    .addFeatures(Feature.LABEL_DETECTION)
                     .addFeatures(Feature.PERSON_DETECTION)
-                    .addFeatures(Feature.OBJECT_TRACKING)  // ADD: Object tracking for overlay
-                    .build();
+                    .addFeatures(Feature.OBJECT_TRACKING);  // ADD: Object tracking for overlay
+                
+                // Conditionally add label detection
+                if (includeLabelDetection) {
+                    requestBuilder.addFeatures(Feature.LABEL_DETECTION);
+                }
+                
+                AnnotateVideoRequest request = requestBuilder.build();
 
                 System.out.println("Sending request to Video Intelligence API");
                 AnnotateVideoResponse response = client.annotateVideoAsync(request).get();
@@ -69,16 +92,18 @@ public class SceneDetectionServiceImpl implements SceneDetectionService {
                             shot.getEndTimeOffset().getNanos()
                         ));
 
-                        // Extract labels for this scene
+                        // Extract labels for this scene (only if label detection is enabled)
                         List<String> sceneLabels = new ArrayList<>();
-                        for (LabelAnnotation labelAnnotation : annotationResult.getShotLabelAnnotationsList()) {
-                            for (LabelSegment labelSegment : labelAnnotation.getSegmentsList()) {
-                                VideoSegment labelVideoSegment = labelSegment.getSegment();
-                                
-                                // Check if label overlaps with current shot
-                                if (isTimeOverlap(shot, labelVideoSegment)) {
-                                    sceneLabels.add(labelAnnotation.getEntity().getDescription());
-                                    break;
+                        if (includeLabelDetection) {
+                            for (LabelAnnotation labelAnnotation : annotationResult.getShotLabelAnnotationsList()) {
+                                for (LabelSegment labelSegment : labelAnnotation.getSegmentsList()) {
+                                    VideoSegment labelVideoSegment = labelSegment.getSegment();
+                                    
+                                    // Check if label overlaps with current shot
+                                    if (isTimeOverlap(shot, labelVideoSegment)) {
+                                        sceneLabels.add(labelAnnotation.getEntity().getDescription());
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -160,68 +185,211 @@ public class SceneDetectionServiceImpl implements SceneDetectionService {
                             shot.getEndTimeOffset().getNanos() / 1_000_000_000.0;
         double shotMidpointSec = (shotStartSec + shotEndSec) / 2.0;
         
-        Map<String, ObjectOverlay> bestOverlays = new HashMap<>();  // De-duplicate by label
+        // Group overlays by label for NMS processing
+        Map<String, List<ObjectOverlay>> overlaysByLabel = new HashMap<>();
         
         for (ObjectTrackingAnnotation objAnnotation : objectAnnotations) {
             String label = objAnnotation.getEntity().getDescription();
             if (label == null || label.isBlank()) continue;
             
-            // Find the frame closest to shot midpoint
-            ObjectTrackingFrame closestFrame = null;
-            double minTimeDiff = Double.MAX_VALUE;
+            float confidence = objAnnotation.getConfidence();
             
-            for (ObjectTrackingFrame frame : objAnnotation.getFramesList()) {
-                double frameTimeSec = frame.getTimeOffset().getSeconds() + 
-                                     frame.getTimeOffset().getNanos() / 1_000_000_000.0;
-                
-                // Check if frame is within the shot boundaries
-                if (frameTimeSec >= shotStartSec && frameTimeSec <= shotEndSec) {
-                    double timeDiff = Math.abs(frameTimeSec - shotMidpointSec);
-                    if (timeDiff < minTimeDiff) {
-                        minTimeDiff = timeDiff;
-                        closestFrame = frame;
-                    }
-                }
-            }
+            // Filter out low confidence detections early
+            if (confidence < confidenceThreshold) continue;
             
-            if (closestFrame != null) {
-                NormalizedBoundingBox bbox = closestFrame.getNormalizedBoundingBox();
-                float confidence = objAnnotation.getConfidence();
-                
-                // Filter out low confidence detections
-                if (confidence < 0.5f) continue;
-                
-                // Extract and clamp normalized coordinates
-                float left = Math.max(0, Math.min(1, bbox.getLeft()));
-                float top = Math.max(0, Math.min(1, bbox.getTop()));
-                float right = Math.max(0, Math.min(1, bbox.getRight()));
-                float bottom = Math.max(0, Math.min(1, bbox.getBottom()));
-                
-                float width = right - left;
-                float height = bottom - top;
-                
-                // Skip degenerate boxes
-                if (width <= 0 || height <= 0) continue;
-                
-                ObjectOverlay overlay = new ObjectOverlay(label, confidence, left, top, width, height);
-                
-                // Keep highest confidence for each label (de-duplication)
-                ObjectOverlay existing = bestOverlays.get(label);
-                if (existing == null || confidence > existing.getConfidence()) {
-                    bestOverlays.put(label, overlay);
-                }
+            // Apply temporal smoothing across 3 frames
+            ObjectOverlay smoothedOverlay = extractSmoothedOverlay(
+                objAnnotation, shotStartSec, shotEndSec, shotMidpointSec, label, confidence);
+            
+            if (smoothedOverlay != null) {
+                // Add to label group for NMS processing
+                overlaysByLabel.computeIfAbsent(label, k -> new ArrayList<>()).add(smoothedOverlay);
             }
         }
         
-        // Sort by confidence * area descending, cap to 5
-        return bestOverlays.values().stream()
+        // Apply NMS per label and collect results
+        List<ObjectOverlay> allOverlays = new ArrayList<>();
+        for (List<ObjectOverlay> labelOverlays : overlaysByLabel.values()) {
+            allOverlays.addAll(applyNMS(labelOverlays));
+        }
+        
+        // Sort by confidence * area descending, cap to configured max
+        return allOverlays.stream()
             .sorted((a, b) -> {
-                float scoreA = a.getConfidence() * a.getW() * a.getH();
-                float scoreB = b.getConfidence() * b.getW() * b.getH();
+                float scoreA = a.getConfidence() * a.getWidth() * a.getHeight();
+                float scoreB = b.getConfidence() * b.getWidth() * b.getHeight();
                 return Float.compare(scoreB, scoreA);  // Descending
             })
-            .limit(5)
+            .limit(maxObjects)
             .collect(Collectors.toList());
+    }
+    
+    /**
+     * Extract and smooth an object overlay using temporal averaging across 3 frames:
+     * t-delta, t (midpoint), t+delta. Falls back gracefully if neighboring frames are missing.
+     */
+    private ObjectOverlay extractSmoothedOverlay(ObjectTrackingAnnotation objAnnotation,
+                                                double shotStartSec, double shotEndSec, double shotMidpointSec,
+                                                String label, float confidence) {
+        
+        // Find frames at t-delta, t, t+delta
+        ObjectTrackingFrame centerFrame = null;
+        ObjectTrackingFrame leftFrame = null;
+        ObjectTrackingFrame rightFrame = null;
+        
+        double targetLeft = shotMidpointSec - smoothingDelta;
+        double targetRight = shotMidpointSec + smoothingDelta;
+        
+        double minCenterDiff = Double.MAX_VALUE;
+        double minLeftDiff = Double.MAX_VALUE;
+        double minRightDiff = Double.MAX_VALUE;
+        
+        for (ObjectTrackingFrame frame : objAnnotation.getFramesList()) {
+            double frameTimeSec = frame.getTimeOffset().getSeconds() + 
+                                 frame.getTimeOffset().getNanos() / 1_000_000_000.0;
+            
+            // Only consider frames within shot boundaries
+            if (frameTimeSec < shotStartSec || frameTimeSec > shotEndSec) continue;
+            
+            // Check for center frame (closest to midpoint)
+            double centerDiff = Math.abs(frameTimeSec - shotMidpointSec);
+            if (centerDiff < minCenterDiff) {
+                minCenterDiff = centerDiff;
+                centerFrame = frame;
+            }
+            
+            // Check for left frame (closest to t-delta)
+            double leftDiff = Math.abs(frameTimeSec - targetLeft);
+            if (leftDiff < minLeftDiff) {
+                minLeftDiff = leftDiff;
+                leftFrame = frame;
+            }
+            
+            // Check for right frame (closest to t+delta)
+            double rightDiff = Math.abs(frameTimeSec - targetRight);
+            if (rightDiff < minRightDiff) {
+                minRightDiff = rightDiff;
+                rightFrame = frame;
+            }
+        }
+        
+        // Must have at least the center frame
+        if (centerFrame == null) {
+            return null;
+        }
+        
+        // Collect available frames for averaging
+        List<ObjectTrackingFrame> framesToAverage = new ArrayList<>();
+        framesToAverage.add(centerFrame);
+        
+        // Add left frame if it's different from center and reasonably close
+        if (leftFrame != null && leftFrame != centerFrame && minLeftDiff < smoothingDelta * 2) {
+            framesToAverage.add(leftFrame);
+        }
+        
+        // Add right frame if it's different from center and reasonably close
+        if (rightFrame != null && rightFrame != centerFrame && minRightDiff < smoothingDelta * 2) {
+            framesToAverage.add(rightFrame);
+        }
+        
+        // Average the bounding boxes
+        float avgLeft = 0, avgTop = 0, avgRight = 0, avgBottom = 0;
+        
+        for (ObjectTrackingFrame frame : framesToAverage) {
+            NormalizedBoundingBox bbox = frame.getNormalizedBoundingBox();
+            avgLeft += bbox.getLeft();
+            avgTop += bbox.getTop();
+            avgRight += bbox.getRight();
+            avgBottom += bbox.getBottom();
+        }
+        
+        int numFrames = framesToAverage.size();
+        avgLeft /= numFrames;
+        avgTop /= numFrames;
+        avgRight /= numFrames;
+        avgBottom /= numFrames;
+        
+        // Clamp to [0,1] and calculate dimensions
+        float left = Math.max(0, Math.min(1, avgLeft));
+        float top = Math.max(0, Math.min(1, avgTop));
+        float right = Math.max(0, Math.min(1, avgRight));
+        float bottom = Math.max(0, Math.min(1, avgBottom));
+        
+        float width = right - left;
+        float height = bottom - top;
+        
+        // Skip degenerate boxes and those below minimum area
+        if (width <= 0 || height <= 0 || (width * height) < minArea) {
+            return null;
+        }
+        
+        return new ObjectOverlay(label, confidence, left, top, width, height);
+    }
+    
+    /**
+     * Apply Non-Maximum Suppression (NMS) to a list of overlays of the same label.
+     * Removes boxes that have high IoU overlap with higher confidence boxes.
+     */
+    private List<ObjectOverlay> applyNMS(List<ObjectOverlay> overlays) {
+        if (overlays == null || overlays.size() <= 1) {
+            return overlays != null ? new ArrayList<>(overlays) : new ArrayList<>();
+        }
+        
+        // Sort by confidence descending
+        List<ObjectOverlay> sorted = overlays.stream()
+            .sorted((a, b) -> Float.compare(b.getConfidence(), a.getConfidence()))
+            .collect(Collectors.toList());
+        
+        List<ObjectOverlay> kept = new ArrayList<>();
+        
+        for (ObjectOverlay candidate : sorted) {
+            boolean shouldKeep = true;
+            
+            // Check IoU against all previously kept boxes
+            for (ObjectOverlay kept_box : kept) {
+                if (calculateIoU(candidate, kept_box) > nmsIouThreshold) {
+                    shouldKeep = false;
+                    break;
+                }
+            }
+            
+            if (shouldKeep) {
+                kept.add(candidate);
+            }
+        }
+        
+        return kept;
+    }
+    
+    /**
+     * Calculate Intersection over Union (IoU) between two bounding boxes.
+     * Both boxes use normalized coordinates [0,1].
+     */
+    private float calculateIoU(ObjectOverlay box1, ObjectOverlay box2) {
+        // Calculate intersection area
+        float x1 = Math.max(box1.getX(), box2.getX());
+        float y1 = Math.max(box1.getY(), box2.getY());
+        float x2 = Math.min(box1.getX() + box1.getWidth(), box2.getX() + box2.getWidth());
+        float y2 = Math.min(box1.getY() + box1.getHeight(), box2.getY() + box2.getHeight());
+        
+        // No intersection if coordinates don't overlap
+        if (x2 <= x1 || y2 <= y1) {
+            return 0.0f;
+        }
+        
+        float intersectionArea = (x2 - x1) * (y2 - y1);
+        
+        // Calculate union area
+        float area1 = box1.getWidth() * box1.getHeight();
+        float area2 = box2.getWidth() * box2.getHeight();
+        float unionArea = area1 + area2 - intersectionArea;
+        
+        // Avoid division by zero
+        if (unionArea <= 0) {
+            return 0.0f;
+        }
+        
+        return intersectionArea / unionArea;
     }
     
     /*

@@ -40,18 +40,18 @@ public class Scene {
         private float confidence;
         private float x;  // normalized [0,1], top-left corner
         private float y;  // normalized [0,1], top-left corner
-        private float w;  // normalized [0,1], width
-        private float h;  // normalized [0,1], height
+        private float width;  // normalized [0,1], width
+        private float height;  // normalized [0,1], height
         
         public ObjectOverlay() {}
         
-        public ObjectOverlay(String label, float confidence, float x, float y, float w, float h) {
+        public ObjectOverlay(String label, float confidence, float x, float y, float width, float height) {
             this.label = label;
             this.confidence = confidence;
             this.x = x;
             this.y = y;
-            this.w = w;
-            this.h = h;
+            this.width = width;
+            this.height = height;
         }
         
         public String getLabel() { return label; }
@@ -66,11 +66,22 @@ public class Scene {
         public float getY() { return y; }
         public void setY(float y) { this.y = y; }
         
-        public float getW() { return w; }
-        public void setW(float w) { this.w = w; }
+        public float getWidth() { return width; }
+        public void setWidth(float width) { this.width = width; }
         
-        public float getH() { return h; }
-        public void setH(float h) { this.h = h; }
+        public float getHeight() { return height; }
+        public void setHeight(float height) { this.height = height; }
+        
+        // Keep backward compatibility getters for now
+        @Deprecated
+        public float getW() { return width; }
+        @Deprecated
+        public void setW(float w) { this.width = w; }
+        
+        @Deprecated
+        public float getH() { return height; }
+        @Deprecated
+        public void setH(float h) { this.height = h; }
     }
 
     public Scene() {
