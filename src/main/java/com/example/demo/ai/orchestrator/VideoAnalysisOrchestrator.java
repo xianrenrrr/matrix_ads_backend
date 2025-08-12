@@ -3,6 +3,7 @@ package com.example.demo.ai.orchestrator;
 import com.example.demo.ai.template.SceneDetectionService;
 import com.example.demo.model.SceneSegment;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -18,11 +19,21 @@ public class VideoAnalysisOrchestrator {
     @Autowired
     private SceneDetectionService sceneDetectionService;
     
+    @Autowired
+    private VideoMetadataService videoMetadataService;
+    
+    @Autowired
+    private FullPassAnalysisService fullPassAnalysisService;
+    
+    @Value("${ai.vi.fullPass.maxSeconds:120}")
+    private int fullPassMaxSeconds;
+    
     /**
      * Analyzes a video using a multi-pass approach:
-     * 1. Coarse pass: Scene detection with person/label detection
-     * 2. Quality assessment: Identify scenes needing refinement
-     * 3. Refinement pass: Targeted object detection for low-quality scenes
+     * 1. Duration check: If video ≤ threshold, perform single comprehensive pass
+     * 2. Coarse pass: Scene detection with person/label detection
+     * 3. Quality assessment: Identify scenes needing refinement
+     * 4. Refinement pass: Targeted object detection for low-quality scenes
      * 
      * @param gcsUri GCS URI of the video to analyze
      * @return List of scene segments with complete analysis
@@ -31,8 +42,19 @@ public class VideoAnalysisOrchestrator {
         System.out.printf("VideoAnalysisOrchestrator: Starting analysis for %s%n", gcsUri);
         
         try {
-            // Phase 1: Coarse pass - existing scene detection logic
-            // Uses SHOT_CHANGE_DETECTION + PERSON_DETECTION + optional LABEL_DETECTION
+            // Phase 0: Duration check for full pass rule
+            int videoDurationSeconds = videoMetadataService.getVideoDurationSeconds(gcsUri);
+            
+            if (videoDurationSeconds > 0 && videoDurationSeconds <= fullPassMaxSeconds) {
+                System.out.printf("VideoAnalysisOrchestrator: Video is %ds (≤ %ds), using full pass%n", 
+                                videoDurationSeconds, fullPassMaxSeconds);
+                return fullPassAnalysisService.performFullPassAnalysis(gcsUri);
+            } else {
+                System.out.printf("VideoAnalysisOrchestrator: Video is %ds (> %ds), using multi-pass approach%n", 
+                                videoDurationSeconds, fullPassMaxSeconds);
+            }
+            
+            // Phase 1: Coarse pass for longer videos
             List<SceneSegment> sceneSegments = performCoarsePass(gcsUri);
             
             if (sceneSegments.isEmpty()) {
