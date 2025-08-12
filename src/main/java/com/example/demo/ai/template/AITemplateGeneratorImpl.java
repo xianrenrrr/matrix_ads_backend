@@ -1,5 +1,6 @@
 package com.example.demo.ai.template;
 
+import com.example.demo.ai.orchestrator.VideoAnalysisOrchestrator;
 import com.example.demo.ai.shared.BlockDescriptionService;
 import com.example.demo.ai.shared.KeyframeExtractionService;
 import com.example.demo.ai.shared.VideoSummaryService;
@@ -20,6 +21,9 @@ import java.util.Map;
 public class AITemplateGeneratorImpl implements AITemplateGenerator {
 
     @Autowired
+    private VideoAnalysisOrchestrator videoAnalysisOrchestrator;
+    
+    @Autowired
     private SceneDetectionService sceneDetectionService;
     
     @Autowired
@@ -36,6 +40,9 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
     
     @Value("${ai.template.useObjectOverlay:true}")
     private boolean useObjectOverlay;
+    
+    @Value("${firebase.storage.bucket}")
+    private String bucketName;
 
     @Override
     public ManualTemplate generateTemplate(Video video) {
@@ -47,9 +54,15 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
         System.out.printf("Starting AI template generation for video ID: %s in language: %s%n", video.getId(), language);
 
         try {
-            // Step 1: Detect scenes using Google Video Intelligence API
-            System.out.println("Step 1: Detecting scenes...");
-            List<SceneSegment> sceneSegments = sceneDetectionService.detectScenes(video.getUrl());
+            // Step 1: Analyze video using orchestrator (multi-pass approach)
+            System.out.println("Step 1: Analyzing video with orchestrator...");
+            
+            // Convert video URL to GCS URI if needed
+            String videoUrl = video.getUrl();
+            String gcsUri = toGcsUri(videoUrl);
+            
+            // Use orchestrator for centralized VI calls
+            List<SceneSegment> sceneSegments = videoAnalysisOrchestrator.analyze(gcsUri);
             
             if (sceneSegments.isEmpty()) {
                 System.out.println("No scenes detected, creating fallback template");
@@ -267,5 +280,27 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
         template.setScenes(List.of(defaultScene));
         return template;
     }
+    
+    /**
+     * Converts a video URL to GCS URI format for Video Intelligence API
+     */
+    private String toGcsUri(String videoUrl) {
+        if (videoUrl == null || videoUrl.isBlank()) return videoUrl;
+        if (videoUrl.startsWith("gs://")) return videoUrl;
+        
+        String httpsPrefix = "https://storage.googleapis.com/";
+        if (videoUrl.startsWith(httpsPrefix)) {
+            // https://storage.googleapis.com/<bucket>/<object>
+            return "gs://" + videoUrl.substring(httpsPrefix.length());
+        }
+        
+        // If caller passed just an object path, attach default bucket
+        if (!videoUrl.contains("://")) {
+            return "gs://" + bucketName + "/" + videoUrl.replaceFirst("^/", "");
+        }
+        
+        // Fallback: return as-is (the API may reject non-GCS URIs)
+        return videoUrl;
+    }
 }
-// Change Log: Added dual scene system tags (sceneSource, overlayType); AI scenes prefer object overlay with fallback to 9-grid
+// Change Log: Added VideoAnalysisOrchestrator integration for centralized VI calls
