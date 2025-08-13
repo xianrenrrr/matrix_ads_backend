@@ -101,7 +101,7 @@ public class NotificationServiceImpl implements NotificationService {
                 notification.put("sceneId", scene.getId());
                 notification.put("templateId", scene.getTemplateId());
                 notification.put("submittedBy", scene.getUserId());
-                notification.put("timestamp", new Date());
+                notification.put("timestamp", System.currentTimeMillis());
                 notification.put("read", false);
                 
                 saveNotificationToUser(manager.getId(), notification);
@@ -124,7 +124,7 @@ public class NotificationServiceImpl implements NotificationService {
             notification.put("sceneId", scene.getId());
             notification.put("templateId", scene.getTemplateId());
             notification.put("reviewedBy", data.get("reviewerId"));
-            notification.put("timestamp", new Date());
+            notification.put("timestamp", System.currentTimeMillis());
             notification.put("read", false);
             
             saveNotificationToUser(scene.getUserId(), notification);
@@ -148,7 +148,7 @@ public class NotificationServiceImpl implements NotificationService {
             notification.put("templateId", scene.getTemplateId());
             notification.put("feedback", feedback);
             notification.put("reviewedBy", data.get("reviewerId"));
-            notification.put("timestamp", new Date());
+            notification.put("timestamp", System.currentTimeMillis());
             notification.put("read", false);
             
             saveNotificationToUser(scene.getUserId(), notification);
@@ -169,7 +169,7 @@ public class NotificationServiceImpl implements NotificationService {
             notification.put("type", "compilation_started");
             notification.put("message", String.format("All %d scenes approved! Video compilation has started.", sceneCount));
             notification.put("templateId", templateId);
-            notification.put("timestamp", new Date());
+            notification.put("timestamp", System.currentTimeMillis());
             notification.put("read", false);
             
             saveNotificationToUser(userId, notification);
@@ -191,7 +191,7 @@ public class NotificationServiceImpl implements NotificationService {
             notification.put("message", "Your video has been compiled successfully! Ready for download.");
             notification.put("templateId", templateId);
             notification.put("videoUrl", videoUrl);
-            notification.put("timestamp", new Date());
+            notification.put("timestamp", System.currentTimeMillis());
             notification.put("read", false);
             
             saveNotificationToUser(userId, notification);
@@ -215,7 +215,7 @@ public class NotificationServiceImpl implements NotificationService {
             notification.put("message", String.format("Progress: %d/%d scenes approved", approved, total));
             notification.put("templateId", scene.getTemplateId());
             notification.put("progress", progress);
-            notification.put("timestamp", new Date());
+            notification.put("timestamp", System.currentTimeMillis());
             notification.put("read", false);
             
             saveNotificationToUser(scene.getUserId(), notification);
@@ -238,7 +238,7 @@ public class NotificationServiceImpl implements NotificationService {
             notification.put("message", String.format("%d scene submissions are overdue for review", count));
             notification.put("overdueCount", count);
             notification.put("priority", "high");
-            notification.put("timestamp", new Date());
+            notification.put("timestamp", System.currentTimeMillis());
             notification.put("read", false);
             
             saveNotificationToUser(manager.getId(), notification);
@@ -261,7 +261,7 @@ public class NotificationServiceImpl implements NotificationService {
                 data.getOrDefault("highPriority", 0),
                 data.getOrDefault("overdue", 0)));
             notification.put("summaryData", data);
-            notification.put("timestamp", new Date());
+            notification.put("timestamp", System.currentTimeMillis());
             notification.put("read", false);
             
             saveNotificationToUser(manager.getId(), notification);
@@ -291,7 +291,7 @@ public class NotificationServiceImpl implements NotificationService {
                 notification.put("templateId", scene.getTemplateId());
                 notification.put("userId", scene.getUserId());
                 notification.put("priority", "urgent");
-                notification.put("timestamp", new Date());
+                notification.put("timestamp", System.currentTimeMillis());
                 notification.put("read", false);
                 
                 saveNotificationToUser(manager.getId(), notification);
@@ -370,7 +370,7 @@ public class NotificationServiceImpl implements NotificationService {
             Map<String, Object> notification = new HashMap<>();
             notification.put("type", type);
             notification.put("data", data);
-            notification.put("timestamp", new Date());
+            notification.put("timestamp", System.currentTimeMillis());
             notification.put("read", false);
             
             saveNotificationToUser(userId, notification);
