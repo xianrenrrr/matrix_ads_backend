@@ -5,7 +5,7 @@ import com.example.demo.ai.orchestrator.VideoAnalysisOrchestrator;
 import com.example.demo.ai.shared.KeyframeExtractionService;
 import com.example.demo.ai.shared.VideoSummaryService;
 import com.example.demo.ai.translate.TranslationService;
-import com.example.demo.ai.guidance.OverlayLegendService;
+import com.example.demo.ai.vision.ObjectLocalizationService;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSegment;
@@ -40,9 +40,6 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
     
     @Autowired
     private VideoSummaryService videoSummaryService;
-    
-    @Autowired
-    private OverlayLegendService overlayLegendService;
     
     @Value("${ai.template.useObjectOverlay:true}")
     private boolean useObjectOverlay;
@@ -196,7 +193,8 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
             }
             
             // Generate legend for AI scenes with objects
-            scene.setLegend(overlayLegendService.buildLegendFromObjects(scene));
+            String targetLocale = (language != null && language.contains("zh")) ? language : "zh-CN";
+            scene.setLegend(overlayLegendService.buildLegend(scene, targetLocale));
             scene.setSourceAspect("9:16");  // MVP: force portrait, OK for your use case
             
             System.out.printf("Scene %d: Generated legend with %d items%n", 

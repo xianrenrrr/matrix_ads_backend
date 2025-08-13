@@ -351,20 +351,5 @@ public class Scene {
         this.overlayPolygons = overlayPolygons;
     }
     
-    public List<LegendItem> getLegend() {
-        return legend;
-    }
-    
-    public void setLegend(List<LegendItem> legend) {
-        this.legend = legend;
-    }
-    
-    public String getSourceAspect() {
-        return sourceAspect;
-    }
-    
-    public void setSourceAspect(String sourceAspect) {
-        this.sourceAspect = sourceAspect;
-    }
 }
 // Change Log: Added dual scene system fields (sceneSource, overlayType, overlayObjects) for object overlay support
