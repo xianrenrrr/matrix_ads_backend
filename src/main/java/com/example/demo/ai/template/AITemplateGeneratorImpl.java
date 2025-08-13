@@ -4,6 +4,7 @@ import com.example.demo.ai.orchestrator.VideoAnalysisOrchestrator;
 import com.example.demo.ai.shared.KeyframeExtractionService;
 import com.example.demo.ai.shared.VideoSummaryService;
 import com.example.demo.ai.translate.TranslationService;
+import com.example.demo.ai.vision.ObjectLocalizationService;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSegment;
@@ -26,6 +27,9 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
     
     @Autowired
     private TranslationService translationService;
+    
+    @Autowired
+    private ObjectLocalizationService objectLocalizationService;
     
     @Autowired
     private KeyframeExtractionService keyframeExtractionService;
@@ -199,6 +203,52 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
                 if (keyframeUrl != null && !keyframeUrl.isBlank()) {
                     scene.setKeyframeUrl(keyframeUrl);
                     scene.setExampleFrame(keyframeUrl);
+                    
+                    // Try to detect polygons from keyframe if enabled
+                    if (objectLocalizationService != null) {
+                        try {
+                            System.out.printf("Detecting polygons from keyframe for scene %d...%n", sceneNumber);
+                            var polygons = objectLocalizationService.detectObjectPolygons(keyframeUrl);
+                            
+                            if (!polygons.isEmpty()) {
+                                // Prefer polygons over bounding boxes
+                                System.out.printf("Scene %d: Found %d polygon shapes, switching to polygon mode%n", 
+                                    sceneNumber, polygons.size());
+                                scene.setOverlayType("polygons");
+                                scene.setOverlayPolygons(polygons);
+                                scene.setOverlayObjects(null); // Clear boxes since we have polygons
+                                
+                                // Translate polygon labels
+                                if (translationService != null) {
+                                    List<String> labelsToTranslate = polygons.stream()
+                                        .map(p -> p.getLabel())
+                                        .filter(label -> label != null && !label.isEmpty())
+                                        .distinct()
+                                        .collect(Collectors.toList());
+                                    
+                                    if (!labelsToTranslate.isEmpty()) {
+                                        String targetLocale = (language != null && language.contains("zh")) ? language : "zh-CN";
+                                        Map<String, String> translations = translationService.translateLabels(labelsToTranslate, targetLocale);
+                                        
+                                        // Apply translations to polygons
+                                        for (var polygon : polygons) {
+                                            String translated = translations.get(polygon.getLabel());
+                                            if (translated != null) {
+                                                polygon.setLabelLocalized(translated);
+                                            }
+                                        }
+                                        
+                                        System.out.printf("Scene %d: Translated %d polygon labels to %s%n", 
+                                            sceneNumber, labelsToTranslate.size(), targetLocale);
+                                    }
+                                }
+                            } else {
+                                System.out.printf("Scene %d: No polygons detected from keyframe%n", sceneNumber);
+                            }
+                        } catch (Exception e) {
+                            System.err.printf("Error detecting polygons for scene %d: %s%n", sceneNumber, e.getMessage());
+                        }
+                    }
                 }
             }
         } catch (Exception e) {

@@ -1,5 +1,6 @@
 package com.example.demo.model;
 
+import com.example.demo.ai.vision.ObjectLocalizationService.OverlayPolygon;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -31,8 +32,9 @@ public class Scene {
     
     // Dual scene system fields (add-only, non-breaking)
     private String sceneSource;  // "manual" | "ai" - how the scene was created
-    private String overlayType;  // "grid" | "objects" - how to render guidance
+    private String overlayType;  // "grid" | "objects" | "polygons" - how to render guidance
     private List<ObjectOverlay> overlayObjects;  // only when overlayType="objects"
+    private List<OverlayPolygon> overlayPolygons; // only when overlayType="polygons"
     
     // Inner class for object overlay data
     public static class ObjectOverlay {
@@ -319,6 +321,14 @@ public class Scene {
     
     public void setOverlayObjects(List<ObjectOverlay> overlayObjects) {
         this.overlayObjects = overlayObjects;
+    }
+    
+    public List<OverlayPolygon> getOverlayPolygons() {
+        return overlayPolygons;
+    }
+    
+    public void setOverlayPolygons(List<OverlayPolygon> overlayPolygons) {
+        this.overlayPolygons = overlayPolygons;
     }
 }
 // Change Log: Added dual scene system fields (sceneSource, overlayType, overlayObjects) for object overlay support
