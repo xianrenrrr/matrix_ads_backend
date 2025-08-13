@@ -1,5 +1,6 @@
 package com.example.demo.ai.template;
 
+import com.example.demo.ai.guidance.OverlayLegendService;
 import com.example.demo.ai.orchestrator.VideoAnalysisOrchestrator;
 import com.example.demo.ai.shared.KeyframeExtractionService;
 import com.example.demo.ai.shared.VideoSummaryService;
@@ -30,6 +31,9 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
     
     @Autowired
     private ObjectLocalizationService objectLocalizationService;
+    
+    @Autowired
+    private OverlayLegendService overlayLegendService;
     
     @Autowired
     private KeyframeExtractionService keyframeExtractionService;
@@ -254,6 +258,21 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
         } catch (Exception e) {
             System.err.printf("Error extracting keyframe for scene %d: %s%n", sceneNumber, e.getMessage());
         }
+
+        // Generate legend for overlays (after all overlay processing is complete)
+        if (overlayLegendService != null && scene.getOverlayType() != null && !scene.getOverlayType().equals("grid")) {
+            String targetLocale = (language != null && language.contains("zh")) ? language : "zh-CN";
+            var legend = overlayLegendService.buildLegend(scene, targetLocale);
+            scene.setLegend(legend);
+            
+            if (!legend.isEmpty()) {
+                System.out.printf("Scene %d: Generated legend with %d items (first color: %s)%n", 
+                    sceneNumber, legend.size(), legend.get(0).getColorHex());
+            }
+        }
+        
+        // Set source aspect ratio (default to portrait for MVP)
+        scene.setSourceAspect("9:16");
 
         // Intelligent defaults based on analysis
         scene.setDeviceOrientation("Phone (Portrait 9:16)");
