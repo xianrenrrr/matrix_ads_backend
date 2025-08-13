@@ -273,15 +273,14 @@ public class AuthController {
             userDao.save(user);
 
             // Handle group membership for group invites
-            
             if (invite.getGroupName() != null && !invite.getGroupName().trim().isEmpty()) {
+                // Add the new user to the group's member list
+                invite.addMember(user.getId());
                 
-                // TODO: Group management will be handled directly in Invite model
-                // For now, we'll track membership in the invite itself
+                // Update the invite with the new member
+                inviteDao.update(invite);
                 
-                // TODO: Add member tracking to Invite model
-                // TODO: Remove Group model dependency
-            } else {
+                System.out.println("User " + user.getId() + " added to group " + invite.getGroupName());
             }
 
             // Keep invite active for group invites (don't mark as accepted)
