@@ -324,14 +324,14 @@ public class GroupController {
     }
 
     private String generateQRCodeUrl(String token) {
-        // Generate QR code that directly contains the token
-        // This will be scanned within the mini-program and parsed by handleQRCodeResult
-        String qrContent = token;  // Just the token itself
+        // Generate QR code with mini-program page path format
+        // This makes it recognizable by WeChat scanner
+        String miniProgramPath = "pages/signup/signup?token=" + token;
         try {
-            String encodedContent = URLEncoder.encode(qrContent, StandardCharsets.UTF_8);
-            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + encodedContent;
+            String encodedPath = URLEncoder.encode(miniProgramPath, StandardCharsets.UTF_8);
+            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + encodedPath;
         } catch (Exception e) {
-            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + qrContent;
+            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + miniProgramPath;
         }
     }
 
