@@ -324,12 +324,14 @@ public class GroupController {
     }
 
     private String generateQRCodeUrl(String token) {
-        String miniProgramPath = "pages/signup/signup?token=" + token;
+        // Generate QR code that directly contains the token
+        // This will be scanned within the mini-program and parsed by handleQRCodeResult
+        String qrContent = token;  // Just the token itself
         try {
-            String encodedPath = URLEncoder.encode(miniProgramPath, StandardCharsets.UTF_8);
-            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + encodedPath;
+            String encodedContent = URLEncoder.encode(qrContent, StandardCharsets.UTF_8);
+            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + encodedContent;
         } catch (Exception e) {
-            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + miniProgramPath;
+            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + qrContent;
         }
     }
 
