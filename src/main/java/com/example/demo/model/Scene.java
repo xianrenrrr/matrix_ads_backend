@@ -1,5 +1,6 @@
 package com.example.demo.model;
 
+import com.example.demo.ai.guidance.OverlayLegendService.LegendItem;
 import com.example.demo.ai.vision.ObjectLocalizationService.OverlayPolygon;
 import java.time.Duration;
 import java.util.List;
@@ -35,6 +36,7 @@ public class Scene {
     private String overlayType;  // "grid" | "objects" | "polygons" - how to render guidance
     private List<ObjectOverlay> overlayObjects;  // only when overlayType="objects"
     private List<OverlayPolygon> overlayPolygons; // only when overlayType="polygons"
+ // Color legend for overlays (same order as overlays) // Source aspect ratio, e.g., "9:16" or "16:9"
     private List<LegendItem> legend;  // color-coded legend for overlays
     private String sourceAspect;  // e.g., "9:16" for mini-app pixel mapping
     
@@ -347,6 +349,22 @@ public class Scene {
     
     public void setOverlayPolygons(List<OverlayPolygon> overlayPolygons) {
         this.overlayPolygons = overlayPolygons;
+    }
+    
+    public List<LegendItem> getLegend() {
+        return legend;
+    }
+    
+    public void setLegend(List<LegendItem> legend) {
+        this.legend = legend;
+    }
+    
+    public String getSourceAspect() {
+        return sourceAspect;
+    }
+    
+    public void setSourceAspect(String sourceAspect) {
+        this.sourceAspect = sourceAspect;
     }
 }
 // Change Log: Added dual scene system fields (sceneSource, overlayType, overlayObjects) for object overlay support
