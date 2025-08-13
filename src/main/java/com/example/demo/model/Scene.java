@@ -37,6 +37,7 @@ public class Scene {
     // Inner class for object overlay data
     public static class ObjectOverlay {
         private String label;
+        private String labelLocalized;  // Localized label (e.g., Chinese translation)
         private float confidence;
         private float x;  // normalized [0,1], top-left corner
         private float y;  // normalized [0,1], top-left corner
@@ -56,6 +57,9 @@ public class Scene {
         
         public String getLabel() { return label; }
         public void setLabel(String label) { this.label = label; }
+        
+        public String getLabelLocalized() { return labelLocalized; }
+        public void setLabelLocalized(String labelLocalized) { this.labelLocalized = labelLocalized; }
         
         public float getConfidence() { return confidence; }
         public void setConfidence(float confidence) { this.confidence = confidence; }

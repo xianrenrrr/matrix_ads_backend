@@ -3,6 +3,7 @@ package com.example.demo.ai.template;
 import com.example.demo.ai.orchestrator.VideoAnalysisOrchestrator;
 import com.example.demo.ai.shared.KeyframeExtractionService;
 import com.example.demo.ai.shared.VideoSummaryService;
+import com.example.demo.ai.translate.TranslationService;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSegment;
@@ -14,6 +15,8 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class AITemplateGeneratorImpl implements AITemplateGenerator {
@@ -21,6 +24,8 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
     @Autowired
     private VideoAnalysisOrchestrator videoAnalysisOrchestrator;
     
+    @Autowired
+    private TranslationService translationService;
     
     @Autowired
     private KeyframeExtractionService keyframeExtractionService;
@@ -151,6 +156,33 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
                             sceneNumber, segment.getOverlayObjects().size());
             scene.setOverlayType("objects");
             scene.setOverlayObjects(segment.getOverlayObjects());
+            
+            // Translate labels for overlay objects
+            if (translationService != null && scene.getOverlayObjects() != null && !scene.getOverlayObjects().isEmpty()) {
+                var overlayObjects = scene.getOverlayObjects();
+                List<String> labelsToTranslate = overlayObjects.stream()
+                    .map(obj -> obj.getLabel())
+                    .filter(label -> label != null && !label.isEmpty())
+                    .distinct()
+                    .collect(Collectors.toList());
+                
+                if (!labelsToTranslate.isEmpty()) {
+                    // Default to zh-CN for Chinese localization
+                    String targetLocale = (language != null && language.contains("zh")) ? language : "zh-CN";
+                    Map<String, String> translations = translationService.translateLabels(labelsToTranslate, targetLocale);
+                    
+                    // Apply translations to overlay objects
+                    for (var overlay : overlayObjects) {
+                        String translated = translations.get(overlay.getLabel());
+                        if (translated != null) {
+                            overlay.setLabelLocalized(translated);
+                        }
+                    }
+                    
+                    System.out.printf("Scene %d: Translated %d labels to %s%n", 
+                        sceneNumber, labelsToTranslate.size(), targetLocale);
+                }
+            }
         } else {
             // Simple fallback when no objects detected - just keyframe guidance
             System.out.printf("Scene %d: No objects detected, using simple keyframe guidance%n", sceneNumber);
