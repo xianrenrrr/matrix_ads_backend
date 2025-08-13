@@ -7,10 +7,11 @@ import com.example.demo.model.User;
 import com.example.demo.api.ApiResponse;
 import com.example.demo.service.I18nService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 @RestController
@@ -49,53 +50,53 @@ public class GroupController {
 
         // Check if group name already exists for this manager
         List<Invite> existingGroups = inviteDao.findByManagerId(managerId);
-        for (Invite existing : existingGroups) {
-            if (groupName.equals(existing.getGroupName()) && "active".equals(existing.getStatus())) {
-                throw new IllegalArgumentException("Group with this name already exists");
-            }
+        boolean groupExists = existingGroups.stream()
+            .anyMatch(g -> groupName.equals(g.getGroupName()) && "active".equals(g.getStatus()));
+        if (groupExists) {
+            throw new IllegalArgumentException("Group with this name already exists");
         }
 
-            // Generate unique token for joining
-            String token = "group_" + UUID.randomUUID().toString().replace("-", "");
+        // Generate unique token for joining
+        String token = "group_" + UUID.randomUUID().toString().replace("-", "");
 
-            // Create permanent group (no expiration)
-            Invite group = new Invite();
-            group.setManagerId(managerId);
-            group.setManagerName(manager.getUsername() != null ? manager.getUsername() : manager.getEmail());
-            group.setGroupName(groupName);
-            group.setDescription(description);
-            group.setRole("content_creator");
-            group.setToken(token);
-            group.setStatus("active"); // Groups are always active
-            group.setCreatedAt(new Date());
-            group.setUpdatedAt(new Date());
-            group.setExpiresAt(null); // No expiration for groups
-            group.setMemberIds(new ArrayList<>());
-            group.setMemberCount(0);
-            
-            // Set default AI settings
-            group.setAiApprovalThreshold(0.85);
-            group.setAiAutoApprovalEnabled(true);
-            group.setAllowManualOverride(true);
+        // Create permanent group (no expiration)
+        Invite group = new Invite();
+        group.setManagerId(managerId);
+        group.setManagerName(manager.getUsername() != null ? manager.getUsername() : manager.getEmail());
+        group.setGroupName(groupName);
+        group.setDescription(description);
+        group.setRole("content_creator");
+        group.setToken(token);
+        group.setStatus("active");
+        group.setCreatedAt(new Date());
+        group.setUpdatedAt(new Date());
+        group.setExpiresAt(null);
+        group.setMemberIds(new ArrayList<>());
+        group.setMemberCount(0);
+        
+        // Set default AI settings
+        group.setAiApprovalThreshold(0.85);
+        group.setAiAutoApprovalEnabled(true);
+        group.setAllowManualOverride(true);
 
-            inviteDao.save(group);
+        inviteDao.save(group);
 
-            // Generate QR code and invite URLs
-            String qrCodeUrl = generateQRCodeUrl(token);
-            String inviteUrl = generateInviteUrl(token);
+        // Generate QR code and invite URLs
+        String qrCodeUrl = generateQRCodeUrl(token);
+        String inviteUrl = generateInviteUrl(token);
 
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("id", group.getId());
-            responseData.put("groupName", group.getGroupName());
-            responseData.put("description", group.getDescription());
-            responseData.put("managerId", group.getManagerId());
-            responseData.put("token", group.getToken());
-            responseData.put("qrCodeUrl", qrCodeUrl);
-            responseData.put("inviteUrl", inviteUrl);
-            responseData.put("memberCount", group.getMemberCount());
-            responseData.put("aiApprovalThreshold", group.getAiApprovalThreshold());
-            responseData.put("aiAutoApprovalEnabled", group.isAiAutoApprovalEnabled());
-            responseData.put("createdAt", group.getCreatedAt());
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("id", group.getId());
+        responseData.put("groupName", group.getGroupName());
+        responseData.put("description", group.getDescription());
+        responseData.put("managerId", group.getManagerId());
+        responseData.put("token", group.getToken());
+        responseData.put("qrCodeUrl", qrCodeUrl);
+        responseData.put("inviteUrl", inviteUrl);
+        responseData.put("memberCount", group.getMemberCount());
+        responseData.put("aiApprovalThreshold", group.getAiApprovalThreshold());
+        responseData.put("aiAutoApprovalEnabled", group.isAiAutoApprovalEnabled());
+        responseData.put("createdAt", group.getCreatedAt());
 
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
@@ -139,13 +140,13 @@ public class GroupController {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
 
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("groupId", group.getId());
-            responseData.put("groupName", group.getGroupName());
-            responseData.put("token", group.getToken());
-            responseData.put("qrCodeUrl", generateQRCodeUrl(group.getToken()));
-            responseData.put("inviteUrl", generateInviteUrl(group.getToken()));
-            responseData.put("miniProgramPath", "pages/invite/invite?token=" + group.getToken());
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("groupId", group.getId());
+        responseData.put("groupName", group.getGroupName());
+        responseData.put("token", group.getToken());
+        responseData.put("qrCodeUrl", generateQRCodeUrl(group.getToken()));
+        responseData.put("inviteUrl", generateInviteUrl(group.getToken()));
+        responseData.put("miniProgramPath", "pages/signup/signup?token=" + group.getToken());
 
         String message = i18nService.getMessage("qr.generated", language);
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
@@ -239,18 +240,18 @@ public class GroupController {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
 
-            List<Map<String, Object>> members = new ArrayList<>();
-            for (String memberId : group.getMemberIds()) {
-                User user = userDao.findById(memberId);
-                if (user != null) {
-                    Map<String, Object> memberInfo = new HashMap<>();
-                    memberInfo.put("userId", user.getId());
-                    memberInfo.put("email", user.getEmail());
-                    memberInfo.put("username", user.getUsername());
-                    memberInfo.put("joinedAt", group.getAcceptedAt()); // TODO: Track individual join dates
-                    members.add(memberInfo);
-                }
+        List<Map<String, Object>> members = new ArrayList<>();
+        for (String memberId : group.getMemberIds()) {
+            User user = userDao.findById(memberId);
+            if (user != null) {
+                Map<String, Object> memberInfo = new HashMap<>();
+                memberInfo.put("userId", user.getId());
+                memberInfo.put("email", user.getEmail());
+                memberInfo.put("username", user.getUsername());
+                memberInfo.put("joinedAt", group.getCreatedAt());
+                members.add(memberInfo);
             }
+        }
 
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, members));
@@ -268,32 +269,32 @@ public class GroupController {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
 
-            // Update AI settings
-            if (aiSettings.containsKey("aiApprovalThreshold")) {
-                Object thresholdObj = aiSettings.get("aiApprovalThreshold");
-                double threshold = thresholdObj instanceof Number ? 
-                    ((Number) thresholdObj).doubleValue() : 
-                    Double.parseDouble(thresholdObj.toString());
-                group.setAiApprovalThreshold(threshold);
-            }
-            if (aiSettings.containsKey("aiAutoApprovalEnabled")) {
-                group.setAiAutoApprovalEnabled((Boolean) aiSettings.get("aiAutoApprovalEnabled"));
-            }
-            if (aiSettings.containsKey("allowManualOverride")) {
-                group.setAllowManualOverride((Boolean) aiSettings.get("allowManualOverride"));
-            }
-            if (aiSettings.containsKey("sceneThresholds")) {
-                @SuppressWarnings("unchecked")
-                Map<String, Double> sceneThresholds = (Map<String, Double>) aiSettings.get("sceneThresholds");
-                group.setSceneThresholds(sceneThresholds);
-            }
+        // Update AI settings
+        if (aiSettings.containsKey("aiApprovalThreshold")) {
+            Object thresholdObj = aiSettings.get("aiApprovalThreshold");
+            double threshold = thresholdObj instanceof Number ? 
+                ((Number) thresholdObj).doubleValue() : 
+                Double.parseDouble(thresholdObj.toString());
+            group.setAiApprovalThreshold(threshold);
+        }
+        if (aiSettings.containsKey("aiAutoApprovalEnabled")) {
+            group.setAiAutoApprovalEnabled((Boolean) aiSettings.get("aiAutoApprovalEnabled"));
+        }
+        if (aiSettings.containsKey("allowManualOverride")) {
+            group.setAllowManualOverride((Boolean) aiSettings.get("allowManualOverride"));
+        }
+        if (aiSettings.containsKey("sceneThresholds")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Double> sceneThresholds = (Map<String, Double>) aiSettings.get("sceneThresholds");
+            group.setSceneThresholds(sceneThresholds);
+        }
 
-            inviteDao.update(group);
+        inviteDao.update(group);
 
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("aiApprovalThreshold", group.getAiApprovalThreshold());
-            responseData.put("aiAutoApprovalEnabled", group.isAiAutoApprovalEnabled());
-            responseData.put("allowManualOverride", group.isAllowManualOverride());
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("aiApprovalThreshold", group.getAiApprovalThreshold());
+        responseData.put("aiAutoApprovalEnabled", group.isAiAutoApprovalEnabled());
+        responseData.put("allowManualOverride", group.isAllowManualOverride());
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }
@@ -308,47 +309,26 @@ public class GroupController {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
 
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("groupId", group.getId());
-            responseData.put("groupName", group.getGroupName());
-            responseData.put("aiSettings", Map.of(
-                "aiApprovalThreshold", group.getAiApprovalThreshold(),
-                "aiAutoApprovalEnabled", group.isAiAutoApprovalEnabled(),
-                "allowManualOverride", group.isAllowManualOverride(),
-                "sceneThresholds", group.getSceneThresholds()
-            ));
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("groupId", group.getId());
+        responseData.put("groupName", group.getGroupName());
+        responseData.put("aiSettings", Map.of(
+            "aiApprovalThreshold", group.getAiApprovalThreshold(),
+            "aiAutoApprovalEnabled", group.isAiAutoApprovalEnabled(),
+            "allowManualOverride", group.isAllowManualOverride(),
+            "sceneThresholds", group.getSceneThresholds()
+        ));
 
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }
 
-    // Helper methods
     private String generateQRCodeUrl(String token) {
-        // FIXED: Generate QR code for WeChat mini-program compatibility
-        // 
-        // ISSUE: Previous implementation used web URL which caused "二维码无效" error
-        // SOLUTION: Use WeChat-compatible mini-program format
-        // 
-        // TODO for production: Use WeChat's official QR code API:
-        // POST https://api.weixin.qq.com/wxa/getwxacodeunlimit
-        // This requires:
-        // 1. WeChat Mini Program app_id and app_secret
-        // 2. Valid access_token from WeChat
-        // 3. Proper scene parameter encoding
-        
-        String miniProgramPath = "pages/invite/invite?token=" + token;
-        
-        // Temporary fix: Create WeChat-recognizable format
-        // WeChat can recognize certain URL patterns as mini-program deep links
-        String wechatMiniProgramUrl = "weixin://dl/business/?t=" + 
-                                     java.util.Base64.getEncoder().encodeToString(miniProgramPath.getBytes());
-        
+        String miniProgramPath = "pages/signup/signup?token=" + token;
         try {
-            String encodedData = java.net.URLEncoder.encode(wechatMiniProgramUrl, java.nio.charset.StandardCharsets.UTF_8);
-            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + encodedData;
+            String encodedPath = URLEncoder.encode(miniProgramPath, StandardCharsets.UTF_8);
+            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + encodedPath;
         } catch (Exception e) {
-            System.err.println("Error encoding QR code data: " + e.getMessage());
-            // Fallback: Direct mini-program path (may still need WeChat API)
             return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + miniProgramPath;
         }
     }
