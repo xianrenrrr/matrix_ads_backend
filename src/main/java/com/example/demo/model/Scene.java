@@ -33,6 +33,8 @@ public class Scene {
     private String sceneSource;  // "manual" | "ai" - how the scene was created
     private String overlayType;  // "grid" | "objects" - how to render guidance
     private List<ObjectOverlay> overlayObjects;  // only when overlayType="objects"
+    private List<LegendItem> legend;  // color-coded legend for overlays
+    private String sourceAspect;  // e.g., "9:16" for mini-app pixel mapping
     
     // Inner class for object overlay data
     public static class ObjectOverlay {
@@ -319,6 +321,22 @@ public class Scene {
     
     public void setOverlayObjects(List<ObjectOverlay> overlayObjects) {
         this.overlayObjects = overlayObjects;
+    }
+    
+    public List<LegendItem> getLegend() {
+        return legend;
+    }
+    
+    public void setLegend(List<LegendItem> legend) {
+        this.legend = legend;
+    }
+    
+    public String getSourceAspect() {
+        return sourceAspect;
+    }
+    
+    public void setSourceAspect(String sourceAspect) {
+        this.sourceAspect = sourceAspect;
     }
 }
 // Change Log: Added dual scene system fields (sceneSource, overlayType, overlayObjects) for object overlay support
