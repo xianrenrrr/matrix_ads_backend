@@ -1,10 +1,9 @@
 package com.example.demo.ai.template;
 
 import com.example.demo.ai.guidance.OverlayLegendService;
-import com.example.demo.ai.orchestrator.VideoAnalysisOrchestrator;
+import com.example.demo.ai.scenes.FFmpegSceneDetectionService;
 import com.example.demo.ai.shared.KeyframeExtractionService;
 import com.example.demo.ai.shared.VideoSummaryService;
-import com.example.demo.ai.translate.TranslationService;
 import com.example.demo.ai.vision.ObjectLocalizationService;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Scene;
@@ -17,17 +16,13 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 public class AITemplateGeneratorImpl implements AITemplateGenerator {
 
     @Autowired
-    private VideoAnalysisOrchestrator videoAnalysisOrchestrator;
+    private FFmpegSceneDetectionService sceneDetectionService;
     
-    @Autowired
-    private TranslationService translationService;
     
     @Autowired
     private ObjectLocalizationService objectLocalizationService;
@@ -57,15 +52,13 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
         System.out.printf("Starting AI template generation for video ID: %s in language: %s%n", video.getId(), language);
 
         try {
-            // Step 1: Analyze video using orchestrator (multi-pass approach)
-            System.out.println("Step 1: Analyzing video with orchestrator...");
+            // Step 1: Detect scenes using FFmpeg (Chinese-first workflow)
+            System.out.println("Step 1: Detecting scenes with FFmpeg...");
             
-            // Convert video URL to GCS URI if needed
             String videoUrl = video.getUrl();
-            String gcsUri = toGcsUri(videoUrl);
             
-            // Use orchestrator for centralized VI calls
-            List<SceneSegment> sceneSegments = videoAnalysisOrchestrator.analyze(gcsUri);
+            // Use FFmpeg for scene detection instead of Google Video Intelligence
+            List<SceneSegment> sceneSegments = sceneDetectionService.detectScenes(videoUrl);
             
             if (sceneSegments.isEmpty()) {
                 System.out.println("No scenes detected, creating fallback template");
@@ -165,32 +158,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
             scene.setOverlayType("objects");
             scene.setOverlayObjects(segment.getOverlayObjects());
             
-            // Translate labels for overlay objects
-            if (translationService != null && scene.getOverlayObjects() != null && !scene.getOverlayObjects().isEmpty()) {
-                var overlayObjects = scene.getOverlayObjects();
-                List<String> labelsToTranslate = overlayObjects.stream()
-                    .map(obj -> obj.getLabel())
-                    .filter(label -> label != null && !label.isEmpty())
-                    .distinct()
-                    .collect(Collectors.toList());
-                
-                if (!labelsToTranslate.isEmpty()) {
-                    // Default to zh-CN for Chinese localization
-                    String targetLocale = (language != null && language.contains("zh")) ? language : "zh-CN";
-                    Map<String, String> translations = translationService.translateLabels(labelsToTranslate, targetLocale);
-                    
-                    // Apply translations to overlay objects
-                    for (var overlay : overlayObjects) {
-                        String translated = translations.get(overlay.getLabel());
-                        if (translated != null) {
-                            overlay.setLabelLocalized(translated);
-                        }
-                    }
-                    
-                    System.out.printf("Scene %d: Translated %d labels to %s%n", 
-                        sceneNumber, labelsToTranslate.size(), targetLocale);
-                }
-            }
+            // Labels are now in Chinese directly from AI models, no translation needed
             
             // Generate legend for AI scenes with objects
             String targetLocale = (language != null && language.contains("zh")) ? language : "zh-CN";
@@ -230,30 +198,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
                                 scene.setOverlayPolygons(polygons);
                                 scene.setOverlayObjects(null); // Clear boxes since we have polygons
                                 
-                                // Translate polygon labels
-                                if (translationService != null) {
-                                    List<String> labelsToTranslate = polygons.stream()
-                                        .map(p -> p.getLabel())
-                                        .filter(label -> label != null && !label.isEmpty())
-                                        .distinct()
-                                        .collect(Collectors.toList());
-                                    
-                                    if (!labelsToTranslate.isEmpty()) {
-                                        String targetLocale = (language != null && language.contains("zh")) ? language : "zh-CN";
-                                        Map<String, String> translations = translationService.translateLabels(labelsToTranslate, targetLocale);
-                                        
-                                        // Apply translations to polygons
-                                        for (var polygon : polygons) {
-                                            String translated = translations.get(polygon.getLabel());
-                                            if (translated != null) {
-                                                polygon.setLabelLocalized(translated);
-                                            }
-                                        }
-                                        
-                                        System.out.printf("Scene %d: Translated %d polygon labels to %s%n", 
-                                            sceneNumber, labelsToTranslate.size(), targetLocale);
-                                    }
-                                }
+                                // Polygon labels are now in Chinese directly from AI models
                             } else {
                                 System.out.printf("Scene %d: No polygons detected from keyframe%n", sceneNumber);
                             }
@@ -333,26 +278,5 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
         return template;
     }
     
-    /**
-     * Converts a video URL to GCS URI format for Video Intelligence API
-     */
-    private String toGcsUri(String videoUrl) {
-        if (videoUrl == null || videoUrl.isBlank()) return videoUrl;
-        if (videoUrl.startsWith("gs://")) return videoUrl;
-        
-        String httpsPrefix = "https://storage.googleapis.com/";
-        if (videoUrl.startsWith(httpsPrefix)) {
-            // https://storage.googleapis.com/<bucket>/<object>
-            return "gs://" + videoUrl.substring(httpsPrefix.length());
-        }
-        
-        // If caller passed just an object path, attach default bucket
-        if (!videoUrl.contains("://")) {
-            return "gs://" + bucketName + "/" + videoUrl.replaceFirst("^/", "");
-        }
-        
-        // Fallback: return as-is (the API may reject non-GCS URIs)
-        return videoUrl;
-    }
 }
 // Change Log: Removed block grid services, simplified to use AI object detection only
