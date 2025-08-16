@@ -1,7 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.dao.UserDao;
-import com.example.demo.dao.InviteDao;
+import com.example.demo.dao.GroupDao;
 import com.example.demo.model.User;
 import com.example.demo.model.Invite;
 import com.example.demo.service.I18nService;
@@ -22,7 +22,7 @@ public class AuthController {
     private UserDao userDao;
     
     @Autowired
-    private InviteDao inviteDao;
+    private GroupDao inviteDao;
     
     
     @Autowired

@@ -5,15 +5,14 @@ import com.example.demo.dao.UserDao;
 import com.example.demo.dao.SceneSubmissionDao;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.SceneSubmission;
-import com.example.demo.service.TemplateSubscriptionService;
 import com.example.demo.api.ApiResponse;
 import com.example.demo.service.I18nService;
+import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/content-manager/templates")
@@ -131,8 +130,6 @@ public class ContentManager {
     private final TemplateDao templateDao;
     private final UserDao userDao;
     
-    @Autowired
-    private TemplateSubscriptionService templateSubscriptionService;
 
     @Autowired
     public ContentManager(TemplateDao templateDao, UserDao userDao) {
@@ -161,35 +158,31 @@ public class ContentManager {
         
         // Create the template
         String templateId = templateDao.createTemplate(manualTemplate);
-        userDao.addCreatedTemplate(userId, templateId); // Add templateId to created_template field in user doc
+        userDao.addCreatedTemplate(userId, templateId);
         
-        // If groups are selected, assign the template to all members of those groups using batch subscription
-        int totalMembersAssigned = 0;
+        // Store group assignments directly in template document
         List<String> assignedGroupNames = new ArrayList<>();
-        
         if (selectedGroupIds != null && !selectedGroupIds.isEmpty()) {
-            // Use shared batch subscription service
-            TemplateSubscriptionService.SubscriptionResult result = 
-                templateSubscriptionService.batchSubscribeToTemplate(templateId, selectedGroupIds);
-            
-            totalMembersAssigned = result.getTotalUsersAffected();
-            assignedGroupNames = result.getProcessedGroups();
+            // Update template with assigned groups
+            DocumentReference templateRef = db.collection("templates").document(templateId);
+            templateRef.update("assignedGroups", selectedGroupIds);
+            assignedGroupNames = selectedGroupIds;
         }
         
-        // Prepare response with assignment details
+        // Prepare response
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("template", manualTemplate);
         responseData.put("templateId", templateId);
         responseData.put("assignedGroups", assignedGroupNames);
-        responseData.put("totalMembersAssigned", totalMembersAssigned);
         
         String message = i18nService.getMessage("template.created", language);
-        if (totalMembersAssigned > 0) {
-            message += " and assigned to " + totalMembersAssigned + " content creators across " + assignedGroupNames.size() + " groups";
+        if (!assignedGroupNames.isEmpty()) {
+            message += " and made available to " + assignedGroupNames.size() + " groups";
         }
         
         return new ResponseEntity<>(ApiResponse.ok(message, responseData), HttpStatus.CREATED);
     }
+    
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<ApiResponse<List<TemplateSummary>>> getTemplatesByUserId(@PathVariable String userId,
@@ -315,7 +308,7 @@ public class ContentManager {
         public void setRole(String role) { this.role = role; }
     }
 
-        // TODO: Get groups managed by a user - will be reimplemented using InviteDao
+        // TODO: Get groups managed by a user - will be reimplemented using GroupDao
     // @GetMapping("/groups/manager/{managerId}")
     // public ResponseEntity<List<Map<String, Object>>> getGroupsByManager(@PathVariable String managerId) {
         // TODO: Temporarily disabled during Group model removal

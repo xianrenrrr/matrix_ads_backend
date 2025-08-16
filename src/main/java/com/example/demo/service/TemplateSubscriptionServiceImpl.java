@@ -1,7 +1,7 @@
 package com.example.demo.service;
 
 import com.example.demo.dao.UserDao;
-import com.example.demo.dao.InviteDao;
+import com.example.demo.dao.GroupDao;
 import com.example.demo.model.Invite;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -12,7 +12,7 @@ import java.util.*;
 public class TemplateSubscriptionServiceImpl implements TemplateSubscriptionService {
     
     @Autowired
-    private InviteDao inviteDao;
+    private GroupDao GroupDao;
     
     @Autowired
     private UserDao userDao;
@@ -29,7 +29,7 @@ public class TemplateSubscriptionServiceImpl implements TemplateSubscriptionServ
         for (String groupId : groupIds) {
             try {
                 String cleanGroupId = groupId.trim();
-                Invite group = inviteDao.findById(cleanGroupId); // Now using Invite as Group
+                Invite group = GroupDao.findById(cleanGroupId); // Now using Invite as Group
                 
                 if (group != null && group.getMemberIds() != null && !group.getMemberIds().isEmpty()) {
                     int groupMemberCount = 0;
@@ -82,7 +82,7 @@ public class TemplateSubscriptionServiceImpl implements TemplateSubscriptionServ
         for (String groupId : groupIds) {
             try {
                 String cleanGroupId = groupId.trim();
-                Invite group = inviteDao.findById(cleanGroupId); // Now using Invite as Group
+                Invite group = GroupDao.findById(cleanGroupId); // Now using Invite as Group
                 
                 if (group != null && group.getMemberIds() != null) {
                     int groupMemberCount = 0;

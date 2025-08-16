@@ -7,31 +7,30 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 @Repository
-public class InviteDaoImpl implements InviteDao {
+public class GroupDaoImpl implements GroupDao {
     
     @Autowired
     private Firestore db;
 
-    private static final String COLLECTION_NAME = "invites";
+    private static final String COLLECTION_NAME = "groups";
 
     @Override
     public void save(Invite invite) {
         try {
-            CollectionReference invitesRef = db.collection(COLLECTION_NAME);
+            CollectionReference groupsRef = db.collection(COLLECTION_NAME);
             if (invite.getId() == null || invite.getId().isEmpty()) {
-                // Auto-generate ID for new invites
-                DocumentReference docRef = invitesRef.document();
+                // Auto-generate ID for new groups
+                DocumentReference docRef = groupsRef.document();
                 invite.setId(docRef.getId());
             }
-            ApiFuture<WriteResult> result = invitesRef.document(invite.getId()).set(invite);
+            ApiFuture<WriteResult> result = groupsRef.document(invite.getId()).set(invite);
             result.get(); // Wait for completion
         } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Failed to save invite", e);
+            throw new RuntimeException("Failed to save group", e);
         }
     }
 
@@ -39,28 +38,28 @@ public class InviteDaoImpl implements InviteDao {
     public void update(Invite invite) {
         try {
             if (invite.getId() == null || invite.getId().isEmpty()) {
-                throw new IllegalArgumentException("Invite ID cannot be null or empty for update");
+                throw new IllegalArgumentException("Group ID cannot be null or empty for update");
             }
-            CollectionReference invitesRef = db.collection(COLLECTION_NAME);
-            ApiFuture<WriteResult> result = invitesRef.document(invite.getId()).set(invite);
+            CollectionReference groupsRef = db.collection(COLLECTION_NAME);
+            ApiFuture<WriteResult> result = groupsRef.document(invite.getId()).set(invite);
             result.get(); // Wait for completion
         } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Failed to update invite", e);
+            throw new RuntimeException("Failed to update group", e);
         }
     }
 
     @Override
     public Invite findByToken(String token) {
         try {
-            CollectionReference invitesRef = db.collection(COLLECTION_NAME);
-            Query query = invitesRef.whereEqualTo("token", token).limit(1);
+            CollectionReference groupsRef = db.collection(COLLECTION_NAME);
+            Query query = groupsRef.whereEqualTo("token", token).limit(1);
             ApiFuture<QuerySnapshot> querySnapshot = query.get();
             for (DocumentSnapshot document : querySnapshot.get().getDocuments()) {
                 return document.toObject(Invite.class);
             }
             return null;
         } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Failed to fetch invite by token", e);
+            throw new RuntimeException("Failed to fetch group by token", e);
         }
     }
 
@@ -75,24 +74,24 @@ public class InviteDaoImpl implements InviteDao {
             }
             return null;
         } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Failed to fetch invite by ID", e);
+            throw new RuntimeException("Failed to fetch group by ID", e);
         }
     }
 
     @Override
     public List<Invite> findByManagerId(String managerId) {
         try {
-            CollectionReference invitesRef = db.collection(COLLECTION_NAME);
-            Query query = invitesRef.whereEqualTo("managerId", managerId);
+            CollectionReference groupsRef = db.collection(COLLECTION_NAME);
+            Query query = groupsRef.whereEqualTo("managerId", managerId);
             ApiFuture<QuerySnapshot> querySnapshot = query.get();
             
-            List<Invite> invites = new ArrayList<>();
+            List<Invite> groups = new ArrayList<>();
             for (DocumentSnapshot document : querySnapshot.get().getDocuments()) {
-                invites.add(document.toObject(Invite.class));
+                groups.add(document.toObject(Invite.class));
             }
-            return invites;
+            return groups;
         } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Failed to fetch invites by manager ID", e);
+            throw new RuntimeException("Failed to fetch groups by manager ID", e);
         }
     }
 
@@ -100,17 +99,17 @@ public class InviteDaoImpl implements InviteDao {
     @Override
     public List<Invite> findByStatus(String status) {
         try {
-            CollectionReference invitesRef = db.collection(COLLECTION_NAME);
-            Query query = invitesRef.whereEqualTo("status", status);
+            CollectionReference groupsRef = db.collection(COLLECTION_NAME);
+            Query query = groupsRef.whereEqualTo("status", status);
             ApiFuture<QuerySnapshot> querySnapshot = query.get();
             
-            List<Invite> invites = new ArrayList<>();
+            List<Invite> groups = new ArrayList<>();
             for (DocumentSnapshot document : querySnapshot.get().getDocuments()) {
-                invites.add(document.toObject(Invite.class));
+                groups.add(document.toObject(Invite.class));
             }
-            return invites;
+            return groups;
         } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Failed to fetch invites by status", e);
+            throw new RuntimeException("Failed to fetch groups by status", e);
         }
     }
 
@@ -120,7 +119,7 @@ public class InviteDaoImpl implements InviteDao {
             ApiFuture<WriteResult> writeResult = db.collection(COLLECTION_NAME).document(id).delete();
             writeResult.get(); // Wait for completion
         } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Failed to delete invite", e);
+            throw new RuntimeException("Failed to delete group", e);
         }
     }
 
@@ -131,7 +130,27 @@ public class InviteDaoImpl implements InviteDao {
             ApiFuture<WriteResult> result = docRef.update("status", status);
             result.get(); // Wait for completion
         } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Failed to update invite status", e);
+            throw new RuntimeException("Failed to update group status", e);
+        }
+    }
+    
+    @Override
+    public String getUserGroupId(String userId) {
+        try {
+            Query query = db.collection(COLLECTION_NAME)
+                .whereEqualTo("recipientEmail", userId)
+                .whereEqualTo("status", "accepted")
+                .limit(1);
+                
+            ApiFuture<QuerySnapshot> querySnapshot = query.get();
+            QuerySnapshot snapshot = querySnapshot.get();
+            
+            if (!snapshot.isEmpty()) {
+                return snapshot.getDocuments().get(0).getString("groupId");
+            }
+            return null;
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Failed to get user group ID", e);
         }
     }
 }

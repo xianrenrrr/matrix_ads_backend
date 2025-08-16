@@ -164,8 +164,8 @@ public class CiTestConfig {
 
     @Bean
     @Primary
-    public InviteDao inviteDao() {
-        return Mockito.mock(InviteDao.class);
+    public GroupDao GroupDao() {
+        return Mockito.mock(GroupDao.class);
     }
 
     // Helper methods
