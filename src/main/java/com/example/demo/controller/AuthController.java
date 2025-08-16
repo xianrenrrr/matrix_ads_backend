@@ -9,7 +9,6 @@ import com.example.demo.api.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatus;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -22,7 +21,7 @@ public class AuthController {
     private UserDao userDao;
     
     @Autowired
-    private GroupDao inviteDao;
+    private GroupDao groupDao;
     
     
     @Autowired
@@ -58,9 +57,10 @@ public class AuthController {
         }
             
             user.setId(UUID.randomUUID().toString());
-            // Initialize fields based on role for db.md compatibility
+            // Initialize fields based on role 
             if ("content_creator".equals(user.getRole())) {
-                user.setSubscribed_Templates(new java.util.HashMap<>()); // Map<String, Boolean>
+                // Content creators don't have subscriptions - they get assigned through groups
+                user.setSubscribed_Templates(new java.util.HashMap<>()); // Empty for compatibility
             } else if ("content_manager".equals(user.getRole())) {
                 user.setCreated_Templates(new java.util.HashMap<>()); // Map<String, Boolean>
             }
@@ -148,7 +148,7 @@ public class AuthController {
                                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
-        Invite invite = inviteDao.findByToken(token);
+        Invite invite = groupDao.findByToken(token);
         if (invite == null) {
             throw new NoSuchElementException("Invite not found with token: " + token);
         }
@@ -207,7 +207,7 @@ public class AuthController {
         }
 
         // Validate invite
-        Invite invite = inviteDao.findByToken(inviteToken);
+        Invite invite = groupDao.findByToken(inviteToken);
         
         // Since invites are permanent now, just check if it exists and is active
         if (invite == null) {
@@ -263,7 +263,8 @@ public class AuthController {
 
             // Initialize fields based on role
             if ("content_creator".equals(user.getRole())) {
-                user.setSubscribed_Templates(new HashMap<>());
+                // Content creators don't have subscriptions - they get assigned through groups
+                user.setSubscribed_Templates(new HashMap<>()); // Empty for compatibility
             } else if ("content_manager".equals(user.getRole())) {
                 user.setCreated_Templates(new HashMap<>());
             }
@@ -278,7 +279,7 @@ public class AuthController {
                 invite.addMember(user.getId());
                 
                 // Update the invite with the new member
-                inviteDao.update(invite);
+                groupDao.update(invite);
                 
                 System.out.println("User " + user.getId() + " added to group " + invite.getGroupName());
             }

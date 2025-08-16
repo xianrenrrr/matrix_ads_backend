@@ -144,6 +144,23 @@ public class TemplateDaoImpl implements TemplateDao {
     }
 
     @Override
+    public List<ManualTemplate> getTemplatesAssignedToGroup(String groupId) throws ExecutionException, InterruptedException {
+        checkFirestore();
+        Query query = db.collection("templates").whereArrayContains("assignedGroups", groupId);
+        QuerySnapshot snapshot = query.get().get();
+        
+        List<ManualTemplate> templates = new ArrayList<>();
+        for (DocumentSnapshot doc : snapshot.getDocuments()) {
+            ManualTemplate template = doc.toObject(ManualTemplate.class);
+            if (template != null) {
+                template.setId(doc.getId());
+                templates.add(template);
+            }
+        }
+        return templates;
+    }
+
+    @Override
     public boolean deleteTemplate(String id) {
         if (id == null || id.isEmpty()) {
             throw new IllegalArgumentException("Template ID must not be null or empty for delete.");
