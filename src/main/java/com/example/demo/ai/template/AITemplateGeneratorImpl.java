@@ -9,6 +9,8 @@ import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSegment;
 import com.example.demo.model.Video;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,7 @@ import java.util.List;
 
 @Service
 public class AITemplateGeneratorImpl implements AITemplateGenerator {
+    private static final Logger log = LoggerFactory.getLogger(AITemplateGeneratorImpl.class);
 
     @Autowired
     private FFmpegSceneDetectionService sceneDetectionService;
@@ -49,11 +52,11 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
     
     @Override
     public ManualTemplate generateTemplate(Video video, String language) {
-        System.out.printf("Starting AI template generation for video ID: %s in language: %s%n", video.getId(), language);
+        log.info("Starting AI template generation for video ID: {} in language: {}", video.getId(), language);
 
         try {
             // Step 1: Detect scenes using FFmpeg (Chinese-first workflow)
-            System.out.println("Step 1: Detecting scenes with FFmpeg...");
+            log.info("Step 1: Detecting scenes with FFmpeg...");
             
             String videoUrl = video.getUrl();
             
@@ -61,18 +64,18 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
             List<SceneSegment> sceneSegments = sceneDetectionService.detectScenes(videoUrl);
             
             if (sceneSegments.isEmpty()) {
-                System.out.println("No scenes detected, creating fallback template");
+                log.info("No scenes detected, creating fallback template");
                 return createFallbackTemplate(video);
             }
 
             // Step 2: Process each scene
-            System.out.printf("Step 2: Processing %d detected scenes...%n", sceneSegments.size());
+            log.info("Step 2: Processing {} detected scenes", sceneSegments.size());
             List<Scene> scenes = new ArrayList<>();
             List<String> allSceneLabels = new ArrayList<>();
 
             for (int i = 0; i < sceneSegments.size(); i++) {
                 SceneSegment segment = sceneSegments.get(i);
-                System.out.printf("Processing scene %d/%d with language: %s%n", i + 1, sceneSegments.size(), language);
+                log.info("Processing scene {}/{} with language: {}", i + 1, sceneSegments.size(), language);
                 
                 Scene scene = processScene(segment, i + 1, video.getUrl(), language);
                 scenes.add(scene);
@@ -84,7 +87,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
             }
 
             // Step 3: Create the template
-            System.out.println("Step 3: Creating final template...");
+            log.info("Step 3: Creating final template...");
             ManualTemplate template = new ManualTemplate();
             template.setVideoId(video.getId());
             template.setUserId(video.getUserId());
@@ -96,8 +99,8 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
             template.setTotalVideoLength(calculateTotalDuration(sceneSegments));
             
             // LOG: These are preset values, not AI-generated
-            System.out.println("=== AI TEMPLATE DEFAULT VALUES (NOT AI-GENERATED) ===");
-            System.out.println("Setting preset values for videoPurpose, tone, etc.");
+            log.info("=== AI TEMPLATE DEFAULT VALUES (NOT AI-GENERATED) ===");
+            log.info("Setting preset values for videoPurpose, tone, etc.");
             
             template.setVideoPurpose("Product demonstration and promotion");
             template.setTone("Professional");
@@ -105,138 +108,55 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
             template.setBackgroundMusic("Soft instrumental or ambient music");
 
             // Step 4: Generate summary (optional) - simplified without block descriptions
-            System.out.println("Step 4: Generating video summary...");
+            log.info("Step 4: Generating video summary...");
             String summary = videoSummaryService.generateSummary(video, allSceneLabels, new HashMap<>(), language);
-            System.out.printf("Generated summary: %s%n", summary);
+            log.info("Generated summary: {}", summary);
             
-            System.out.printf("AI template generation completed for video ID: %s with %d scenes%n", 
+            log.info("AI template generation completed for video ID: {} with {} scenes", 
                              video.getId(), scenes.size());
             return template;
 
         } catch (Exception e) {
-            System.err.printf("Error in AI template generation for video ID %s: %s%n", video.getId(), e.getMessage());
-            e.printStackTrace();
+            log.error("Error in AI template generation for video ID {}: {}", video.getId(), e.getMessage(), e);
             return createFallbackTemplate(video);
         }
     }
 
     private Scene processScene(SceneSegment segment, int sceneNumber, String videoUrl, String language) {
-        Scene scene = new Scene();
-        scene.setSceneNumber(sceneNumber);
-        scene.setSceneTitle("Scene " + sceneNumber);
+        // Create base scene with clean data
+        Scene scene = SceneProcessor.createFromSegment(segment, sceneNumber);
         
-        // Mark as AI-generated scene
-        scene.setSceneSource("ai");
-
-        // Cache start/end and compute duration safely
+        // Extract keyframe if possible
+        String keyframeUrl = extractKeyframe(scene, segment, videoUrl);
+        if (keyframeUrl != null) {
+            scene.setKeyframeUrl(keyframeUrl);
+            scene.setExampleFrame(keyframeUrl);
+        }
+        
+        // Process overlays in a clean, separated way
+        OverlayProcessor overlayProcessor = new OverlayProcessor(
+            objectLocalizationService, overlayLegendService);
+        overlayProcessor.processOverlays(scene, segment, keyframeUrl);
+        
+        return scene;
+    }
+    
+    private String extractKeyframe(Scene scene, SceneSegment segment, String videoUrl) {
         var start = segment.getStartTime();
         var end = segment.getEndTime();
-        scene.setStartTime(start);
-        scene.setEndTime(end);
-        long durationSec = 0L;
-        if (start != null && end != null) {
-            try {
-                durationSec = Math.max(0L, end.minus(start).getSeconds());
-            } catch (Exception ignored) {
-                durationSec = 0L;
-            }
-        }
-        scene.setSceneDurationInSeconds(durationSec);
-
-        // Person/labels (null-safe)
-        scene.setPresenceOfPerson(segment.isPersonPresent());
-        var labels = segment.getLabels();
-        scene.setScriptLine(labels == null || labels.isEmpty() ? "" : String.join(", ", labels));
         
-        // AI scenes now always use object overlay detection from our orchestrator
-        boolean hasObjects = segment.getOverlayObjects() != null && !segment.getOverlayObjects().isEmpty();
-        
-        if (hasObjects) {
-            // Use object overlay mode with AI-detected objects
-            System.out.printf("Scene %d: Using AI object overlay with %d objects%n", 
-                            sceneNumber, segment.getOverlayObjects().size());
-            scene.setOverlayType("objects");
-            scene.setOverlayObjects(segment.getOverlayObjects());
-            
-            // Labels are now in Chinese directly from AI models, no translation needed
-            
-            // Generate legend for AI scenes with objects
-            String targetLocale = (language != null && language.contains("zh")) ? language : "zh-CN";
-            scene.setLegend(overlayLegendService.buildLegend(scene, targetLocale));
-            scene.setSourceAspect("9:16");  // MVP: force portrait, OK for your use case
-            
-            System.out.printf("Scene %d: Generated legend with %d items%n", 
-                            sceneNumber, scene.getLegend().size());
-        } else {
-            // Simple fallback when no objects detected - just keyframe guidance
-            System.out.printf("Scene %d: No objects detected, using simple keyframe guidance%n", sceneNumber);
-            scene.setOverlayType("grid");
-            // Set minimal grid overlay for compatibility
-            scene.setScreenGridOverlay(java.util.List.of(5)); // Center grid only
+        if (start == null || end == null || end.compareTo(start) <= 0) {
+            return null;
         }
         
-        // Extract keyframe for all scenes (for reference display)
         try {
-            if (start != null && end != null && end.compareTo(start) > 0) {
-                System.out.printf("Extracting keyframe for scene %d...%n", sceneNumber);
-                String keyframeUrl = keyframeExtractionService.extractKeyframe(videoUrl, start, end);
-                if (keyframeUrl != null && !keyframeUrl.isBlank()) {
-                    scene.setKeyframeUrl(keyframeUrl);
-                    scene.setExampleFrame(keyframeUrl);
-                    
-                    // Try to detect polygons from keyframe if enabled
-                    if (objectLocalizationService != null) {
-                        try {
-                            System.out.printf("Detecting polygons from keyframe for scene %d...%n", sceneNumber);
-                            var polygons = objectLocalizationService.detectObjectPolygons(keyframeUrl);
-                            
-                            if (!polygons.isEmpty()) {
-                                // Prefer polygons over bounding boxes
-                                System.out.printf("Scene %d: Found %d polygon shapes, switching to polygon mode%n", 
-                                    sceneNumber, polygons.size());
-                                scene.setOverlayType("polygons");
-                                scene.setOverlayPolygons(polygons);
-                                scene.setOverlayObjects(null); // Clear boxes since we have polygons
-                                
-                                // Polygon labels are now in Chinese directly from AI models
-                            } else {
-                                System.out.printf("Scene %d: No polygons detected from keyframe%n", sceneNumber);
-                            }
-                        } catch (Exception e) {
-                            System.err.printf("Error detecting polygons for scene %d: %s%n", sceneNumber, e.getMessage());
-                        }
-                    }
-                }
-            }
+            log.info("Extracting keyframe for scene {}...", scene.getSceneNumber());
+            return keyframeExtractionService.extractKeyframe(videoUrl, start, end);
         } catch (Exception e) {
-            System.err.printf("Error extracting keyframe for scene %d: %s%n", sceneNumber, e.getMessage());
+            log.error("Keyframe extraction failed for scene {}: {}", 
+                     scene.getSceneNumber(), e.getMessage());
+            return null;
         }
-
-        // Generate legend for overlays (after all overlay processing is complete)
-        if (overlayLegendService != null && scene.getOverlayType() != null && !scene.getOverlayType().equals("grid")) {
-            String targetLocale = (language != null && language.contains("zh")) ? language : "zh-CN";
-            var legend = overlayLegendService.buildLegend(scene, targetLocale);
-            scene.setLegend(legend);
-            
-            if (!legend.isEmpty()) {
-                System.out.printf("Scene %d: Generated legend with %d items (first color: %s)%n", 
-                    sceneNumber, legend.size(), legend.get(0).getColorHex());
-            }
-        }
-        
-        // Set source aspect ratio (default to portrait for MVP)
-        scene.setSourceAspect("9:16");
-
-        // Intelligent defaults based on analysis
-        scene.setDeviceOrientation("Phone (Portrait 9:16)");
-        scene.setPersonPosition(segment.isPersonPresent() ? "Center" : "No Preference");
-        scene.setPreferredGender("No Preference");
-        scene.setMovementInstructions("Static");
-        scene.setBackgroundInstructions("Use similar background as shown in example frame");
-        scene.setSpecificCameraInstructions("Follow the framing shown in the example");
-        scene.setAudioNotes("Clear speech, match the tone of the scene");
-
-        return scene;
     }
 
     private int calculateTotalDuration(List<SceneSegment> segments) {
@@ -246,7 +166,7 @@ public class AITemplateGeneratorImpl implements AITemplateGenerator {
     }
 
     private ManualTemplate createFallbackTemplate(Video video) {
-        System.out.println("Creating fallback template due to processing failure");
+        log.info("Creating fallback template due to processing failure");
         
         ManualTemplate template = new ManualTemplate();
         template.setVideoId(video.getId());

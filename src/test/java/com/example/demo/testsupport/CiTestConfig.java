@@ -4,7 +4,6 @@ import com.example.demo.ai.comparison.EmbeddingService;
 import com.example.demo.ai.scene.SceneAnalysisService;
 import com.example.demo.ai.shared.KeyframeExtractionService;
 import com.example.demo.ai.shared.VideoSummaryService;
-import com.example.demo.ai.template.SceneDetectionService;
 import com.example.demo.dao.*;
 import com.example.demo.model.*;
 import com.example.demo.service.*;
@@ -24,22 +23,6 @@ import static org.mockito.Mockito.when;
 public class CiTestConfig {
 
 
-    @Bean
-    @Primary
-    public SceneDetectionService sceneDetectionService() {
-        SceneDetectionService service = Mockito.mock(SceneDetectionService.class);
-        
-        // Create synthetic scene segments
-        List<SceneSegment> scenes = Arrays.asList(
-            createSceneSegment(0L, 5000L, Arrays.asList("indoor", "person"), true),
-            createSceneSegment(5000L, 10000L, Arrays.asList("outdoor", "product"), false),
-            createSceneSegment(10000L, 15000L, Arrays.asList("closeup", "person"), true)
-        );
-        
-        when(service.detectScenes(anyString())).thenReturn(scenes);
-        
-        return service;
-    }
 
     @Bean
     @Primary
@@ -186,16 +169,6 @@ public class CiTestConfig {
     }
 
     // Helper methods
-    private SceneSegment createSceneSegment(Long startMs, Long endMs, 
-                                           List<String> labels, boolean personPresent) {
-        SceneSegment segment = new SceneSegment();
-        segment.setStartTimeMs(startMs);
-        segment.setEndTimeMs(endMs);
-        segment.setLabels(labels);
-        segment.setPersonPresent(personPresent);
-        return segment;
-    }
-
     private ManualTemplate createMockTemplate() {
         ManualTemplate template = new ManualTemplate();
         template.setId("template456");
@@ -218,39 +191,4 @@ public class CiTestConfig {
     }
 
 
-    private static Map<String, Object> createMockSubmittedVideo() {
-        Map<String, Object> video = new HashMap<>();
-        video.put("id", "user123_template456");
-        video.put("templateId", "template456");
-        video.put("uploadedBy", "user123");
-        video.put("publishStatus", "pending");
-        
-        Map<String, Object> scenes = new HashMap<>();
-        Map<String, Object> scene1 = new HashMap<>();
-        scene1.put("sceneNumber", 1);
-        scene1.put("status", "approved");
-        scene1.put("sceneId", "scene123");
-        scene1.put("similarityScore", 90.0);
-        scenes.put("1", scene1);
-        
-        Map<String, Object> scene2 = new HashMap<>();
-        scene2.put("sceneNumber", 2);
-        scene2.put("status", "pending");
-        scene2.put("sceneId", "scene456");
-        scene2.put("similarityScore", 75.0);
-        scenes.put("2", scene2);
-        
-        video.put("scenes", scenes);
-        
-        Map<String, Object> progress = new HashMap<>();
-        progress.put("totalScenes", 2);
-        progress.put("approved", 1);
-        progress.put("pending", 1);
-        progress.put("rejected", 0);
-        progress.put("completionPercentage", 50);
-        
-        video.put("progress", progress);
-        
-        return video;
-    }
 }

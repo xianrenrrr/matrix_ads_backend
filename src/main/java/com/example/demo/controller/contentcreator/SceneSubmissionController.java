@@ -144,46 +144,6 @@ public class SceneSubmissionController {
         
         return ResponseEntity.ok(response);
     }
-    
-    /**
-     * Get all scene submissions for a user's template
-     * GET /content-creator/scenes/template/{templateId}/user/{userId}
-     */
-    @GetMapping("/template/{templateId}/user/{userId}")
-    public ResponseEntity<Map<String, Object>> getSceneSubmissions(
-            @PathVariable String templateId,
-            @PathVariable String userId) throws Exception {
-        
-        List<SceneSubmission> submissions = sceneSubmissionDao.findByTemplateIdAndUserId(templateId, userId);
-            
-            // Get template to know total scenes expected
-            ManualTemplate template = templateDao.getTemplate(templateId);
-            int totalScenes = template != null ? template.getScenes().size() : 0;
-            
-            // Calculate progress
-            int approvedCount = (int) submissions.stream().filter(s -> "approved".equals(s.getStatus())).count();
-            int pendingCount = (int) submissions.stream().filter(s -> "pending".equals(s.getStatus())).count();
-            int rejectedCount = (int) submissions.stream().filter(s -> "rejected".equals(s.getStatus())).count();
-            int submittedCount = submissions.size();
-            
-            // Group submissions by scene number for easy access
-            Map<Integer, SceneSubmission> sceneMap = new HashMap<>();
-            for (SceneSubmission submission : submissions) {
-                sceneMap.put(submission.getSceneNumber(), submission);
-            }
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("templateId", templateId);
-            response.put("userId", userId);
-            response.put("submissions", submissions);
-            response.put("sceneMap", sceneMap);
-            response.put("progress", createProgressMap(totalScenes, submittedCount, approvedCount, pendingCount, rejectedCount));
-            response.put("isReadyForCompilation", approvedCount == totalScenes && totalScenes > 0);
-            
-        return ResponseEntity.ok(response);
-    }
-    
     /**
      * Get submitted video data by composite ID (userId_templateId)
      * GET /content-creator/scenes/submitted-videos/{compositeVideoId}
@@ -359,19 +319,6 @@ public class SceneSubmissionController {
         System.out.println("AI Analysis completed for scene " + sceneSubmission.getSceneNumber() + 
             " - Similarity: " + Math.round(similarityScore * 100) + "%, Quality: " + 
             qualityMetrics.getOrDefault("qualityRating", "Unknown"));
-    }
-    
-    private Map<String, Object> createProgressMap(int totalScenes, int submitted, int approved, int pending, int rejected) {
-        Map<String, Object> progress = new HashMap<>();
-        progress.put("totalScenes", totalScenes);
-        progress.put("submitted", submitted);
-        progress.put("approved", approved);
-        progress.put("pending", pending);
-        progress.put("rejected", rejected);
-        progress.put("remaining", Math.max(0, totalScenes - submitted));
-        progress.put("completionPercentage", totalScenes > 0 ? (double) approved / totalScenes * 100 : 0);
-        progress.put("isComplete", approved == totalScenes && totalScenes > 0);
-        return progress;
     }
     
     private String getFileExtension(String filename) {
