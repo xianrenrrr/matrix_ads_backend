@@ -5,19 +5,17 @@ import com.example.demo.dao.VideoDao;
 import com.example.demo.model.Video;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.service.TemplateSubscriptionService;
+import com.example.demo.service.TemplateGroupService;
 import com.example.demo.service.I18nService;
 import com.example.demo.api.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import com.example.demo.ai.template.AITemplateGenerator;
 
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 import java.util.NoSuchElementException;
-import com.google.cloud.firestore.Firestore;
 
 @RestController
 @RequestMapping("/content-manager/videos")
@@ -62,6 +60,9 @@ public class VideoController {
 
     @Autowired
     private TemplateSubscriptionService templateSubscriptionService;
+    
+    @Autowired
+    private TemplateGroupService templateGroupService;
 
     @PostMapping("/{videoId}/approve")
     public ResponseEntity<ApiResponse<String>> approveVideo(@PathVariable String videoId,
@@ -188,19 +189,19 @@ public class VideoController {
             aiGeneratedTemplate.setUserId(userId);
             aiGeneratedTemplate.setVideoId(savedVideo.getId());
             aiGeneratedTemplate.setTemplateTitle(title != null ? title : "AI Generated Template");
-            String savedTemplateId = templateDao.createTemplate(aiGeneratedTemplate);
+            
+            // Use TemplateGroupService wrapper to create template with group assignments
+            List<String> groupIds = null;
+            if (groupIdsStr != null && !groupIdsStr.trim().isEmpty()) {
+                groupIds = java.util.Arrays.asList(groupIdsStr.split(","));
+            }
+            String savedTemplateId = templateGroupService.createTemplateWithGroups(aiGeneratedTemplate, groupIds);
+            
             savedVideo.setTemplateId(savedTemplateId);
             videoDao.updateVideo(savedVideo);
             
-            // Handle group subscription for AI-generated template
-            if (groupIdsStr != null && !groupIdsStr.trim().isEmpty()) {
-                List<String> groupIds = java.util.Arrays.asList(groupIdsStr.split(","));
-                TemplateSubscriptionService.SubscriptionResult subscriptionResult = 
-                    templateSubscriptionService.batchSubscribeToTemplate(savedTemplateId, groupIds);
-                
-                System.out.printf("AI-generated template %s subscribed to %d users across %d groups%n", 
-                    savedTemplateId, subscriptionResult.getTotalUsersAffected(), subscriptionResult.getProcessedGroups().size());
-            }
+            System.out.printf("AI-generated template %s created and assigned to %s groups%n", 
+                savedTemplateId, groupIds != null ? groupIds.size() : 0);
         } else {
             // If templateId is provided, link the existing template
             savedVideo.setTemplateId(templateId);

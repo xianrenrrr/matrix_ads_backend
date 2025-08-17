@@ -5,7 +5,7 @@ import com.example.demo.dao.UserDao;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.api.ApiResponse;
 import com.example.demo.service.I18nService;
-import com.google.cloud.firestore.*;
+import com.example.demo.service.TemplateGroupService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +25,9 @@ public class ContentManager {
     
     @Autowired
     private UserDao userDao;
+    
+    @Autowired
+    private TemplateGroupService templateGroupService;
     
     // --- Submissions grouped by status ---
     @GetMapping("/submissions")
@@ -84,18 +87,11 @@ public class ContentManager {
             }
         }
         
-        // Create the template
-        String templateId = templateDao.createTemplate(manualTemplate);
+        // Create the template using the service wrapper
+        String templateId = templateGroupService.createTemplateWithGroups(manualTemplate, selectedGroupIds);
         userDao.addCreatedTemplate(userId, templateId);
         
-        // Store group assignments directly in template document
-        List<String> assignedGroupNames = new ArrayList<>();
-        if (selectedGroupIds != null && !selectedGroupIds.isEmpty()) {
-            // Update template with assigned groups
-            DocumentReference templateRef = db.collection("templates").document(templateId);
-            templateRef.update("assignedGroups", selectedGroupIds);
-            assignedGroupNames = selectedGroupIds;
-        }
+        List<String> assignedGroupNames = selectedGroupIds != null ? selectedGroupIds : new ArrayList<>();
         
         // Prepare response
         Map<String, Object> responseData = new HashMap<>();
@@ -186,7 +182,8 @@ public class ContentManager {
                                                                @RequestParam String userId,
                                                                @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        boolean deleted = templateDao.deleteTemplate(templateId);
+        // Use service wrapper to delete template and clean up group relationships
+        boolean deleted = templateGroupService.deleteTemplateWithCleanup(templateId);
         if (deleted) {
             userDao.removeCreatedTemplate(userId, templateId); // Remove templateId from created_template field in user doc
             String message = i18nService.getMessage("template.deleted", language);

@@ -15,4 +15,8 @@ public interface GroupDao {
     
     // New method for getting user's group
     String getUserGroupId(String userId);
+    
+    // Template-group relationship methods
+    void addTemplateToGroup(String groupId, String templateId);
+    void removeTemplateFromGroup(String groupId, String templateId);
 }

@@ -153,4 +153,26 @@ public class GroupDaoImpl implements GroupDao {
             throw new RuntimeException("Failed to get user group ID", e);
         }
     }
+    
+    @Override
+    public void addTemplateToGroup(String groupId, String templateId) {
+        try {
+            DocumentReference groupRef = db.collection(COLLECTION_NAME).document(groupId);
+            ApiFuture<WriteResult> result = groupRef.update("assignedTemplates", FieldValue.arrayUnion(templateId));
+            result.get(); // Wait for completion
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Failed to add template to group", e);
+        }
+    }
+    
+    @Override
+    public void removeTemplateFromGroup(String groupId, String templateId) {
+        try {
+            DocumentReference groupRef = db.collection(COLLECTION_NAME).document(groupId);
+            ApiFuture<WriteResult> result = groupRef.update("assignedTemplates", FieldValue.arrayRemove(templateId));
+            result.get(); // Wait for completion
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Failed to remove template from group", e);
+        }
+    }
 }
