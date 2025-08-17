@@ -2,28 +2,27 @@ package com.example.demo.model;
 
 public class User {
     private String id;
-    private String username;
+    private String username;    
     private String email;
     private String phone;
     private String province;
     private String city;
     private String password;
     private String role; // "content_creator" or "content_manager"
+    private String groupId; // Group ID for content creators
 
     // New fields for db.md compatibility
-    private java.util.Map<String, Boolean> subscribed_Templates;
     private java.util.Map<String, Boolean> created_Templates;
     private java.util.Map<String, Notification> notifications;
 
     public User() {}
 
-    public User(String id, String username, String email, String password, String role) {
+    public User(String id, String username,String email, String password, String role) {
         this.id = id;
         this.username = username;
         this.email = email;
         this.password = password;
         this.role = role;
-        this.subscribed_Templates = new java.util.HashMap<>();
         this.created_Templates = new java.util.HashMap<>();
         this.notifications = new java.util.HashMap<>();
     }
@@ -57,8 +56,8 @@ public class User {
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
 
-    public java.util.Map<String, Boolean> getSubscribed_Templates() { return subscribed_Templates; }
-    public void setSubscribed_Templates(java.util.Map<String, Boolean> subscribed_Templates) { this.subscribed_Templates = subscribed_Templates; }
+    public String getGroupId() { return groupId; }
+    public void setGroupId(String groupId) { this.groupId = groupId; }
 
     public java.util.Map<String, Boolean> getCreated_Templates() { return created_Templates; }
     public void setCreated_Templates(java.util.Map<String, Boolean> created_Templates) { this.created_Templates = created_Templates; }

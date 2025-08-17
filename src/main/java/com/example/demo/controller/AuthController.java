@@ -59,8 +59,7 @@ public class AuthController {
             user.setId(UUID.randomUUID().toString());
             // Initialize fields based on role 
             if ("content_creator".equals(user.getRole())) {
-                // Content creators don't have subscriptions - they get assigned through groups
-                user.setSubscribed_Templates(new java.util.HashMap<>()); // Empty for compatibility
+                // Content creators get assigned through groups - no individual subscriptions
             } else if ("content_manager".equals(user.getRole())) {
                 user.setCreated_Templates(new java.util.HashMap<>()); // Map<String, Boolean>
             }
@@ -263,8 +262,8 @@ public class AuthController {
 
             // Initialize fields based on role
             if ("content_creator".equals(user.getRole())) {
-                // Content creators don't have subscriptions - they get assigned through groups
-                user.setSubscribed_Templates(new HashMap<>()); // Empty for compatibility
+                // Content creators get assigned through groups - set groupId directly
+                user.setGroupId(invite.getGroupId());
             } else if ("content_manager".equals(user.getRole())) {
                 user.setCreated_Templates(new HashMap<>());
             }
