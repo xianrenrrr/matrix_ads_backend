@@ -2,7 +2,9 @@ package com.example.demo.controller.contentmanager;
 
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.UserDao;
+import com.example.demo.dao.SceneSubmissionDao;
 import com.example.demo.model.ManualTemplate;
+import com.example.demo.model.SceneSubmission;
 import com.example.demo.api.ApiResponse;
 import com.example.demo.service.I18nService;
 import com.example.demo.service.TemplateGroupService;
@@ -28,6 +30,9 @@ public class ContentManager {
     
     @Autowired
     private TemplateGroupService templateGroupService;
+    
+    @Autowired
+    private SceneSubmissionDao sceneSubmissionDao;
     
     // --- Submissions grouped by status ---
     @GetMapping("/submissions")
@@ -191,6 +196,64 @@ public class ContentManager {
         } else {
             throw new NoSuchElementException("Template not found with ID: " + templateId);
         }
+    }
+    
+    /**
+     * Get submitted video data by composite ID (userId_templateId)
+     * GET /content-manager/templates/submitted-videos/{compositeVideoId}
+     */
+    @GetMapping("/submitted-videos/{compositeVideoId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getSubmittedVideo(@PathVariable String compositeVideoId,
+                                                                               @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        // Get video document from submittedVideos collection
+        com.google.cloud.firestore.DocumentSnapshot videoDoc = db.collection("submittedVideos").document(compositeVideoId).get().get();
+        
+        if (!videoDoc.exists()) {
+            throw new NoSuchElementException("No submission found for ID: " + compositeVideoId);
+        }
+        
+        Map<String, Object> videoData = new HashMap<>(videoDoc.getData());
+        
+        // Fetch full scene details from sceneSubmissions collection using scene IDs
+        @SuppressWarnings("unchecked")
+        Map<String, Object> scenes = (Map<String, Object>) videoData.get("scenes");
+        if (scenes != null) {
+            Map<String, Object> fullScenes = new HashMap<>();
+            
+            for (Map.Entry<String, Object> entry : scenes.entrySet()) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> sceneRef = (Map<String, Object>) entry.getValue();
+                String sceneId = (String) sceneRef.get("sceneId");
+                
+                if (sceneId != null) {
+                    SceneSubmission sceneSubmission = sceneSubmissionDao.findById(sceneId);
+                    if (sceneSubmission != null) {
+                        Map<String, Object> fullSceneData = new HashMap<>();
+                        fullSceneData.put("sceneId", sceneSubmission.getId());
+                        fullSceneData.put("sceneNumber", sceneSubmission.getSceneNumber());
+                        fullSceneData.put("sceneTitle", sceneSubmission.getSceneTitle());
+                        fullSceneData.put("videoUrl", sceneSubmission.getVideoUrl());
+                        fullSceneData.put("thumbnailUrl", sceneSubmission.getThumbnailUrl());
+                        fullSceneData.put("status", sceneSubmission.getStatus());
+                        fullSceneData.put("similarityScore", sceneSubmission.getSimilarityScore());
+                        fullSceneData.put("aiSuggestions", sceneSubmission.getAiSuggestions());
+                        fullSceneData.put("submittedAt", sceneSubmission.getSubmittedAt());
+                        fullSceneData.put("originalFileName", sceneSubmission.getOriginalFileName());
+                        fullSceneData.put("fileSize", sceneSubmission.getFileSize());
+                        fullSceneData.put("format", sceneSubmission.getFormat());
+                        fullScenes.put(entry.getKey(), fullSceneData);
+                    } else {
+                        fullScenes.put(entry.getKey(), sceneRef);
+                    }
+                }
+            }
+            videoData.put("scenes", fullScenes);
+        }
+        
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, videoData));
     }
 }
 // Change Log: Manual scenes always set sceneSource="manual" and overlayType="grid" for dual scene system

@@ -39,6 +39,64 @@ public class SceneReviewController {
     private Firestore db;
     
     /**
+     * Get submitted video data by composite ID (userId_templateId)
+     * GET /content-manager/scenes/submitted-videos/{compositeVideoId}
+     */
+    @GetMapping("/submitted-videos/{compositeVideoId}")
+    public ResponseEntity<Map<String, Object>> getSubmittedVideo(@PathVariable String compositeVideoId) throws Exception {
+        // Get video document from submittedVideos collection
+        com.google.cloud.firestore.DocumentSnapshot videoDoc = db.collection("submittedVideos").document(compositeVideoId).get().get();
+        
+        if (!videoDoc.exists()) {
+            throw new NoSuchElementException("No submission found for ID: " + compositeVideoId);
+        }
+        
+        Map<String, Object> videoData = new HashMap<>(videoDoc.getData());
+        
+        // Fetch full scene details from sceneSubmissions collection using scene IDs
+        @SuppressWarnings("unchecked")
+        Map<String, Object> scenes = (Map<String, Object>) videoData.get("scenes");
+        if (scenes != null) {
+            Map<String, Object> fullScenes = new HashMap<>();
+            
+            for (Map.Entry<String, Object> entry : scenes.entrySet()) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> sceneRef = (Map<String, Object>) entry.getValue();
+                String sceneId = (String) sceneRef.get("sceneId");
+                
+                if (sceneId != null) {
+                    SceneSubmission sceneSubmission = sceneSubmissionDao.findById(sceneId);
+                    if (sceneSubmission != null) {
+                        Map<String, Object> fullSceneData = new HashMap<>();
+                        fullSceneData.put("sceneId", sceneSubmission.getId());
+                        fullSceneData.put("sceneNumber", sceneSubmission.getSceneNumber());
+                        fullSceneData.put("sceneTitle", sceneSubmission.getSceneTitle());
+                        fullSceneData.put("videoUrl", sceneSubmission.getVideoUrl());
+                        fullSceneData.put("thumbnailUrl", sceneSubmission.getThumbnailUrl());
+                        fullSceneData.put("status", sceneSubmission.getStatus());
+                        fullSceneData.put("similarityScore", sceneSubmission.getSimilarityScore());
+                        fullSceneData.put("aiSuggestions", sceneSubmission.getAiSuggestions());
+                        fullSceneData.put("submittedAt", sceneSubmission.getSubmittedAt());
+                        fullSceneData.put("originalFileName", sceneSubmission.getOriginalFileName());
+                        fullSceneData.put("fileSize", sceneSubmission.getFileSize());
+                        fullSceneData.put("format", sceneSubmission.getFormat());
+                        fullScenes.put(entry.getKey(), fullSceneData);
+                    } else {
+                        fullScenes.put(entry.getKey(), sceneRef);
+                    }
+                }
+            }
+            videoData.put("scenes", fullScenes);
+        }
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.putAll(videoData);
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
      * Get all pending scene submissions for review
      * GET /content-manager/scenes/pending
      */
