@@ -213,6 +213,8 @@ public class AuthController {
             throw new NoSuchElementException("Invite not found with token: " + inviteToken);
         }
         
+        System.out.println("DEBUG: Found invite - Role: " + invite.getRole() + ", GroupId: " + invite.getGroupId() + ", GroupName: " + invite.getGroupName());
+        
         // Use InviteValidity utility for centralized validation logic
         if (!com.example.demo.util.InviteValidity.isActive(invite)) {
             throw new IllegalArgumentException("Group is inactive");
@@ -263,7 +265,9 @@ public class AuthController {
             // Initialize fields based on role
             if ("content_creator".equals(user.getRole())) {
                 // Content creators get assigned through groups - set groupId directly
-                user.setGroupId(invite.getGroupId());
+                String inviteGroupId = invite.getGroupId();
+                System.out.println("DEBUG: Setting groupId for content creator " + user.getId() + " to: " + inviteGroupId);
+                user.setGroupId(inviteGroupId);
             } else if ("content_manager".equals(user.getRole())) {
                 user.setCreated_Templates(new HashMap<>());
             }
