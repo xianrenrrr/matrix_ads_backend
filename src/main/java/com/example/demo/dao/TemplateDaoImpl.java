@@ -146,32 +146,41 @@ public class TemplateDaoImpl implements TemplateDao {
     @Override
     public List<ManualTemplate> getTemplatesAssignedToGroup(String groupId) throws ExecutionException, InterruptedException {
         checkFirestore();
+        System.out.println("DEBUG: Getting templates assigned to group: " + groupId);
         
         // Fast approach: Get assignedTemplates from group document
         DocumentReference groupRef = db.collection("groups").document(groupId);
         DocumentSnapshot groupDoc = groupRef.get().get();
         
         if (!groupDoc.exists()) {
+            System.out.println("DEBUG: Group " + groupId + " does not exist");
             return new ArrayList<>();
         }
         
         // Get the assignedTemplates array from the group
         @SuppressWarnings("unchecked")
         List<String> templateIds = (List<String>) groupDoc.get("assignedTemplates");
+        System.out.println("DEBUG: Group " + groupId + " has assignedTemplates: " + templateIds);
         
         if (templateIds == null || templateIds.isEmpty()) {
+            System.out.println("DEBUG: No templates assigned to group " + groupId);
             return new ArrayList<>();
         }
         
         // Fetch all templates by their IDs
         List<ManualTemplate> templates = new ArrayList<>();
         for (String templateId : templateIds) {
+            System.out.println("DEBUG: Fetching template: " + templateId);
             ManualTemplate template = getTemplate(templateId);
             if (template != null) {
                 templates.add(template);
+                System.out.println("DEBUG: Found template: " + template.getTemplateTitle());
+            } else {
+                System.out.println("DEBUG: Template " + templateId + " not found");
             }
         }
         
+        System.out.println("DEBUG: Returning " + templates.size() + " templates for group " + groupId);
         return templates;
     }
 

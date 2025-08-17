@@ -137,6 +137,7 @@ public class GroupDaoImpl implements GroupDao {
     @Override
     public String getUserGroupId(String userId) {
         try {
+            System.out.println("DEBUG: Looking for user " + userId + " in groups collection");
             Query query = db.collection(COLLECTION_NAME)
                 .whereEqualTo("recipientEmail", userId)
                 .whereEqualTo("status", "accepted")
@@ -145,11 +146,17 @@ public class GroupDaoImpl implements GroupDao {
             ApiFuture<QuerySnapshot> querySnapshot = query.get();
             QuerySnapshot snapshot = querySnapshot.get();
             
+            System.out.println("DEBUG: Found " + snapshot.size() + " group documents for user " + userId);
+            
             if (!snapshot.isEmpty()) {
-                return snapshot.getDocuments().get(0).getString("groupId");
+                String groupId = snapshot.getDocuments().get(0).getString("groupId");
+                System.out.println("DEBUG: User " + userId + " belongs to group: " + groupId);
+                return groupId;
             }
+            System.out.println("DEBUG: No group found for user " + userId);
             return null;
         } catch (InterruptedException | ExecutionException e) {
+            System.err.println("DEBUG: Error getting user group ID: " + e.getMessage());
             throw new RuntimeException("Failed to get user group ID", e);
         }
     }
