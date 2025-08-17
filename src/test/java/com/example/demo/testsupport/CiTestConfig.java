@@ -164,6 +164,15 @@ public class CiTestConfig {
         return dao;
     }
 
+    @Bean
+    @Primary
+    public SubmittedVideoDao submittedVideoDao() throws Exception {
+        SubmittedVideoDao dao = Mockito.mock(SubmittedVideoDao.class);
+        when(dao.getVideoCountByUser(anyString())).thenReturn(3);
+        when(dao.getPublishedVideoCountByUser(anyString())).thenReturn(1);
+        return dao;
+    }
+
 
     @Bean
     @Primary
