@@ -146,17 +146,32 @@ public class TemplateDaoImpl implements TemplateDao {
     @Override
     public List<ManualTemplate> getTemplatesAssignedToGroup(String groupId) throws ExecutionException, InterruptedException {
         checkFirestore();
-        Query query = db.collection("templates").whereArrayContains("assignedGroups", groupId);
-        QuerySnapshot snapshot = query.get().get();
         
+        // Fast approach: Get assignedTemplates from group document
+        DocumentReference groupRef = db.collection("groups").document(groupId);
+        DocumentSnapshot groupDoc = groupRef.get().get();
+        
+        if (!groupDoc.exists()) {
+            return new ArrayList<>();
+        }
+        
+        // Get the assignedTemplates array from the group
+        @SuppressWarnings("unchecked")
+        List<String> templateIds = (List<String>) groupDoc.get("assignedTemplates");
+        
+        if (templateIds == null || templateIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // Fetch all templates by their IDs
         List<ManualTemplate> templates = new ArrayList<>();
-        for (DocumentSnapshot doc : snapshot.getDocuments()) {
-            ManualTemplate template = doc.toObject(ManualTemplate.class);
+        for (String templateId : templateIds) {
+            ManualTemplate template = getTemplate(templateId);
             if (template != null) {
-                template.setId(doc.getId());
                 templates.add(template);
             }
         }
+        
         return templates;
     }
 
