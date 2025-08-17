@@ -29,9 +29,6 @@ public class SceneReviewController {
     @Autowired
     private CompiledVideoDao compiledVideoDao;
     
-    @Autowired
-    private UserDao userDao;
-    
     @Autowired(required = false)
     private VideoCompilationService videoCompilationService;
     

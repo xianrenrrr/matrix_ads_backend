@@ -6,8 +6,6 @@ import com.example.demo.dao.GroupDao;
 import com.example.demo.dao.SubmittedVideoDao;
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.service.I18nService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,7 +17,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/content-creator")
 public class DashboardController {
-    private static final Logger log = LoggerFactory.getLogger(DashboardController.class);
     
     @Autowired
     private GroupDao groupDao;
