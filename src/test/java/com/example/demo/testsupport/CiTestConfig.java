@@ -93,11 +93,6 @@ public class CiTestConfig {
     }
 
 
-    @Bean
-    @Primary
-    public TemplateSubscriptionService templateSubscriptionService() {
-        return Mockito.mock(TemplateSubscriptionService.class);
-    }
 
     @Bean
     @Primary

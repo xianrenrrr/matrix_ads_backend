@@ -4,7 +4,6 @@ import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.VideoDao;
 import com.example.demo.model.Video;
 import com.example.demo.model.ManualTemplate;
-import com.example.demo.service.TemplateSubscriptionService;
 import com.example.demo.service.TemplateGroupService;
 import com.example.demo.service.I18nService;
 import com.example.demo.api.ApiResponse;
@@ -61,57 +60,16 @@ public class VideoController {
     @Autowired
     private TemplateGroupService templateGroupService;
 
-    @PostMapping("/{videoId}/approve")
-    public ResponseEntity<ApiResponse<String>> approveVideo(@PathVariable String videoId,
-                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
-        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
-        com.google.cloud.firestore.DocumentSnapshot videoSnap = videoRef.get().get();
-        if (!videoSnap.exists()) {
-            throw new NoSuchElementException("Video not found with ID: " + videoId);
-        }
-        String creatorId = (String) videoSnap.get("uploadedBy");
-        videoRef.update("publishStatus", "approved");
-        // Send notification to creator
-        com.google.cloud.firestore.DocumentReference userRef = db.collection("users").document(creatorId);
-        String notifId = java.util.UUID.randomUUID().toString();
-        java.util.Map<String, Object> notif = new java.util.HashMap<>();
-        notif.put("type", "video_approved");
-        notif.put("message", "Your video was approved by the manager.");
-        notif.put("timestamp", System.currentTimeMillis());
-        notif.put("read", false);
-        userRef.update("notifications." + notifId, notif);
-        String message = i18nService.getMessage("video.approved", language);
-        return ResponseEntity.ok(ApiResponse.ok(message, "Video approved and creator notified."));
-    }
+    // REMOVED: /{videoId}/approve and /{videoId}/reject endpoints
+    // These bypassed the scene-by-scene review workflow
+    // Use scene manual override instead: /content-manager/scenes/{sceneId}/manual-override
 
-    @PostMapping("/{videoId}/reject")
-    public ResponseEntity<ApiResponse<String>> rejectVideo(@PathVariable String videoId, 
-                                                           @RequestBody java.util.Map<String, String> body,
-                                                           @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
-        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
-        com.google.cloud.firestore.DocumentSnapshot videoSnap = videoRef.get().get();
-        if (!videoSnap.exists()) {
-            throw new NoSuchElementException("Video not found with ID: " + videoId);
-        }
-        String creatorId = (String) videoSnap.get("uploadedBy");
-        String reason = body.getOrDefault("reason", "No reason provided");
-        String suggestion = body.getOrDefault("suggestion", "");
-        videoRef.update("publishStatus", "rejected", "reason", reason, "suggestion", suggestion);
-        // Send notification to creator
-        com.google.cloud.firestore.DocumentReference userRef = db.collection("users").document(creatorId);
-        String notifId = java.util.UUID.randomUUID().toString();
-        java.util.Map<String, Object> notif = new java.util.HashMap<>();
-        notif.put("type", "video_rejected");
-        notif.put("message", "Your video was rejected. Reason: " + reason + (suggestion.isEmpty() ? "" : ". Suggestion: " + suggestion));
-        notif.put("timestamp", System.currentTimeMillis());
-        notif.put("read", false);
-        userRef.update("notifications." + notifId, notif);
-        String message = i18nService.getMessage("video.rejected", language);
-        return ResponseEntity.ok(ApiResponse.ok(message, "Video rejected and creator notified."));
-    }
-
+    @Autowired
+    private com.example.demo.dao.CompiledVideoDao compiledVideoDao;
+    
+    @Autowired
+    private com.example.demo.service.VideoCompilationService videoCompilationService;
+    
     @PostMapping("/{videoId}/publish")
     public ResponseEntity<ApiResponse<String>> publishVideo(@PathVariable String videoId, 
                                                             @RequestParam String publisherId,
@@ -129,7 +87,20 @@ public class VideoController {
         }
         
         String creatorId = (String) videoSnap.get("uploadedBy");
-        videoRef.update("publishStatus", "published", "publishedAt", com.google.cloud.firestore.FieldValue.serverTimestamp(), "publishedBy", publisherId);
+        String templateId = (String) videoSnap.get("templateId");
+        
+        // COMPILE VIDEO NOW - manager clicked publish
+        String compiledVideoUrl = videoCompilationService.compileVideo(templateId, creatorId, publisherId);
+        com.example.demo.model.CompiledVideo compiledVideo = new com.example.demo.model.CompiledVideo(templateId, creatorId, publisherId);
+        compiledVideo.setVideoUrl(compiledVideoUrl);
+        compiledVideo.setStatus("published");
+        compiledVideoDao.save(compiledVideo);
+        
+        // Update status to published
+        videoRef.update("publishStatus", "published", 
+                       "publishedAt", com.google.cloud.firestore.FieldValue.serverTimestamp(), 
+                       "publishedBy", publisherId,
+                       "compiledVideoUrl", compiledVideoUrl);
         
         // Send notification to creator
         com.google.cloud.firestore.DocumentReference userRef = db.collection("users").document(creatorId);
@@ -141,7 +112,7 @@ public class VideoController {
         notif.put("read", false);
         userRef.update("notifications." + notifId, notif);
         String message = i18nService.getMessage("operation.success", language);
-        return ResponseEntity.ok(ApiResponse.ok(message, "Video published and creator notified."));
+        return ResponseEntity.ok(ApiResponse.ok(message, "Video compiled and published successfully."));
     }
 
     @PostMapping("/upload")
