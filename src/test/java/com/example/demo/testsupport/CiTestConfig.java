@@ -157,8 +157,11 @@ public class CiTestConfig {
 
     @Bean
     @Primary
-    public CompiledVideoDao compiledVideoDao() {
-        return Mockito.mock(CompiledVideoDao.class);
+    public CompiledVideoDao compiledVideoDao() throws Exception {
+        CompiledVideoDao dao = Mockito.mock(CompiledVideoDao.class);
+        when(dao.getCompletedVideoCountByUser(anyString())).thenReturn(5);
+        when(dao.getPublishedVideoCountByUser(anyString())).thenReturn(2);
+        return dao;
     }
 
 

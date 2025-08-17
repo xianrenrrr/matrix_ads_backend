@@ -26,7 +26,7 @@ public class SceneSubmissionController {
     @Autowired
     private TemplateDao templateDao;
     
-    @Autowired
+    @Autowired(required = false)
     private FirebaseStorageService firebaseStorageService;
     
     @Autowired
