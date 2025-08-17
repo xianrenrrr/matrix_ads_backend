@@ -7,11 +7,10 @@ import java.util.Map;
 import java.util.HashMap;
 
 public class Invite {
-    private String id;
+    private String id;             // This IS the groupId (invite ID = group ID)
     private String managerId;      // ID of the content manager who sent the invite
     private String managerName;    // Name of the content manager
     private String groupName;      // Name of the group being invited to join
-    private String groupId;        // ID of the group (will be created when first user joins)
     private String role;           // Role to assign (always "content_creator" for now)
     private String token;          // Unique token for the invite link
     private String status;         // "active", "inactive" (groups are permanent)
@@ -35,13 +34,12 @@ public class Invite {
 
     // Constructor for group invites
     public Invite(String id, String managerId, String managerName, String groupName, 
-                  String groupId, String role, String token, String status, 
+                  String role, String token, String status, 
                   Date createdAt, Date expiresAt) {
         this.id = id;
         this.managerId = managerId;
         this.managerName = managerName;
         this.groupName = groupName;
-        this.groupId = groupId;
         this.role = role;
         this.token = token;
         this.status = status;
@@ -82,8 +80,7 @@ public class Invite {
     public String getGroupName() { return groupName; }
     public void setGroupName(String groupName) { this.groupName = groupName; }
 
-    public String getGroupId() { return groupId; }
-    public void setGroupId(String groupId) { this.groupId = groupId; }
+    // Note: groupId is now the same as id - use getId() instead
     
     public Date getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Date updatedAt) { this.updatedAt = updatedAt; }

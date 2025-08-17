@@ -213,7 +213,7 @@ public class AuthController {
             throw new NoSuchElementException("Invite not found with token: " + inviteToken);
         }
         
-        System.out.println("DEBUG: Found invite - Role: " + invite.getRole() + ", GroupId: " + invite.getGroupId() + ", GroupName: " + invite.getGroupName());
+        System.out.println("DEBUG: Found invite - Role: " + invite.getRole() + ", GroupId: " + invite.getId() + ", GroupName: " + invite.getGroupName());
         
         // Use InviteValidity utility for centralized validation logic
         if (!com.example.demo.util.InviteValidity.isActive(invite)) {
@@ -264,10 +264,10 @@ public class AuthController {
 
             // Initialize fields based on role
             if ("content_creator".equals(user.getRole())) {
-                // Content creators get assigned through groups - set groupId directly
-                String inviteGroupId = invite.getGroupId();
-                System.out.println("DEBUG: Setting groupId for content creator " + user.getId() + " to: " + inviteGroupId);
-                user.setGroupId(inviteGroupId);
+                // Content creators get assigned through groups - invite ID IS the group ID
+                String groupId = invite.getId();
+                System.out.println("DEBUG: Setting groupId for content creator " + user.getId() + " to: " + groupId);
+                user.setGroupId(groupId);
             } else if ("content_manager".equals(user.getRole())) {
                 user.setCreated_Templates(new HashMap<>());
             }
