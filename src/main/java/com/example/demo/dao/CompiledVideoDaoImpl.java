@@ -264,6 +264,22 @@ public class CompiledVideoDaoImpl implements CompiledVideoDao {
         }
     }
     
+    @Override
+    public int getCompletedVideoCountByUser(String userId) throws ExecutionException, InterruptedException {
+        Query query = db.collection(COLLECTION_NAME)
+                .whereEqualTo("userId", userId)
+                .whereEqualTo("status", "completed");
+        return query.get().get().size();
+    }
+    
+    @Override
+    public int getPublishedVideoCountByUser(String userId) throws ExecutionException, InterruptedException {
+        Query query = db.collection(COLLECTION_NAME)
+                .whereEqualTo("userId", userId)
+                .whereEqualTo("publishStatus", "published");
+        return query.get().get().size();
+    }
+    
     // Helper method to execute queries and convert results
     private List<CompiledVideo> executeQuery(Query query) throws ExecutionException, InterruptedException {
         ApiFuture<QuerySnapshot> querySnapshot = query.get();

@@ -57,9 +57,6 @@ public class VideoController {
 
     @Autowired(required = false)
     private com.google.cloud.firestore.Firestore db;
-
-    @Autowired
-    private TemplateSubscriptionService templateSubscriptionService;
     
     @Autowired
     private TemplateGroupService templateGroupService;

@@ -43,6 +43,10 @@ public interface CompiledVideoDao {
     List<CompiledVideo> findReadyForPublishing() throws ExecutionException, InterruptedException;
     void updatePublishStatus(String id, String publishStatus) throws ExecutionException, InterruptedException;
     
+    // Count Operations for Dashboard
+    int getCompletedVideoCountByUser(String userId) throws ExecutionException, InterruptedException;
+    int getPublishedVideoCountByUser(String userId) throws ExecutionException, InterruptedException;
+    
     // Cleanup Operations
     void deleteByTemplateId(String templateId) throws ExecutionException, InterruptedException;
     void deleteByUserId(String userId) throws ExecutionException, InterruptedException;

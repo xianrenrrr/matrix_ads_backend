@@ -3,7 +3,7 @@ package com.example.demo.controller.contentcreator;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.api.ApiResponse;
 import com.example.demo.dao.GroupDao;
-import com.example.demo.dao.SubmittedVideoDao;
+import com.example.demo.dao.CompiledVideoDao;
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.service.I18nService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +22,7 @@ public class DashboardController {
     private GroupDao groupDao;
     
     @Autowired
-    private SubmittedVideoDao submittedVideoDao;
+    private CompiledVideoDao compiledVideoDao;
     
     @Autowired
     private TemplateDao templateDao;
@@ -46,13 +46,13 @@ public class DashboardController {
         }
         
         
-        // Get video counts using SubmittedVideoDao
-        int submittedVideosCount = submittedVideoDao.getVideoCountByUser(userId);
-        int publishedVideosCount = submittedVideoDao.getPublishedVideoCountByUser(userId);
+        // Get compiled video counts using CompiledVideoDao
+        int completedVideosCount = compiledVideoDao.getCompletedVideoCountByUser(userId);
+        int publishedVideosCount = compiledVideoDao.getPublishedVideoCountByUser(userId);
         
         // Build response
         stats.put("assignedTemplates", assignedTemplatesCount);
-        stats.put("recordedVideos", submittedVideosCount);
+        stats.put("recordedVideos", completedVideosCount);
         stats.put("publishedVideos", publishedVideosCount);
         stats.put("userGroupId", userGroupId);
         
