@@ -158,9 +158,19 @@ public class GroupDaoImpl implements GroupDao {
     public void addTemplateToGroup(String groupId, String templateId) {
         try {
             DocumentReference groupRef = db.collection(COLLECTION_NAME).document(groupId);
+            
+            // First check if group exists and has assignedTemplates field
+            DocumentSnapshot groupDoc = groupRef.get().get();
+            if (!groupDoc.exists()) {
+                throw new RuntimeException("Group " + groupId + " does not exist");
+            }
+            
+            // Check if assignedTemplates field exists, if not it will be created by arrayUnion
             ApiFuture<WriteResult> result = groupRef.update("assignedTemplates", FieldValue.arrayUnion(templateId));
-            result.get(); // Wait for completion
+            result.get();
+            
         } catch (InterruptedException | ExecutionException e) {
+            System.err.println("Failed to add template " + templateId + " to group " + groupId + ": " + e.getMessage());
             throw new RuntimeException("Failed to add template to group", e);
         }
     }
