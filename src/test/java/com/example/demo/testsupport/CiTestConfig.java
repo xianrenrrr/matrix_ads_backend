@@ -88,14 +88,6 @@ public class CiTestConfig {
 
     @Bean
     @Primary
-    public WorkflowAutomationService workflowAutomationService() {
-        return Mockito.mock(WorkflowAutomationService.class);
-    }
-
-
-
-    @Bean
-    @Primary
     public I18nService i18nService() {
         // Use real I18nService since it has no external dependencies
         return new I18nService();

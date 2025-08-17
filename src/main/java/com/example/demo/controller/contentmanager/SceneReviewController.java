@@ -1,7 +1,9 @@
 package com.example.demo.controller.contentmanager;
 
 import com.example.demo.dao.SceneSubmissionDao;
+import com.example.demo.dao.TemplateDao;
 import com.example.demo.model.SceneSubmission;
+import com.example.demo.model.ManualTemplate;
 import com.google.cloud.firestore.Firestore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +21,9 @@ public class SceneReviewController {
     
     @Autowired
     private SceneSubmissionDao sceneSubmissionDao;
+    
+    @Autowired
+    private TemplateDao templateDao;
     
     @Autowired
     private Firestore db;
@@ -110,15 +115,18 @@ public class SceneReviewController {
                             }
                         }
                         
+                        // Get actual template scene count
+                        int templateTotalScenes = getTemplateTotalScenes(templateId);
+                        
                         updates.put("progress", Map.of(
-                            "totalScenes", scenes.size(),
+                            "totalScenes", templateTotalScenes,
                             "approved", approvedCount,
                             "pending", pendingCount,
-                            "completionPercentage", scenes.size() > 0 ? (double) approvedCount / scenes.size() * 100 : 0
+                            "completionPercentage", templateTotalScenes > 0 ? (double) approvedCount / templateTotalScenes * 100 : 0
                         ));
                         
-                        // Update publishStatus if all scenes are approved
-                        if (approvedCount == scenes.size() && scenes.size() > 0) {
+                        // Update publishStatus if all template scenes are approved
+                        if (approvedCount == templateTotalScenes && templateTotalScenes > 0) {
                             String currentPublishStatus = (String) videoData.get("publishStatus");
                             if (!"approved".equals(currentPublishStatus) && !"published".equals(currentPublishStatus)) {
                                 updates.put("publishStatus", "approved");
@@ -134,5 +142,10 @@ public class SceneReviewController {
         } else {
             System.err.println("SubmittedVideo not found for update: " + compositeVideoId);
         }
+    }
+    
+    private int getTemplateTotalScenes(String templateId) throws Exception {
+        ManualTemplate template = templateDao.getTemplate(templateId);
+        return (template != null && template.getScenes() != null) ? template.getScenes().size() : 0;
     }
 }

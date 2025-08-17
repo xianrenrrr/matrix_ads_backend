@@ -67,8 +67,14 @@ public class SceneSubmissionController {
         sceneSubmission.setFormat(getFileExtension(file.getOriginalFilename()));
         
         // Basic mock AI scores - NO GOOGLE API CALLS
-        sceneSubmission.setSimilarityScore(0.85); // Mock score
+        double similarityScore = 0.85; // Mock score
+        sceneSubmission.setSimilarityScore(similarityScore);
         sceneSubmission.setAiSuggestions(Arrays.asList("Good quality", "Well framed"));
+        
+        // Check if score exceeds group AI threshold for auto-approval
+        if (checkGroupAIThreshold(userId, similarityScore)) {
+            sceneSubmission.setStatus("approved");
+        }
         
         String sceneId = sceneSubmissionDao.save(sceneSubmission);
         sceneSubmission.setId(sceneId);
@@ -168,6 +174,12 @@ public class SceneSubmissionController {
                 "completionPercentage", templateTotalScenes > 0 ? (double) approvedScenes / templateTotalScenes * 100 : 0
             ));
             
+            // Auto-update publishStatus if all scenes approved
+            if (approvedScenes == templateTotalScenes && templateTotalScenes > 0) {
+                updates.put("publishStatus", "approved");
+                updates.put("approvedAt", FieldValue.serverTimestamp());
+            }
+            
             videoDocRef.update(updates);
         } else {
             Map<String, Object> videoData = new HashMap<>();
@@ -205,5 +217,30 @@ public class SceneSubmissionController {
     private int getTemplateTotalScenes(String templateId) throws Exception {
         ManualTemplate template = templateDao.getTemplate(templateId);
         return (template != null && template.getScenes() != null) ? template.getScenes().size() : 0;
+    }
+    
+    @SuppressWarnings("unchecked")
+    private boolean checkGroupAIThreshold(String userId, double similarityScore) {
+        try {
+            // Get user's group
+            DocumentSnapshot userDoc = db.collection("users").document(userId).get().get();
+            if (!userDoc.exists()) return false;
+            
+            String groupId = userDoc.getString("groupId");
+            if (groupId == null) return false;
+            
+            // Get group's AI threshold
+            DocumentSnapshot groupDoc = db.collection("invites").document(groupId).get().get();
+            if (!groupDoc.exists()) return false;
+            
+            Double aiThreshold = groupDoc.getDouble("aiApprovalThreshold");
+            Boolean aiAutoApprovalEnabled = groupDoc.getBoolean("aiAutoApprovalEnabled");
+            
+            // Auto-approve if enabled and score meets threshold
+            return aiAutoApprovalEnabled != null && aiAutoApprovalEnabled && 
+                   aiThreshold != null && similarityScore >= aiThreshold;
+        } catch (Exception e) {
+            return false; // Default to manual approval if error
+        }
     }
 }

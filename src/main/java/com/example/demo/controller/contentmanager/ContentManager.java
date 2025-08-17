@@ -52,6 +52,35 @@ public class ContentManager {
             // Add document ID for frontend use
             data.put("id", doc.getId());
             
+            // Enrich with user information
+            String uploadedBy = (String) data.get("uploadedBy");
+            if (uploadedBy != null) {
+                try {
+                    com.google.cloud.firestore.DocumentSnapshot userDoc = db.collection("users").document(uploadedBy).get().get();
+                    if (userDoc.exists()) {
+                        String username = userDoc.getString("username");
+                        String city = userDoc.getString("city");
+                        data.put("uploaderName", username);
+                        data.put("uploaderCity", city);
+                    }
+                } catch (Exception e) {
+                    // Continue without user info if fetch fails
+                }
+            }
+            
+            // Enrich with template information
+            String templateId = (String) data.get("templateId");
+            if (templateId != null) {
+                try {
+                    ManualTemplate template = templateDao.getTemplate(templateId);
+                    if (template != null) {
+                        data.put("templateTitle", template.getTemplateTitle());
+                    }
+                } catch (Exception e) {
+                    // Continue without template info if fetch fails
+                }
+            }
+            
             String status = (String) data.getOrDefault("publishStatus", "pending");
             if ("approved".equalsIgnoreCase(status)) {
                 approved.add(data);
