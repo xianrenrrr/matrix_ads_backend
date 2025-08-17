@@ -3,7 +3,6 @@ package com.example.demo.controller.contentcreator;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.api.ApiResponse;
 import com.example.demo.dao.GroupDao;
-import com.example.demo.dao.UserDao;
 import com.example.demo.dao.SubmittedVideoDao;
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.service.I18nService;
@@ -24,9 +23,6 @@ public class DashboardController {
     
     @Autowired
     private GroupDao groupDao;
-    
-    @Autowired
-    private UserDao userDao;
     
     @Autowired
     private SubmittedVideoDao submittedVideoDao;
