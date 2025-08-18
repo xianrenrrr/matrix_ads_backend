@@ -16,11 +16,19 @@ public class OverlayProcessor {
     
     private final AIOrchestrator aiOrchestrator;
     private final OverlayLegendService legendService;
+    private final String language;
     
     public OverlayProcessor(AIOrchestrator aiOrchestrator, 
                            OverlayLegendService legendService) {
+        this(aiOrchestrator, legendService, "zh-CN");
+    }
+    
+    public OverlayProcessor(AIOrchestrator aiOrchestrator, 
+                           OverlayLegendService legendService,
+                           String language) {
         this.aiOrchestrator = aiOrchestrator;
         this.legendService = legendService;
+        this.language = language;
     }
     
     public void processOverlays(Scene scene, SceneSegment segment, String keyframeUrl) {
@@ -117,7 +125,7 @@ public class OverlayProcessor {
             return;
         }
         
-        var legend = legendService.buildLegend(scene, "zh-CN");
+        var legend = legendService.buildLegend(scene, language);
         scene.setLegend(legend);
         
         if (!legend.isEmpty()) {

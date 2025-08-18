@@ -39,6 +39,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Autowired
     private VideoSummaryService videoSummaryService;
     
+    @Autowired(required = false)
+    private com.example.demo.ai.providers.llm.LLMProvider qwenProvider;
+    
     @Value("${ai.template.useObjectOverlay:true}")
     private boolean useObjectOverlay;
     
@@ -102,19 +105,8 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             log.info("=== AI TEMPLATE METADATA GENERATION ===");
             log.info("Generating template metadata using AI in language: {}", language);
             
-            if ("zh".equals(language) || "zh-CN".equals(language)) {
-                // Chinese template metadata
-                template.setVideoPurpose("产品展示与推广");
-                template.setTone("专业");
-                template.setLightingRequirements("良好的自然光或人工照明");
-                template.setBackgroundMusic("轻柔的器乐或环境音乐");
-            } else {
-                // English fallback
-                template.setVideoPurpose("Product demonstration and promotion");
-                template.setTone("Professional");
-                template.setLightingRequirements("Good natural or artificial lighting");
-                template.setBackgroundMusic("Soft instrumental or ambient music");
-            }
+            // Use AI to generate metadata based on video analysis
+            generateAIMetadata(template, video, scenes, allSceneLabels, language);
 
             // Step 4: Generate summary (optional) - simplified without block descriptions
             log.info("Step 4: Generating video summary...");
@@ -236,6 +228,103 @@ public class TemplateAIServiceImpl implements TemplateAIService {
 
         template.setScenes(List.of(defaultScene));
         return template;
+    }
+    
+    private void generateAIMetadata(ManualTemplate template, Video video, List<Scene> scenes, 
+                                   List<String> sceneLabels, String language) {
+        try {
+            // Try to use AI for metadata generation
+            if (aiOrchestrator != null) {
+                var response = aiOrchestrator.<com.example.demo.ai.providers.llm.LLMProvider.SceneSuggestions>executeWithFallback(
+                    com.example.demo.ai.core.AIModelType.LLM,
+                    "generateTemplateMetadata",
+                    provider -> {
+                        var llmProvider = (com.example.demo.ai.providers.llm.LLMProvider) provider;
+                        
+                        // Create a scene suggestions request for metadata
+                        var request = new com.example.demo.ai.providers.llm.LLMProvider.SceneSuggestionsRequest();
+                        request.setSceneTitle(video.getTitle());
+                        
+                        // Add scene context
+                        java.util.Map<String, Object> analysisData = new java.util.HashMap<>();
+                        analysisData.put("sceneCount", scenes.size());
+                        analysisData.put("totalDuration", template.getTotalVideoLength());
+                        analysisData.put("sceneLabels", sceneLabels);
+                        analysisData.put("language", language);
+                        request.setAnalysisData(analysisData);
+                        
+                        return llmProvider.generateSceneSuggestions(request);
+                    }
+                );
+                
+                if (response.isSuccess() && response.getData() != null) {
+                    var suggestions = response.getData();
+                    // Extract metadata from suggestions
+                    applyAIGeneratedMetadata(template, suggestions, language);
+                    log.info("Applied AI-generated metadata using {}", response.getModelUsed());
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to generate AI metadata: {}", e.getMessage());
+        }
+        
+        // Fallback to defaults
+        applyDefaultMetadata(template, language);
+    }
+    
+    private void applyAIGeneratedMetadata(ManualTemplate template, 
+                                         com.example.demo.ai.providers.llm.LLMProvider.SceneSuggestions suggestions,
+                                         String language) {
+        // Use AI suggestions to set metadata
+        if (suggestions.getSuggestionsZh() != null && !suggestions.getSuggestionsZh().isEmpty()) {
+            // Parse first suggestion for video purpose
+            String firstSuggestion = suggestions.getSuggestionsZh().get(0);
+            if (firstSuggestion.length() <= 10) {
+                template.setVideoPurpose(firstSuggestion);
+            } else {
+                template.setVideoPurpose(firstSuggestion.substring(0, 10));
+            }
+            
+            // Use other suggestions for tone and requirements
+            if (suggestions.getSuggestionsZh().size() > 1) {
+                String tone = extractTone(suggestions.getSuggestionsZh().get(1));
+                template.setTone(tone);
+            }
+        }
+        
+        // Set lighting and music based on analysis
+        if ("zh".equals(language) || "zh-CN".equals(language)) {
+            template.setLightingRequirements("智能分析建议的照明条件");
+            template.setBackgroundMusic("AI推荐的背景音乐");
+        } else {
+            template.setLightingRequirements("AI-analyzed lighting conditions");
+            template.setBackgroundMusic("AI-recommended background music");
+        }
+    }
+    
+    private void applyDefaultMetadata(ManualTemplate template, String language) {
+        if ("zh".equals(language) || "zh-CN".equals(language)) {
+            template.setVideoPurpose("产品展示与推广");
+            template.setTone("专业");
+            template.setLightingRequirements("良好的自然光或人工照明");
+            template.setBackgroundMusic("轻柔的器乐或环境音乐");
+        } else {
+            template.setVideoPurpose("Product demonstration and promotion");
+            template.setTone("Professional");
+            template.setLightingRequirements("Good natural or artificial lighting");
+            template.setBackgroundMusic("Soft instrumental or ambient music");
+        }
+    }
+    
+    private String extractTone(String suggestion) {
+        // Extract tone from suggestion text
+        if (suggestion.contains("专业")) return "专业";
+        if (suggestion.contains("轻松")) return "轻松";
+        if (suggestion.contains("正式")) return "正式";
+        if (suggestion.contains("casual")) return "Casual";
+        if (suggestion.contains("formal")) return "Formal";
+        return "专业"; // Default
     }
     
 }
