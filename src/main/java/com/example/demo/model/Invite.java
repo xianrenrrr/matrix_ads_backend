@@ -29,6 +29,9 @@ public class Invite {
     private boolean aiAutoApprovalEnabled = true;     // Whether AI auto-approval is enabled
     private boolean allowManualOverride = true;       // Whether managers can override AI decisions
     private Map<String, Double> sceneThresholds;      // Custom thresholds for specific scenes
+    
+    // Additional database field to prevent Firestore warnings
+    private List<String> assignedTemplates;           // Templates assigned to this group
 
     public Invite() {}
 
@@ -170,6 +173,19 @@ public class Invite {
     // Set scene-specific threshold
     public void setSceneThreshold(String sceneId, double threshold) {
         getSceneThresholds().put(sceneId, threshold);
+        this.updatedAt = new Date();
+    }
+    
+    // Getter and setter for assignedTemplates
+    public List<String> getAssignedTemplates() {
+        if (assignedTemplates == null) {
+            assignedTemplates = new ArrayList<>();
+        }
+        return assignedTemplates;
+    }
+    
+    public void setAssignedTemplates(List<String> assignedTemplates) {
+        this.assignedTemplates = assignedTemplates;
         this.updatedAt = new Date();
     }
 }

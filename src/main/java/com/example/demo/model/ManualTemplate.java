@@ -15,6 +15,10 @@ public class ManualTemplate {
     private String backgroundMusic;
     private String id;
     private String videoId;
+    
+    // Additional database fields to prevent Firestore warnings
+    private List<String> assignedGroups;
+    private List<String> submittedVideos;
 
     public ManualTemplate() {
         this.scenes = new ArrayList<>();
@@ -110,6 +114,28 @@ public class ManualTemplate {
     public void setBackgroundMusic(String backgroundMusic) {
         this.backgroundMusic = backgroundMusic;
     }
-
+    
+    // Getters and setters for additional database fields
+    public List<String> getAssignedGroups() {
+        if (assignedGroups == null) {
+            assignedGroups = new ArrayList<>();
+        }
+        return assignedGroups;
+    }
+    
+    public void setAssignedGroups(List<String> assignedGroups) {
+        this.assignedGroups = assignedGroups;
+    }
+    
+    public List<String> getSubmittedVideos() {
+        if (submittedVideos == null) {
+            submittedVideos = new ArrayList<>();
+        }
+        return submittedVideos;
+    }
+    
+    public void setSubmittedVideos(List<String> submittedVideos) {
+        this.submittedVideos = submittedVideos;
+    }
 
 }
