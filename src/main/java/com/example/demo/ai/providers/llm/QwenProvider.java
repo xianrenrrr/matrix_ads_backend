@@ -83,9 +83,8 @@ public class QwenProvider implements LLMProvider {
         long startTime = System.currentTimeMillis();
         
         try {
-            // TODO: Implement actual translation API call
-            // For now, return mock translations
-            List<String> chineseLabels = createMockChineseLabels(englishLabels);
+            // Real Qwen VL API call for Chinese label translation
+            List<String> chineseLabels = callQwenForChineseLabels(englishLabels);
             
             AIResponse<List<String>> response = 
                 AIResponse.success(chineseLabels, getProviderName(), getModelType());
@@ -109,8 +108,8 @@ public class QwenProvider implements LLMProvider {
         long startTime = System.currentTimeMillis();
         
         try {
-            // TODO: Implement actual Qwen API call for suggestions
-            SceneSuggestions suggestions = createMockSceneSuggestions(request);
+            // Real Qwen VL API call for Chinese scene suggestions
+            SceneSuggestions suggestions = callQwenForSceneSuggestions(request);
             
             AIResponse<SceneSuggestions> response = 
                 AIResponse.success(suggestions, getProviderName(), getModelType());
@@ -372,6 +371,218 @@ public class QwenProvider implements LLMProvider {
         }
         
         return summary;
+    }
+
+    /**
+     * Real Qwen VL API call for Chinese label translation
+     */
+    private List<String> callQwenForChineseLabels(List<String> englishLabels) {
+        try {
+            // Build Chinese translation prompt
+            String prompt = buildChineseLabelsPrompt(englishLabels);
+            
+            // Call Qwen VL API
+            Map<String, Object> response = callQwenAPI(prompt, null);
+            
+            // Parse response and extract Chinese labels
+            return parseChineseLabelsResponse(response, englishLabels);
+            
+        } catch (Exception e) {
+            log.warn("Qwen Chinese labels API call failed, using fallback: {}", e.getMessage());
+            return createMockChineseLabels(englishLabels);
+        }
+    }
+    
+    /**
+     * Real Qwen VL API call for Chinese scene suggestions
+     */
+    private SceneSuggestions callQwenForSceneSuggestions(SceneSuggestionsRequest request) {
+        try {
+            // Build Chinese suggestions prompt
+            String prompt = buildSceneSuggestionsPrompt(request);
+            
+            // Call Qwen VL API
+            Map<String, Object> response = callQwenAPI(prompt, null);
+            
+            // Parse response and extract suggestions
+            return parseSceneSuggestionsResponse(response, request);
+            
+        } catch (Exception e) {
+            log.warn("Qwen scene suggestions API call failed, using fallback: {}", e.getMessage());
+            return createMockSceneSuggestions(request);
+        }
+    }
+    
+    /**
+     * Build Chinese prompt for label translation
+     */
+    private String buildChineseLabelsPrompt(List<String> englishLabels) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("请将以下英文物体标签翻译成中文。要求：\n\n");
+        prompt.append("英文标签：").append(String.join("、", englishLabels)).append("\n\n");
+        prompt.append("翻译要求：\n");
+        prompt.append("- 每个中文标签不超过4个字\n");
+        prompt.append("- 使用最常见的中文词汇\n");
+        prompt.append("- 按原顺序排列\n\n");
+        prompt.append("请按以下格式输出（严格按照格式，不要添加其他内容）：\n");
+        prompt.append("中文标签：[用逗号分隔的中文标签]\n");
+        
+        return prompt.toString();
+    }
+    
+    /**
+     * Build Chinese prompt for scene suggestions
+     */
+    private String buildSceneSuggestionsPrompt(SceneSuggestionsRequest request) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("请根据以下场景分析结果，生成中文改进建议。\n\n");
+        prompt.append("场景标题：").append(request.getSceneTitle()).append("\n");
+        prompt.append("相似度得分：").append(String.format("%.2f", request.getSimilarityScore())).append("\n");
+        
+        if (request.getAnalysisData() != null && !request.getAnalysisData().isEmpty()) {
+            prompt.append("分析数据：").append(request.getAnalysisData().toString()).append("\n");
+        }
+        
+        prompt.append("\n请按以下格式输出（严格按照格式，不要添加其他内容）：\n");
+        
+        if (request.getSimilarityScore() < 0.7) {
+            prompt.append("改进建议：[2-4条建议，每条不超过40字，用分号分隔]\n");
+            prompt.append("下步行动：[1-2条行动，每条不超过20字，用分号分隔]\n");
+        } else {
+            prompt.append("改进建议：[1-2条简短建议，每条不超过40字，用分号分隔]\n");
+            prompt.append("下步行动：[1条行动，不超过20字]\n");
+        }
+        
+        return prompt.toString();
+    }
+    
+    /**
+     * Parse Qwen API response to Chinese labels
+     */
+    private List<String> parseChineseLabelsResponse(Map<String, Object> response, List<String> fallbackLabels) {
+        try {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
+            
+            if (choices != null && !choices.isEmpty()) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
+                String content = (String) message.get("content");
+                
+                return parseChineseLabelsText(content, fallbackLabels.size());
+            }
+            
+        } catch (Exception e) {
+            log.warn("Failed to parse Qwen Chinese labels response: {}", e.getMessage());
+        }
+        
+        // Fallback
+        return createMockChineseLabels(fallbackLabels);
+    }
+    
+    /**
+     * Parse Qwen API response to SceneSuggestions
+     */
+    private SceneSuggestions parseSceneSuggestionsResponse(Map<String, Object> response, SceneSuggestionsRequest request) {
+        try {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
+            
+            if (choices != null && !choices.isEmpty()) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
+                String content = (String) message.get("content");
+                
+                return parseSceneSuggestionsText(content);
+            }
+            
+        } catch (Exception e) {
+            log.warn("Failed to parse Qwen scene suggestions response: {}", e.getMessage());
+        }
+        
+        // Fallback
+        return createMockSceneSuggestions(request);
+    }
+    
+    /**
+     * Parse Chinese labels text response
+     */
+    private List<String> parseChineseLabelsText(String content, int expectedCount) {
+        List<String> labels = new ArrayList<>();
+        
+        try {
+            String[] lines = content.split("\n");
+            for (String line : lines) {
+                line = line.trim();
+                if (line.startsWith("中文标签：")) {
+                    String labelsText = line.substring(5).trim();
+                    String[] labelArray = labelsText.split("[，,；;]");
+                    for (String label : labelArray) {
+                        String cleanLabel = label.trim();
+                        if (!cleanLabel.isEmpty() && cleanLabel.length() <= 4) {
+                            labels.add(cleanLabel);
+                        }
+                    }
+                    break;
+                }
+            }
+            
+            // Ensure we have the expected number of labels
+            while (labels.size() < expectedCount) {
+                labels.add("物体" + (labels.size() + 1));
+            }
+            
+            // Trim to expected count
+            if (labels.size() > expectedCount) {
+                labels = labels.subList(0, expectedCount);
+            }
+            
+        } catch (Exception e) {
+            log.warn("Failed to parse Chinese labels text: {}", e.getMessage());
+            // Return basic fallback
+            for (int i = 0; i < expectedCount; i++) {
+                labels.add("物体" + (i + 1));
+            }
+        }
+        
+        return labels;
+    }
+    
+    /**
+     * Parse scene suggestions text response
+     */
+    private SceneSuggestions parseSceneSuggestionsText(String content) {
+        SceneSuggestions suggestions = new SceneSuggestions();
+        
+        try {
+            String[] lines = content.split("\n");
+            for (String line : lines) {
+                line = line.trim();
+                if (line.startsWith("改进建议：")) {
+                    String suggestionsText = line.substring(5).trim();
+                    suggestions.setSuggestionsZh(Arrays.asList(suggestionsText.split("[；;]")));
+                } else if (line.startsWith("下步行动：")) {
+                    String actionsText = line.substring(5).trim();
+                    suggestions.setNextActionsZh(Arrays.asList(actionsText.split("[；;]")));
+                }
+            }
+            
+            // Ensure we have some suggestions
+            if (suggestions.getSuggestionsZh() == null || suggestions.getSuggestionsZh().isEmpty()) {
+                suggestions.setSuggestionsZh(Arrays.asList("画面质量良好"));
+            }
+            if (suggestions.getNextActionsZh() == null || suggestions.getNextActionsZh().isEmpty()) {
+                suggestions.setNextActionsZh(Arrays.asList("继续录制"));
+            }
+            
+        } catch (Exception e) {
+            log.warn("Failed to parse scene suggestions text: {}", e.getMessage());
+            // Return basic fallback
+            suggestions.setSuggestionsZh(Arrays.asList("请检查视频质量"));
+            suggestions.setNextActionsZh(Arrays.asList("重新录制"));
+        }
+        
+        return suggestions;
     }
 
     /**

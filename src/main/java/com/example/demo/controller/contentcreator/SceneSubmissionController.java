@@ -2,8 +2,10 @@ package com.example.demo.controller.contentcreator;
 
 import com.example.demo.dao.SceneSubmissionDao;
 import com.example.demo.dao.TemplateDao;
+import com.example.demo.dao.VideoDao;
 import com.example.demo.model.SceneSubmission;
 import com.example.demo.model.ManualTemplate;
+import com.example.demo.model.Video;
 import com.example.demo.service.FirebaseStorageService;
 import com.example.demo.ai.services.ComparisonAIService;
 import com.google.cloud.firestore.Firestore;
@@ -39,6 +41,9 @@ public class SceneSubmissionController {
     
     @Autowired
     private ComparisonAIService comparisonAIService;
+    
+    @Autowired
+    private VideoDao videoDao;
     
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Object>> uploadScene(
@@ -270,11 +275,28 @@ public class SceneSubmissionController {
     }
     
     /**
-     * Get the original video URL from videoId for template comparison
+     * Get the original template video URL from template videoId
+     * Uses VideoDao to fetch from exampleVideos collection
      */
     private String getTemplateVideoUrl(String videoId) {
-        // TODO: Implement video URL lookup from videoId
-        // For now, return a placeholder URL for the AI comparison service
-        return "gs://bucket/videos/" + videoId + ".mp4";
+        try {
+            // Use VideoDao to get the video from exampleVideos collection
+            Video video = videoDao.getVideoById(videoId);
+            
+            if (video != null && video.getUrl() != null) {
+                log.info("Template video URL retrieved: {} for videoId: {}", video.getUrl(), videoId);
+                return video.getUrl();
+            }
+            
+            log.warn("Video not found in exampleVideos collection for videoId: {}", videoId);
+            
+        } catch (Exception e) {
+            log.error("Error retrieving template video URL for videoId {}: {}", videoId, e.getMessage(), e);
+        }
+        
+        // Fallback: construct URL with default pattern if VideoDao lookup fails
+        String fallbackUrl = String.format("https://storage.googleapis.com/matrix-ads-bucket/videos/template/%s/template.mp4", videoId);
+        log.warn("Using fallback URL for videoId {}: {}", videoId, fallbackUrl);
+        return fallbackUrl;
     }
 }
