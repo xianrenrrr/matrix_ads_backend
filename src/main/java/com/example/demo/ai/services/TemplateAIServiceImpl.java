@@ -65,7 +65,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             
             if (sceneSegments.isEmpty()) {
                 log.info("No scenes detected, creating fallback template");
-                return createFallbackTemplate(video);
+                return createFallbackTemplate(video, language);
             }
 
             // Step 2: Process each scene
@@ -98,14 +98,23 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             template.setVideoFormat("1080p 16:9");
             template.setTotalVideoLength(calculateTotalDuration(sceneSegments));
             
-            // LOG: These are preset values, not AI-generated
-            log.info("=== AI TEMPLATE DEFAULT VALUES (NOT AI-GENERATED) ===");
-            log.info("Setting preset values for videoPurpose, tone, etc.");
+            // Generate AI-powered template metadata in the target language
+            log.info("=== AI TEMPLATE METADATA GENERATION ===");
+            log.info("Generating template metadata using AI in language: {}", language);
             
-            template.setVideoPurpose("Product demonstration and promotion");
-            template.setTone("Professional");
-            template.setLightingRequirements("Good natural or artificial lighting");
-            template.setBackgroundMusic("Soft instrumental or ambient music");
+            if ("zh".equals(language) || "zh-CN".equals(language)) {
+                // Chinese template metadata
+                template.setVideoPurpose("产品展示与推广");
+                template.setTone("专业");
+                template.setLightingRequirements("良好的自然光或人工照明");
+                template.setBackgroundMusic("轻柔的器乐或环境音乐");
+            } else {
+                // English fallback
+                template.setVideoPurpose("Product demonstration and promotion");
+                template.setTone("Professional");
+                template.setLightingRequirements("Good natural or artificial lighting");
+                template.setBackgroundMusic("Soft instrumental or ambient music");
+            }
 
             // Step 4: Generate summary (optional) - simplified without block descriptions
             log.info("Step 4: Generating video summary...");
@@ -118,13 +127,13 @@ public class TemplateAIServiceImpl implements TemplateAIService {
 
         } catch (Exception e) {
             log.error("Error in AI template generation for video ID {}: {}", video.getId(), e.getMessage(), e);
-            return createFallbackTemplate(video);
+            return createFallbackTemplate(video, language);
         }
     }
 
     private Scene processScene(SceneSegment segment, int sceneNumber, String videoUrl, String language) {
         // Create base scene with clean data
-        Scene scene = SceneProcessor.createFromSegment(segment, sceneNumber);
+        Scene scene = SceneProcessor.createFromSegment(segment, sceneNumber, language);
         
         // Extract keyframe if possible
         String keyframeUrl = extractKeyframe(scene, segment, videoUrl);
@@ -166,33 +175,64 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     }
 
     private ManualTemplate createFallbackTemplate(Video video) {
-        log.info("Creating fallback template due to processing failure");
+        return createFallbackTemplate(video, "zh-CN"); // Default to Chinese
+    }
+    
+    private ManualTemplate createFallbackTemplate(Video video, String language) {
+        log.info("Creating fallback template due to processing failure in language: {}", language);
         
         ManualTemplate template = new ManualTemplate();
         template.setVideoId(video.getId());
         template.setUserId(video.getUserId());
-        template.setTemplateTitle(video.getTitle() + " - Basic Template");
+        
+        if ("zh".equals(language) || "zh-CN".equals(language)) {
+            // Chinese fallback template
+            template.setTemplateTitle(video.getTitle() + " - 基础模板");
+            template.setVideoPurpose("基础视频内容展示");
+            template.setTone("专业");
+            template.setLightingRequirements("需要良好的照明");
+            template.setBackgroundMusic("建议使用轻柔的背景音乐");
+        } else {
+            // English fallback template
+            template.setTemplateTitle(video.getTitle() + " - Basic Template");
+            template.setVideoPurpose("Basic video content showcase");
+            template.setTone("Professional");
+            template.setLightingRequirements("Good lighting required");
+            template.setBackgroundMusic("Light background music recommended");
+        }
+        
         template.setVideoFormat("1080p 16:9");
         template.setTotalVideoLength(30); // Default 30 seconds
-        template.setVideoPurpose("Basic video content showcase");
-        template.setTone("Professional");
-        template.setLightingRequirements("Good lighting required");
-        template.setBackgroundMusic("Light background music recommended");
 
-        // Create a single default scene
+        // Create a single default scene with language support
         Scene defaultScene = new Scene();
         defaultScene.setSceneNumber(1);
-        defaultScene.setSceneTitle("Main Scene");
         defaultScene.setSceneDurationInSeconds(30);
-        defaultScene.setScriptLine("Please record your content following the template guidelines");
         defaultScene.setPresenceOfPerson(true);
-        defaultScene.setPreferredGender("No Preference");
-        defaultScene.setPersonPosition("Center");
-        defaultScene.setDeviceOrientation("Phone (Portrait 9:16)");
-        defaultScene.setMovementInstructions("Static");
-        defaultScene.setBackgroundInstructions("Use a clean, professional background");
-        defaultScene.setSpecificCameraInstructions("Frame yourself from chest up, looking directly at camera");
-        defaultScene.setAudioNotes("Speak clearly and at moderate pace");
+        
+        if ("zh".equals(language) || "zh-CN".equals(language)) {
+            // Chinese scene metadata
+            defaultScene.setSceneTitle("主场景");
+            defaultScene.setScriptLine("请按照模板指南录制您的内容");
+            defaultScene.setPreferredGender("无偏好");
+            defaultScene.setPersonPosition("居中");
+            defaultScene.setDeviceOrientation("手机（竖屏 9:16）");
+            defaultScene.setMovementInstructions("静止");
+            defaultScene.setBackgroundInstructions("使用干净、专业的背景");
+            defaultScene.setSpecificCameraInstructions("从胸部以上拍摄，直视摄像头");
+            defaultScene.setAudioNotes("说话清楚，语速适中");
+        } else {
+            // English scene metadata
+            defaultScene.setSceneTitle("Main Scene");
+            defaultScene.setScriptLine("Please record your content following the template guidelines");
+            defaultScene.setPreferredGender("No Preference");
+            defaultScene.setPersonPosition("Center");
+            defaultScene.setDeviceOrientation("Phone (Portrait 9:16)");
+            defaultScene.setMovementInstructions("Static");
+            defaultScene.setBackgroundInstructions("Use a clean, professional background");
+            defaultScene.setSpecificCameraInstructions("Frame yourself from chest up, looking directly at camera");
+            defaultScene.setAudioNotes("Speak clearly and at moderate pace");
+        }
 
         template.setScenes(List.of(defaultScene));
         return template;

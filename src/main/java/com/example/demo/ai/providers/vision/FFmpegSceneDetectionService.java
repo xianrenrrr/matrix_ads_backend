@@ -45,7 +45,7 @@ public class FFmpegSceneDetectionService {
             };
             
             ProcessBuilder pb = new ProcessBuilder(command);
-            pb.redirectErrorStream(true);
+            // Don't merge streams - capture stderr separately for debugging
             Process process = pb.start();
             
             // Parse FFmpeg output for scene timestamps
@@ -66,10 +66,21 @@ public class FFmpegSceneDetectionService {
                     }
                 }
                 
+                // Capture stderr for debugging
+                BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+                StringBuilder errorOutput = new StringBuilder();
+                String errorLine;
+                while ((errorLine = errorReader.readLine()) != null) {
+                    errorOutput.append(errorLine).append("\n");
+                }
+                
                 // Wait for process to complete
                 int exitCode = process.waitFor();
                 if (exitCode != 0) {
                     System.err.printf("FFmpeg process exited with code: %d%n", exitCode);
+                    System.err.printf("FFmpeg error output: %s%n", errorOutput.toString());
+                } else {
+                    System.out.println("FFmpeg process completed successfully");
                 }
                 
                 // Create scene segments from timestamps
