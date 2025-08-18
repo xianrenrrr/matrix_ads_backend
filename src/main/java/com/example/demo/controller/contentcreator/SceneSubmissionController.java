@@ -69,7 +69,7 @@ public class SceneSubmissionController {
         // Basic mock AI scores - NO GOOGLE API CALLS
         double similarityScore = 0.85; // Mock score
         sceneSubmission.setSimilarityScore(similarityScore);
-        sceneSubmission.setAiSuggestions(Arrays.asList("Good quality", "Well framed"));
+        sceneSubmission.setAiSuggestions(Arrays.asList("画质良好", "构图合理"));
         
         // Check if score exceeds group AI threshold for auto-approval
         if (checkGroupAIThreshold(userId, similarityScore)) {
