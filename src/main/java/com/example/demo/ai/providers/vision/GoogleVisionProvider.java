@@ -1,5 +1,8 @@
 package com.example.demo.ai.providers.vision;
 
+import com.example.demo.ai.core.AIModelType;
+import com.example.demo.ai.core.AIResponse;
+import com.example.demo.model.SceneSegment;
 import com.example.demo.util.FirebaseCredentialsUtil;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.vision.v1.*;
@@ -14,7 +17,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
-public class GoogleVisionProvider {
+public class GoogleVisionProvider implements VisionProvider {
     
     private static final Logger logger = LoggerFactory.getLogger(GoogleVisionProvider.class);
     
@@ -38,7 +41,34 @@ public class GoogleVisionProvider {
      * @param imageUrl GCS URL of the keyframe image
      * @return List of polygon overlays with normalized coordinates
      */
-    public List<OverlayPolygon> detectObjectPolygons(String imageUrl) {
+    @Override
+    public AIResponse<List<VisionProvider.ObjectPolygon>> detectObjectPolygons(String imageUrl) {
+        long startTime = System.currentTimeMillis();
+        
+        if (!polygonsEnabled || imageUrl == null || imageUrl.isEmpty()) {
+            return AIResponse.success(new ArrayList<>(), getProviderName(), getModelType());
+        }
+        
+        try {
+            List<OverlayPolygon> legacyPolygons = detectObjectPolygonsLegacy(imageUrl);
+            List<VisionProvider.ObjectPolygon> polygons = legacyPolygons.stream()
+                .map(this::convertToVisionPolygon)
+                .collect(Collectors.toList());
+                
+            AIResponse<List<VisionProvider.ObjectPolygon>> response = 
+                AIResponse.success(polygons, getProviderName(), getModelType());
+            response.setProcessingTimeMs(System.currentTimeMillis() - startTime);
+            return response;
+        } catch (Exception e) {
+            logger.error("Failed to detect object polygons from keyframe {}: {}", imageUrl, e.getMessage(), e);
+            return AIResponse.error("Vision API error: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Legacy method for backward compatibility
+     */
+    public List<OverlayPolygon> detectObjectPolygonsLegacy(String imageUrl) {
         if (!polygonsEnabled || imageUrl == null || imageUrl.isEmpty()) {
             return new ArrayList<>();
         }
@@ -171,6 +201,111 @@ public class GoogleVisionProvider {
      */
     private float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
+    }
+    
+    // =========================
+    // VisionProvider Interface Implementation
+    // =========================
+    
+    @Override
+    public AIResponse<List<SceneSegment>> detectSceneChanges(String videoUrl, double threshold) {
+        // For now, delegate to FFmpegSceneDetectionService or return not supported
+        return AIResponse.error("Scene change detection not supported by Google Vision API");
+    }
+    
+    @Override
+    public AIResponse<String> extractKeyframe(String videoUrl, long timestampMs) {
+        // For now, return not supported - this would need Video Intelligence API
+        return AIResponse.error("Keyframe extraction not supported by Google Vision API");
+    }
+    
+    // =========================
+    // AIModelProvider Interface Implementation
+    // =========================
+    
+    @Override
+    public AIModelType getModelType() {
+        return AIModelType.VISION;
+    }
+    
+    @Override
+    public String getProviderName() {
+        return "GoogleVision";
+    }
+    
+    @Override
+    public boolean isAvailable() {
+        try {
+            return firebaseCredentialsUtil != null && firebaseCredentialsUtil.getCredentials() != null;
+        } catch (Exception e) {
+            logger.warn("Google Vision provider not available: {}", e.getMessage());
+            return false;
+        }
+    }
+    
+    @Override
+    public Map<String, Object> getConfiguration() {
+        Map<String, Object> config = new HashMap<>();
+        config.put("polygonsEnabled", polygonsEnabled);
+        config.put("maxShapes", maxShapes);
+        config.put("minArea", minArea);
+        config.put("confidenceThreshold", confidenceThreshold);
+        return config;
+    }
+    
+    @Override
+    public void initialize(Map<String, Object> config) {
+        if (config.containsKey("polygonsEnabled")) {
+            this.polygonsEnabled = (Boolean) config.get("polygonsEnabled");
+        }
+        if (config.containsKey("maxShapes")) {
+            this.maxShapes = (Integer) config.get("maxShapes");
+        }
+        if (config.containsKey("minArea")) {
+            this.minArea = ((Number) config.get("minArea")).floatValue();
+        }
+        if (config.containsKey("confidenceThreshold")) {
+            this.confidenceThreshold = ((Number) config.get("confidenceThreshold")).floatValue();
+        }
+    }
+    
+    @Override
+    public int getPriority() {
+        return 50; // Medium priority - YOLO would be higher
+    }
+    
+    @Override
+    public boolean supportsOperation(String operation) {
+        switch (operation) {
+            case "detectObjectPolygons":
+                return true;
+            case "detectSceneChanges":
+            case "extractKeyframe":
+                return false; // Not supported
+            default:
+                return false;
+        }
+    }
+    
+    // =========================
+    // Helper Methods
+    // =========================
+    
+    /**
+     * Convert legacy OverlayPolygon to VisionProvider.ObjectPolygon
+     */
+    private VisionProvider.ObjectPolygon convertToVisionPolygon(OverlayPolygon legacyPolygon) {
+        List<VisionProvider.ObjectPolygon.Point> points = legacyPolygon.getPoints().stream()
+            .map(p -> new VisionProvider.ObjectPolygon.Point(p.getX(), p.getY()))
+            .collect(Collectors.toList());
+            
+        VisionProvider.ObjectPolygon polygon = new VisionProvider.ObjectPolygon(
+            legacyPolygon.getLabel(), 
+            legacyPolygon.getConfidence(), 
+            points
+        );
+        polygon.setLabelLocalized(legacyPolygon.getLabelLocalized());
+        return polygon;
     }
     
     /**

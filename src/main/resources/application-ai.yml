@@ -1,0 +1,128 @@
+# =============================================================================
+# Matrix Ads AI Configuration Template
+# =============================================================================
+# Copy this configuration to your application.yml or application-production.yml
+# Customize the settings based on your deployment environment
+
+ai:
+  # Global AI Settings
+  enabled: true
+  default-language: "zh-CN"
+  global-timeout-ms: 30000
+
+  # Model Switching Configuration
+  switching:
+    enable-fallback: true
+    max-retries: 3
+    enable-health-check: true
+    health-check-interval-ms: 60000
+    preferred-providers:
+      vision: "YOLO-yolov8n-seg"      # Primary choice for vision tasks
+      llm: "Qwen-qwen2.5-vl-7b"      # Primary choice for Chinese text
+      embedding: "LocalEmbedding"     # Primary choice for embeddings
+
+  # Provider-Specific Configurations
+  providers:
+    # =============================================================================
+    # YOLO Provider (Object Detection & Segmentation) - PRIMARY VISION
+    # =============================================================================
+    yolo:
+      enabled: true
+      priority: 100
+      endpoint: "http://localhost:8000"
+      model: "yolov8n-seg"              # Options: yolov8n-seg, yolov8s-seg
+      timeout-ms: 15000
+      parameters:
+        confidence: 0.60
+        max-objects: 4
+        min-area: 0.02
+
+    # =============================================================================
+    # Google Vision Provider (Fallback Vision) - SECONDARY VISION
+    # =============================================================================
+    google-vision:
+      enabled: true
+      priority: 50
+      timeout-ms: 20000
+      parameters:
+        polygons-enabled: true
+        max-shapes: 4
+        min-area: 0.02
+        confidence-threshold: 0.6
+
+    # =============================================================================
+    # Qwen Provider (Chinese-First LLM) - PRIMARY LLM
+    # =============================================================================
+    qwen:
+      enabled: true
+      priority: 100
+      endpoint: "http://localhost:8001"
+      model: "qwen2.5-vl-7b"
+      api-key: ""                       # Set if required
+      timeout-ms: 25000
+      parameters:
+        max-tokens: 512
+        temperature: 0.7
+        language: "zh-CN"
+
+    # =============================================================================
+    # OpenAI Provider (Fallback LLM) - SECONDARY LLM
+    # =============================================================================
+    openai:
+      enabled: false                    # Enable only if you have API key
+      priority: 50
+      api-key: "your_openai_api_key"   # Required - replace with actual key
+      model: "gpt-4"
+      timeout-ms: 20000
+      parameters:
+        max-tokens: 512
+        temperature: 0.7
+
+    # =============================================================================
+    # Local Embedding Provider (Always Available) - PRIMARY EMBEDDING
+    # =============================================================================
+    local-embedding:
+      enabled: true
+      priority: 10
+      timeout-ms: 5000
+      parameters:
+        dimension: 384
+
+# =============================================================================
+# Legacy AI Settings (Backward Compatibility)
+# =============================================================================
+# These settings are still used by existing services during migration
+ai:
+  overlay:
+    polygons:
+      enabled: true
+      max-shapes: 4
+      min-area: 0.02
+    confidence-threshold: 0.6
+
+# =============================================================================
+# Production Deployment Notes
+# =============================================================================
+# 1. YOLO Service Setup:
+#    - Deploy YOLO service with YOLOv8-seg model
+#    - CPU: Use yolov8n-seg for faster inference
+#    - GPU: Use yolov8s-seg for better accuracy
+#    - Endpoint should return polygon segmentation data
+#
+# 2. Qwen Service Setup:
+#    - Deploy Qwen2.5-VL model service
+#    - Configure for Chinese-first text generation
+#    - Ensure proper Chinese character encoding
+#
+# 3. Google Vision API:
+#    - Ensure Firebase credentials are properly configured
+#    - Used as fallback when YOLO is unavailable
+#
+# 4. OpenAI (Optional):
+#    - Only enable if you want LLM fallback
+#    - Requires valid API key with sufficient credits
+#
+# 5. Monitoring:
+#    - Check AI health status: GET /api/ai-management/health
+#    - View metrics: GET /api/ai-management/metrics
+#    - Test providers: POST /api/ai-management/test/{providerName}

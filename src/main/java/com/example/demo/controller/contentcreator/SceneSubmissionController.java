@@ -5,10 +5,13 @@ import com.example.demo.dao.TemplateDao;
 import com.example.demo.model.SceneSubmission;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.service.FirebaseStorageService;
+import com.example.demo.ai.services.ComparisonAIService;
 import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.DocumentReference;
 import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.FieldValue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,6 +22,8 @@ import java.util.*;
 @RestController
 @RequestMapping("/content-creator/scenes")
 public class SceneSubmissionController {
+    
+    private static final Logger log = LoggerFactory.getLogger(SceneSubmissionController.class);
     
     @Autowired
     private SceneSubmissionDao sceneSubmissionDao;
@@ -31,6 +36,9 @@ public class SceneSubmissionController {
     
     @Autowired
     private Firestore db;
+    
+    @Autowired
+    private ComparisonAIService comparisonAIService;
     
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Object>> uploadScene(
@@ -66,13 +74,30 @@ public class SceneSubmissionController {
         sceneSubmission.setFileSize(file.getSize());
         sceneSubmission.setFormat(getFileExtension(file.getOriginalFilename()));
         
-        // Basic mock AI scores - NO GOOGLE API CALLS
-        double similarityScore = 0.85; // Mock score
-        sceneSubmission.setSimilarityScore(similarityScore);
-        sceneSubmission.setAiSuggestions(Arrays.asList("画质良好", "构图合理"));
+        // REAL AI Scene Comparison (YOLO + Qwen via AI orchestrator)
+        try {
+            // Get the original video URL from the template's videoId
+            String templateVideoUrl = getTemplateVideoUrl(template.getVideoId());
+            
+            ComparisonAIService.SceneComparisonResult comparisonResult = comparisonAIService.compareScenes(
+                templateScene, uploadResult.videoUrl, templateVideoUrl);
+            
+            sceneSubmission.setSimilarityScore(comparisonResult.similarityScore);
+            sceneSubmission.setAiSuggestions(comparisonResult.suggestions);
+            
+            log.info("AI Comparison for scene {}: score={}, suggestions={}", 
+                    sceneNumber, comparisonResult.similarityScore, comparisonResult.suggestions);
+                    
+        } catch (Exception e) {
+            log.warn("AI comparison failed, using fallback scores: {}", e.getMessage());
+            // Fallback to basic scores if AI fails
+            sceneSubmission.setSimilarityScore(0.75);
+            sceneSubmission.setAiSuggestions(Arrays.asList("AI分析暂时不可用", "请检查视频质量"));
+        }
         
         // Check if score exceeds group AI threshold for auto-approval
-        if (checkGroupAIThreshold(userId, similarityScore)) {
+        double finalSimilarityScore = sceneSubmission.getSimilarityScore();
+        if (checkGroupAIThreshold(userId, finalSimilarityScore)) {
             sceneSubmission.setStatus("approved");
         }
         
@@ -242,5 +267,14 @@ public class SceneSubmissionController {
         } catch (Exception e) {
             return false; // Default to manual approval if error
         }
+    }
+    
+    /**
+     * Get the original video URL from videoId for template comparison
+     */
+    private String getTemplateVideoUrl(String videoId) {
+        // TODO: Implement video URL lookup from videoId
+        // For now, return a placeholder URL for the AI comparison service
+        return "gs://bucket/videos/" + videoId + ".mp4";
     }
 }

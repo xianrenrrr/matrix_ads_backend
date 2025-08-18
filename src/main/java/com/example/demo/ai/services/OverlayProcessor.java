@@ -3,7 +3,8 @@ package com.example.demo.ai.services;
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSegment;
 import com.example.demo.ai.services.OverlayLegendService;
-import com.example.demo.ai.providers.vision.GoogleVisionProvider;
+import com.example.demo.ai.services.AIOrchestrator;
+import com.example.demo.ai.core.AIModelType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,12 +14,12 @@ import org.slf4j.LoggerFactory;
 public class OverlayProcessor {
     private static final Logger log = LoggerFactory.getLogger(OverlayProcessor.class);
     
-    private final GoogleVisionProvider objectService;
+    private final AIOrchestrator aiOrchestrator;
     private final OverlayLegendService legendService;
     
-    public OverlayProcessor(GoogleVisionProvider objectService, 
+    public OverlayProcessor(AIOrchestrator aiOrchestrator, 
                            OverlayLegendService legendService) {
-        this.objectService = objectService;
+        this.aiOrchestrator = aiOrchestrator;
         this.legendService = legendService;
     }
     
@@ -57,24 +58,59 @@ public class OverlayProcessor {
     }
     
     private boolean shouldDetectPolygons(String keyframeUrl) {
-        return objectService != null && keyframeUrl != null && !keyframeUrl.isBlank();
+        return aiOrchestrator != null && keyframeUrl != null && !keyframeUrl.isBlank();
     }
     
     private void tryPolygonDetection(Scene scene, String keyframeUrl) {
         try {
-            var polygons = objectService.detectObjectPolygons(keyframeUrl);
-            if (!polygons.isEmpty()) {
-                scene.setOverlayType("polygons");
-                scene.setOverlayPolygons(polygons);
-                scene.setOverlayObjects(null); // Clear boxes
-                log.info("Scene {}: Detected {} polygons", 
-                        scene.getSceneNumber(), polygons.size());
+            // Use AI orchestrator to get the best available vision provider (YOLO -> Google Vision)
+            var response = aiOrchestrator.<java.util.List<com.example.demo.ai.providers.vision.VisionProvider.ObjectPolygon>>executeWithFallback(
+                AIModelType.VISION, 
+                "detectObjectPolygons",
+                provider -> {
+                    var visionProvider = (com.example.demo.ai.providers.vision.VisionProvider) provider;
+                    return visionProvider.detectObjectPolygons(keyframeUrl);
+                }
+            );
+            
+            if (response.isSuccess() && response.getData() != null) {
+                var visionPolygons = response.getData();
+                
+                if (!visionPolygons.isEmpty()) {
+                    // Convert VisionProvider.ObjectPolygon to GoogleVisionProvider.OverlayPolygon for compatibility
+                    var legacyPolygons = visionPolygons.stream()
+                        .map(this::convertToLegacyPolygon)
+                        .collect(java.util.stream.Collectors.toList());
+                    
+                    scene.setOverlayType("polygons");
+                    scene.setOverlayPolygons(legacyPolygons);
+                    scene.setOverlayObjects(null); // Clear boxes
+                    log.info("Scene {}: Detected {} polygons using {} (via AI orchestrator)", 
+                            scene.getSceneNumber(), visionPolygons.size(), response.getModelUsed());
+                }
             }
         } catch (Exception e) {
             log.error("Polygon detection failed for scene {}: {}", 
                      scene.getSceneNumber(), e.getMessage());
         }
     }
+    
+    /**
+     * Convert VisionProvider.ObjectPolygon to GoogleVisionProvider.OverlayPolygon for compatibility
+     */
+    private com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon convertToLegacyPolygon(
+            com.example.demo.ai.providers.vision.VisionProvider.ObjectPolygon visionPolygon) {
+        
+        var legacyPoints = visionPolygon.getPoints().stream()
+            .map(p -> new com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point(p.getX(), p.getY()))
+            .collect(java.util.stream.Collectors.toList());
+            
+        var legacyPolygon = new com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon(
+            visionPolygon.getLabel(), visionPolygon.getConfidence(), legacyPoints);
+        legacyPolygon.setLabelLocalized(visionPolygon.getLabelLocalized());
+        return legacyPolygon;
+    }
+    
     
     private void generateLegendIfNeeded(Scene scene) {
         if (legendService == null || "grid".equals(scene.getOverlayType())) {

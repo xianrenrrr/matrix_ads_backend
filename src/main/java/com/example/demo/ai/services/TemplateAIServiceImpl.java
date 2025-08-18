@@ -4,7 +4,7 @@ import com.example.demo.ai.services.OverlayLegendService;
 import com.example.demo.ai.providers.vision.FFmpegSceneDetectionService;
 import com.example.demo.ai.services.KeyframeExtractionService;
 import com.example.demo.ai.providers.llm.VideoSummaryService;
-import com.example.demo.ai.providers.vision.GoogleVisionProvider;
+import com.example.demo.ai.services.AIOrchestrator;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSegment;
@@ -28,7 +28,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     
     
     @Autowired
-    private GoogleVisionProvider objectLocalizationService;
+    private AIOrchestrator aiOrchestrator;
     
     @Autowired
     private OverlayLegendService overlayLegendService;
@@ -47,7 +47,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
 
     @Override
     public ManualTemplate generateTemplate(Video video) {
-        return generateTemplate(video, "en");
+        return generateTemplate(video, "zh-CN"); // Chinese-first approach
     }
     
     @Override
@@ -133,9 +133,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             scene.setExampleFrame(keyframeUrl);
         }
         
-        // Process overlays in a clean, separated way
+        // Process overlays in a clean, separated way using AI orchestrator
         OverlayProcessor overlayProcessor = new OverlayProcessor(
-            objectLocalizationService, overlayLegendService);
+            aiOrchestrator, overlayLegendService);
         overlayProcessor.processOverlays(scene, segment, keyframeUrl);
         
         return scene;
