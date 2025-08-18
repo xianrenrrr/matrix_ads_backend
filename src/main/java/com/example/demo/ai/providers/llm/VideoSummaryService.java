@@ -1,4 +1,4 @@
-package com.example.demo.ai.shared;
+package com.example.demo.ai.providers.llm;
 
 import com.example.demo.model.Video;
 import java.util.List;

@@ -1,9 +1,7 @@
 package com.example.demo.testsupport;
 
-import com.example.demo.ai.comparison.EmbeddingService;
-import com.example.demo.ai.scene.SceneAnalysisService;
-import com.example.demo.ai.shared.KeyframeExtractionService;
-import com.example.demo.ai.shared.VideoSummaryService;
+import com.example.demo.ai.services.KeyframeExtractionService;
+import com.example.demo.ai.providers.llm.VideoSummaryService;
 import com.example.demo.dao.*;
 import com.example.demo.model.*;
 import com.example.demo.service.*;
@@ -62,21 +60,6 @@ public class CiTestConfig {
         return service;
     }
 
-    @Bean
-    @Primary
-    public SceneAnalysisService sceneAnalysisService() {
-        SceneAnalysisService service = Mockito.mock(SceneAnalysisService.class);
-        // SceneAnalysisService methods will be mocked per test as needed
-        return service;
-    }
-
-    @Bean
-    @Primary
-    public EmbeddingService embeddingService() {
-        EmbeddingService service = Mockito.mock(EmbeddingService.class);
-        when(service.generateEmbedding(anyString())).thenReturn(new float[]{0.1f, 0.2f, 0.3f});
-        return service;
-    }
 
     @Bean
     @Primary

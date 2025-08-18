@@ -1,4 +1,4 @@
-package com.example.demo.ai.template;
+package com.example.demo.ai.services;
 
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSegment;

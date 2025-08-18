@@ -1,6 +1,6 @@
-package com.example.demo.ai.vision;
+package com.example.demo.ai.providers.vision;
 
-import com.example.demo.ai.vision.ObjectLocalizationService.OverlayPolygon;
+import com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon;
 import com.example.demo.util.FirebaseCredentialsUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,9 +13,9 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class ObjectLocalizationServiceTest {
+public class GoogleVisionProviderTest {
     
-    private ObjectLocalizationService objectLocalizationService;
+    private GoogleVisionProvider googleVisionProvider;
     
     @Mock
     private FirebaseCredentialsUtil firebaseCredentialsUtil;
@@ -23,24 +23,24 @@ public class ObjectLocalizationServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        objectLocalizationService = new ObjectLocalizationService();
+        googleVisionProvider = new GoogleVisionProvider();
         
         // Configure test settings
-        ReflectionTestUtils.setField(objectLocalizationService, "firebaseCredentialsUtil", firebaseCredentialsUtil);
-        ReflectionTestUtils.setField(objectLocalizationService, "polygonsEnabled", true);
-        ReflectionTestUtils.setField(objectLocalizationService, "maxShapes", 4);
-        ReflectionTestUtils.setField(objectLocalizationService, "minArea", 0.02f);
-        ReflectionTestUtils.setField(objectLocalizationService, "confidenceThreshold", 0.6f);
+        ReflectionTestUtils.setField(googleVisionProvider, "firebaseCredentialsUtil", firebaseCredentialsUtil);
+        ReflectionTestUtils.setField(googleVisionProvider, "polygonsEnabled", true);
+        ReflectionTestUtils.setField(googleVisionProvider, "maxShapes", 4);
+        ReflectionTestUtils.setField(googleVisionProvider, "minArea", 0.02f);
+        ReflectionTestUtils.setField(googleVisionProvider, "confidenceThreshold", 0.6f);
     }
     
     @Test
     void testDetectObjectPolygonsWithDisabledPolygons() {
         // Given
-        ReflectionTestUtils.setField(objectLocalizationService, "polygonsEnabled", false);
+        ReflectionTestUtils.setField(googleVisionProvider, "polygonsEnabled", false);
         String imageUrl = "gs://bucket/image.jpg";
         
         // When
-        List<OverlayPolygon> result = objectLocalizationService.detectObjectPolygons(imageUrl);
+        List<OverlayPolygon> result = googleVisionProvider.detectObjectPolygons(imageUrl);
         
         // Then
         assertTrue(result.isEmpty());
@@ -49,7 +49,7 @@ public class ObjectLocalizationServiceTest {
     @Test
     void testDetectObjectPolygonsWithNullImageUrl() {
         // When
-        List<OverlayPolygon> result = objectLocalizationService.detectObjectPolygons(null);
+        List<OverlayPolygon> result = googleVisionProvider.detectObjectPolygons(null);
         
         // Then
         assertTrue(result.isEmpty());
@@ -58,7 +58,7 @@ public class ObjectLocalizationServiceTest {
     @Test
     void testDetectObjectPolygonsWithEmptyImageUrl() {
         // When
-        List<OverlayPolygon> result = objectLocalizationService.detectObjectPolygons("");
+        List<OverlayPolygon> result = googleVisionProvider.detectObjectPolygons("");
         
         // Then
         assertTrue(result.isEmpty());
@@ -149,7 +149,7 @@ public class ObjectLocalizationServiceTest {
     @Test
     void testCalculatePolygonArea() throws Exception {
         // Use reflection to test private method
-        java.lang.reflect.Method method = ObjectLocalizationService.class.getDeclaredMethod(
+        java.lang.reflect.Method method = GoogleVisionProvider.class.getDeclaredMethod(
             "calculatePolygonArea", List.class);
         method.setAccessible(true);
         
@@ -162,7 +162,7 @@ public class ObjectLocalizationServiceTest {
         );
         
         // When
-        float area = (Float) method.invoke(objectLocalizationService, square);
+        float area = (Float) method.invoke(googleVisionProvider, square);
         
         // Then
         assertEquals(0.25f, area, 0.001f);
@@ -171,7 +171,7 @@ public class ObjectLocalizationServiceTest {
     @Test
     void testCalculatePolygonAreaWithTriangle() throws Exception {
         // Use reflection to test private method
-        java.lang.reflect.Method method = ObjectLocalizationService.class.getDeclaredMethod(
+        java.lang.reflect.Method method = GoogleVisionProvider.class.getDeclaredMethod(
             "calculatePolygonArea", List.class);
         method.setAccessible(true);
         
@@ -183,7 +183,7 @@ public class ObjectLocalizationServiceTest {
         );
         
         // When
-        float area = (Float) method.invoke(objectLocalizationService, triangle);
+        float area = (Float) method.invoke(googleVisionProvider, triangle);
         
         // Then
         assertEquals(0.5f, area, 0.001f);
@@ -192,13 +192,13 @@ public class ObjectLocalizationServiceTest {
     @Test
     void testClamp() throws Exception {
         // Use reflection to test private method
-        java.lang.reflect.Method method = ObjectLocalizationService.class.getDeclaredMethod(
+        java.lang.reflect.Method method = GoogleVisionProvider.class.getDeclaredMethod(
             "clamp", float.class, float.class, float.class);
         method.setAccessible(true);
         
         // Test clamping
-        assertEquals(0.0f, (Float) method.invoke(objectLocalizationService, -0.5f, 0.0f, 1.0f), 0.001f);
-        assertEquals(0.5f, (Float) method.invoke(objectLocalizationService, 0.5f, 0.0f, 1.0f), 0.001f);
-        assertEquals(1.0f, (Float) method.invoke(objectLocalizationService, 1.5f, 0.0f, 1.0f), 0.001f);
+        assertEquals(0.0f, (Float) method.invoke(googleVisionProvider, -0.5f, 0.0f, 1.0f), 0.001f);
+        assertEquals(0.5f, (Float) method.invoke(googleVisionProvider, 0.5f, 0.0f, 1.0f), 0.001f);
+        assertEquals(1.0f, (Float) method.invoke(googleVisionProvider, 1.5f, 0.0f, 1.0f), 0.001f);
     }
 }

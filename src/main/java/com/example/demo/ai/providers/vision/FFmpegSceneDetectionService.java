@@ -1,4 +1,4 @@
-package com.example.demo.ai.scenes;
+package com.example.demo.ai.providers.vision;
 
 import com.example.demo.model.SceneSegment;
 import org.springframework.beans.factory.annotation.Value;

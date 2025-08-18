@@ -1,4 +1,4 @@
-package com.example.demo.ai.shared;
+package com.example.demo.ai.services;
 
 import com.example.demo.util.FirebaseCredentialsUtil;
 import com.google.auth.oauth2.GoogleCredentials;

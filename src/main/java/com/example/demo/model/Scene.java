@@ -1,7 +1,7 @@
 package com.example.demo.model;
 
-import com.example.demo.ai.guidance.OverlayLegendService.LegendItem;
-import com.example.demo.ai.vision.ObjectLocalizationService.OverlayPolygon;
+import com.example.demo.ai.services.OverlayLegendService.LegendItem;
+import com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;

@@ -1,4 +1,4 @@
-package com.example.demo.ai.shared;
+package com.example.demo.ai.services;
 
 import java.time.Duration;
 

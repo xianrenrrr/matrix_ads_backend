@@ -1,9 +1,9 @@
-package com.example.demo.ai.template;
+package com.example.demo.ai.services;
 
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSegment;
-import com.example.demo.ai.guidance.OverlayLegendService;
-import com.example.demo.ai.vision.ObjectLocalizationService;
+import com.example.demo.ai.services.OverlayLegendService;
+import com.example.demo.ai.providers.vision.GoogleVisionProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,10 +13,10 @@ import org.slf4j.LoggerFactory;
 public class OverlayProcessor {
     private static final Logger log = LoggerFactory.getLogger(OverlayProcessor.class);
     
-    private final ObjectLocalizationService objectService;
+    private final GoogleVisionProvider objectService;
     private final OverlayLegendService legendService;
     
-    public OverlayProcessor(ObjectLocalizationService objectService, 
+    public OverlayProcessor(GoogleVisionProvider objectService, 
                            OverlayLegendService legendService) {
         this.objectService = objectService;
         this.legendService = legendService;

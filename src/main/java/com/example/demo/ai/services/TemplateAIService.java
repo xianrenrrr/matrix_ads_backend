@@ -1,9 +1,9 @@
-package com.example.demo.ai.template;
+package com.example.demo.ai.services;
 
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Video;
 
-public interface AITemplateGenerator {
+public interface TemplateAIService {
     ManualTemplate generateTemplate(Video video);
     
     default ManualTemplate generateTemplate(Video video, String language) {

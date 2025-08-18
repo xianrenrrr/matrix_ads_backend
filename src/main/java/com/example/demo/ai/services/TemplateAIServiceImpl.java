@@ -1,10 +1,10 @@
-package com.example.demo.ai.template;
+package com.example.demo.ai.services;
 
-import com.example.demo.ai.guidance.OverlayLegendService;
-import com.example.demo.ai.scenes.FFmpegSceneDetectionService;
-import com.example.demo.ai.shared.KeyframeExtractionService;
-import com.example.demo.ai.shared.VideoSummaryService;
-import com.example.demo.ai.vision.ObjectLocalizationService;
+import com.example.demo.ai.services.OverlayLegendService;
+import com.example.demo.ai.providers.vision.FFmpegSceneDetectionService;
+import com.example.demo.ai.services.KeyframeExtractionService;
+import com.example.demo.ai.providers.llm.VideoSummaryService;
+import com.example.demo.ai.providers.vision.GoogleVisionProvider;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSegment;
@@ -20,15 +20,15 @@ import java.util.HashMap;
 import java.util.List;
 
 @Service
-public class AITemplateGeneratorImpl implements AITemplateGenerator {
-    private static final Logger log = LoggerFactory.getLogger(AITemplateGeneratorImpl.class);
+public class TemplateAIServiceImpl implements TemplateAIService {
+    private static final Logger log = LoggerFactory.getLogger(TemplateAIServiceImpl.class);
 
     @Autowired
     private FFmpegSceneDetectionService sceneDetectionService;
     
     
     @Autowired
-    private ObjectLocalizationService objectLocalizationService;
+    private GoogleVisionProvider objectLocalizationService;
     
     @Autowired
     private OverlayLegendService overlayLegendService;

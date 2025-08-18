@@ -11,7 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import com.example.demo.ai.template.AITemplateGenerator;
+import com.example.demo.ai.services.TemplateAIService;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -20,7 +20,7 @@ import java.util.NoSuchElementException;
 @RequestMapping("/content-manager/videos")
 public class VideoController {
     @Autowired
-    private AITemplateGenerator aiTemplateGenerator;
+    private TemplateAIService aiTemplateGenerator;
     private String detectLanguage(String acceptLanguageHeader) {
         if (acceptLanguageHeader == null || acceptLanguageHeader.isEmpty()) {
             return "en";

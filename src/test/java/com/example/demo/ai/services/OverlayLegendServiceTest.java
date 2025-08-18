@@ -1,7 +1,7 @@
-package com.example.demo.ai.guidance;
+package com.example.demo.ai.services;
 
-import com.example.demo.ai.guidance.OverlayLegendService.LegendItem;
-import com.example.demo.ai.vision.ObjectLocalizationService.OverlayPolygon;
+import com.example.demo.ai.services.OverlayLegendService.LegendItem;
+import com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon;
 import com.example.demo.model.Scene;
 import com.example.demo.model.Scene.ObjectOverlay;
 import org.junit.jupiter.api.BeforeEach;

@@ -1,4 +1,4 @@
-package com.example.demo.ai.vision;
+package com.example.demo.ai.providers.vision;
 
 import com.example.demo.util.FirebaseCredentialsUtil;
 import com.google.auth.oauth2.GoogleCredentials;
@@ -14,9 +14,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
-public class ObjectLocalizationService {
+public class GoogleVisionProvider {
     
-    private static final Logger logger = LoggerFactory.getLogger(ObjectLocalizationService.class);
+    private static final Logger logger = LoggerFactory.getLogger(GoogleVisionProvider.class);
     
     @Autowired
     private FirebaseCredentialsUtil firebaseCredentialsUtil;

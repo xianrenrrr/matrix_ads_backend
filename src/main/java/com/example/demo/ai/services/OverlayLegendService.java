@@ -1,4 +1,4 @@
-package com.example.demo.ai.guidance;
+package com.example.demo.ai.services;
 
 import com.example.demo.model.Scene;
 import org.springframework.stereotype.Service;
