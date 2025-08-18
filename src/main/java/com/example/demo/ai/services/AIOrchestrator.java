@@ -5,7 +5,6 @@ import com.example.demo.ai.core.AIModelType;
 import com.example.demo.ai.core.AIResponse;
 import com.example.demo.ai.providers.vision.VisionProvider;
 import com.example.demo.ai.providers.llm.LLMProvider;
-import com.example.demo.ai.providers.embedding.EmbeddingProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,13 +26,11 @@ public class AIOrchestrator {
     
     @Autowired
     public AIOrchestrator(List<VisionProvider> visionProviders,
-                         List<LLMProvider> llmProviders,
-                         List<EmbeddingProvider> embeddingProviders) {
+                         List<LLMProvider> llmProviders) {
         // Register all providers by type
         providers.put(AIModelType.VISION, new ArrayList<>(visionProviders));
         providers.put(AIModelType.SEGMENTATION, new ArrayList<>(visionProviders)); // Vision providers handle segmentation
         providers.put(AIModelType.LLM, new ArrayList<>(llmProviders));
-        providers.put(AIModelType.EMBEDDING, new ArrayList<>(embeddingProviders));
         
         // Sort providers by priority (highest first)
         providers.values().forEach(providerList -> 

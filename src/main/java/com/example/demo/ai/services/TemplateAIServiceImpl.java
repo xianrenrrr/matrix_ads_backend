@@ -39,9 +39,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Autowired
     private VideoSummaryService videoSummaryService;
     
-    @Autowired(required = false)
-    private com.example.demo.ai.providers.llm.LLMProvider qwenProvider;
-    
     @Value("${ai.template.useObjectOverlay:true}")
     private boolean useObjectOverlay;
     
@@ -166,9 +163,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             .sum();
     }
 
-    private ManualTemplate createFallbackTemplate(Video video) {
-        return createFallbackTemplate(video, "zh-CN"); // Default to Chinese
-    }
     
     private ManualTemplate createFallbackTemplate(Video video, String language) {
         log.info("Creating fallback template due to processing failure in language: {}", language);

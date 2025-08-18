@@ -15,11 +15,6 @@ public enum AIModelType {
     LLM,
     
     /**
-     * Embedding models (vector representations, similarity)
-     */
-    EMBEDDING,
-    
-    /**
      * Segmentation models (object segmentation, polygons)
      */
     SEGMENTATION
