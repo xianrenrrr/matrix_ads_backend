@@ -251,14 +251,29 @@ public class YOLOProvider implements VisionProvider {
      */
     private byte[] downloadImageData(String imageUrl) throws Exception {
         try {
-            ResponseEntity<byte[]> response = restTemplate.getForEntity(imageUrl, byte[].class);
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return response.getBody();
+            // Use URL connection instead of RestTemplate to avoid URL encoding issues with signed URLs
+            java.net.URL url = new java.net.URL(imageUrl);
+            java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(30000);
+            
+            int responseCode = connection.getResponseCode();
+            if (responseCode == 200) {
+                try (java.io.InputStream inputStream = connection.getInputStream();
+                     java.io.ByteArrayOutputStream outputStream = new java.io.ByteArrayOutputStream()) {
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+                    while ((bytesRead = inputStream.read(buffer)) != -1) {
+                        outputStream.write(buffer, 0, bytesRead);
+                    }
+                    return outputStream.toByteArray();
+                }
             } else {
-                throw new RuntimeException("Failed to download image: " + response.getStatusCode());
+                throw new RuntimeException("Failed to download image, HTTP response code: " + responseCode);
             }
         } catch (Exception e) {
-            log.error("Failed to download image from {}: {}", imageUrl, e.getMessage());
+            log.error("Failed to download image from signed URL: {}", e.getMessage());
             throw e;
         }
     }
