@@ -39,7 +39,8 @@ public class FFmpegSceneDetectionService {
      * @return List of scene segments with start/end timestamps
      */
     public List<SceneSegment> detectScenes(String videoUrl) {
-        System.out.printf("FFmpeg scene detection starting for: %s with threshold: %.2f%n", videoUrl, sceneThreshold);
+        System.out.printf("FFmpeg scene detection starting for: %s with threshold: %.2f (configured: ai.scenes.threshold=%.2f)%n", 
+                         videoUrl, sceneThreshold, sceneThreshold);
         List<SceneSegment> scenes = new ArrayList<>();
         
         try {
