@@ -208,17 +208,16 @@ public class YOLOProvider implements VisionProvider {
      */
     private List<ObjectPolygon> callHuggingFaceAPI(String imageUrl) {
         try {
-            // HF API expects different format
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("inputs", imageUrl);
+            // Download image data for Hugging Face API
+            byte[] imageData = downloadImageData(imageUrl);
             
             HttpHeaders headers = new HttpHeaders();
-            headers.set("Content-Type", "application/json");
+            headers.set("Content-Type", "application/octet-stream"); // Binary data
             headers.set("Authorization", "Bearer " + apiKey);
             
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            HttpEntity<byte[]> request = new HttpEntity<>(imageData, headers);
             
-            // Call Hugging Face API (no /detect/polygons suffix)
+            // Call Hugging Face API with binary image data
             ResponseEntity<Map> response = restTemplate.exchange(
                 yoloEndpoint,
                 HttpMethod.POST,
@@ -231,6 +230,23 @@ public class YOLOProvider implements VisionProvider {
             
         } catch (Exception e) {
             log.warn("Hugging Face API call failed: {}", e.getMessage());
+            throw new RuntimeException("Hugging Face API call failed", e);
+        }
+    }
+    
+    /**
+     * Download image data from URL for Hugging Face API
+     */
+    private byte[] downloadImageData(String imageUrl) throws Exception {
+        try {
+            ResponseEntity<byte[]> response = restTemplate.getForEntity(imageUrl, byte[].class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            } else {
+                throw new RuntimeException("Failed to download image: " + response.getStatusCode());
+            }
+        } catch (Exception e) {
+            log.error("Failed to download image from {}: {}", imageUrl, e.getMessage());
             throw e;
         }
     }

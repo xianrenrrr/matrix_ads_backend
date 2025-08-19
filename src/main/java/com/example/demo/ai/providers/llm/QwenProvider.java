@@ -260,11 +260,16 @@ public class QwenProvider implements LLMProvider {
         List<Map<String, Object>> content = new ArrayList<>();
         if (imageUrl != null && !imageUrl.isEmpty()) {
             content.add(Map.of("type", "image_url", "image_url", Map.of("url", imageUrl)));
+            log.info("Adding image to Qwen request: {}", imageUrl);
+        } else {
+            log.info("No image provided, text-only request to Qwen");
         }
         content.add(Map.of("type", "text", "text", prompt));
         
         userMessage.put("content", content);
         messages.add(userMessage);
+        
+        log.info("Qwen request content structure: {}", content);
         
         requestBody.put("messages", messages);
         
@@ -278,7 +283,14 @@ public class QwenProvider implements LLMProvider {
                 Map.class
             );
             
-            return response.getBody();
+            Map<String, Object> responseBody = response.getBody();
+            log.info("=== QWEN API RAW RESPONSE ===");
+            log.info("Status: {}", response.getStatusCode());
+            log.info("Headers: {}", response.getHeaders());
+            log.info("Body: {}", responseBody);
+            log.info("=== END QWEN RAW RESPONSE ===");
+            
+            return responseBody;
             
         } catch (Exception e) {
             log.error("Qwen API call failed: {}", e.getMessage(), e);
@@ -674,7 +686,40 @@ public class QwenProvider implements LLMProvider {
     private TemplateMetadata callQwenForTemplateMetadata(TemplateMetadataRequest request) throws Exception {
         String prompt = buildTemplateMetadataPrompt(request);
         Map<String, Object> response = callQwenAPI(prompt, null); // No image needed for metadata
-        String responseText = (String) response.get("output");
+        
+        // LOG FULL RESPONSE for debugging
+        log.info("=== QWEN TEMPLATE METADATA RESPONSE DEBUG ===");
+        log.info("Full response object: {}", response);
+        log.info("Response keys: {}", response != null ? response.keySet() : "null response");
+        
+        // Extract response text from Qwen API format
+        String responseText = null;
+        if (response != null) {
+            // Try different response format paths
+            if (response.containsKey("output")) {
+                responseText = (String) response.get("output");
+                log.info("Found responseText in 'output': {}", responseText);
+            } else if (response.containsKey("choices")) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
+                log.info("Found choices array, size: {}", choices != null ? choices.size() : "null");
+                if (choices != null && !choices.isEmpty()) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
+                    log.info("Message object: {}", message);
+                    responseText = (String) message.get("content");
+                    log.info("Found responseText in 'choices[0].message.content': {}", responseText);
+                }
+            } else {
+                log.warn("Response doesn't contain 'output' or 'choices' keys. Available keys: {}", response.keySet());
+            }
+        } else {
+            log.error("Qwen API returned null response!");
+        }
+        
+        log.info("Final responseText: {}", responseText);
+        log.info("=== END QWEN DEBUG ===");
+        
         return parseTemplateMetadataResponse(responseText, request);
     }
     
