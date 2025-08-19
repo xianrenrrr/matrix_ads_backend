@@ -224,7 +224,7 @@ public class YOLOProvider implements VisionProvider {
             byte[] imageData = downloadImageData(imageUrl);
             
             HttpHeaders headers = new HttpHeaders();
-            headers.set("Content-Type", "application/octet-stream"); // Binary data
+            headers.set("Content-Type", "image/jpeg"); // Hugging Face expects image content type
             headers.set("Authorization", "Bearer " + apiKey);
             
             HttpEntity<byte[]> request = new HttpEntity<>(imageData, headers);
