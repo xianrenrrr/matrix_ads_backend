@@ -118,7 +118,7 @@ public class FFmpegSceneDetectionService {
         String[] command = {
             ffmpegPath,
             "-i", localPath,
-            "-vf", String.format("select=gt(scene,%.2f),showinfo", sceneThreshold),
+            "-vf", String.format("select='gt(scene,%.2f)',showinfo", sceneThreshold),
             "-f", "null",
             "-"
         };
