@@ -3,8 +3,14 @@ package com.example.demo.ai.providers.vision;
 import com.example.demo.ai.core.AIModelType;
 import com.example.demo.ai.core.AIResponse;
 import com.example.demo.model.SceneSegment;
+import com.example.demo.util.FirebaseCredentialsUtil;
+import com.google.auth.oauth2.GoogleCredentials;
+import com.google.cloud.storage.Blob;
+import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.StorageOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -43,6 +49,12 @@ public class YOLOProvider implements VisionProvider {
     
     @Value("${ai.providers.yolo.api-key:}")
     private String apiKey;
+    
+    @Value("${firebase.storage.bucket}")
+    private String bucketName;
+    
+    @Autowired
+    private FirebaseCredentialsUtil firebaseCredentialsUtil;
     
     private boolean initialized = false;
     private final RestTemplate restTemplate = new RestTemplate();
@@ -235,20 +247,50 @@ public class YOLOProvider implements VisionProvider {
     }
     
     /**
-     * Download image data from URL for Hugging Face API
+     * Download image data from GCS using authenticated access or HTTP for external URLs
      */
     private byte[] downloadImageData(String imageUrl) throws Exception {
         try {
-            ResponseEntity<byte[]> response = restTemplate.getForEntity(imageUrl, byte[].class);
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return response.getBody();
+            // Check if this is a GCS URL
+            if (imageUrl.startsWith("https://storage.googleapis.com/" + bucketName + "/")) {
+                return downloadFromGCS(imageUrl);
             } else {
-                throw new RuntimeException("Failed to download image: " + response.getStatusCode());
+                // Fallback to direct HTTP for non-GCS URLs
+                ResponseEntity<byte[]> response = restTemplate.getForEntity(imageUrl, byte[].class);
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    return response.getBody();
+                } else {
+                    throw new RuntimeException("Failed to download image: " + response.getStatusCode());
+                }
             }
         } catch (Exception e) {
             log.error("Failed to download image from {}: {}", imageUrl, e.getMessage());
             throw e;
         }
+    }
+    
+    /**
+     * Download image from GCS using authenticated access
+     */
+    private byte[] downloadFromGCS(String gcsUrl) throws Exception {
+        // Extract object name from GCS URL
+        String objectName = gcsUrl.replace("https://storage.googleapis.com/" + bucketName + "/", "");
+        
+        // Get credentials and create storage client
+        GoogleCredentials credentials = firebaseCredentialsUtil.getCredentials();
+        Storage storage = StorageOptions.newBuilder()
+            .setCredentials(credentials)
+            .build()
+            .getService();
+        
+        // Download the blob
+        Blob blob = storage.get(bucketName, objectName);
+        if (blob == null || !blob.exists()) {
+            throw new RuntimeException("Image not found in GCS: " + objectName);
+        }
+        
+        log.debug("Successfully downloaded image from GCS: {}", objectName);
+        return blob.getContent();
     }
     
     /**
