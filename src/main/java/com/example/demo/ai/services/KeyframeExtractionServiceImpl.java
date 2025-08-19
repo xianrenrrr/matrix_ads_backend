@@ -106,7 +106,11 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
                 );
                 
                 String signedUrlString = signedUrl.toString();
-                System.out.printf("Keyframe extracted and uploaded with signed URL: %s%n", signedUrlString);
+                System.out.printf("✅ Keyframe extracted and uploaded successfully:%n");
+                System.out.printf("   Object name: %s%n", keyframeObjectName);
+                System.out.printf("   Blob exists: %s%n", storage.get(bucketName, keyframeObjectName).exists());
+                System.out.printf("   Signed URL (15min TTL): %s%n", signedUrlString);
+                System.out.printf("   Generated at: %s%n", java.time.Instant.now());
                 
                 return signedUrlString;
                 

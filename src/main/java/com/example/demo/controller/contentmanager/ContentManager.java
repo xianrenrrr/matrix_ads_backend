@@ -228,6 +228,46 @@ public class ContentManager {
     }
     
     /**
+     * Update template groups (add/remove groups from template)
+     * PUT /content-manager/templates/{templateId}/groups
+     */
+    @PutMapping("/{templateId}/groups")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateTemplateGroups(
+            @PathVariable String templateId,
+            @RequestBody Map<String, Object> requestBody,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        // Get the new group IDs from request
+        @SuppressWarnings("unchecked")
+        List<String> newGroupIds = (List<String>) requestBody.get("groupIds");
+        if (newGroupIds == null) {
+            throw new IllegalArgumentException("groupIds list is required");
+        }
+        
+        // Check if template exists
+        ManualTemplate template = templateDao.getTemplate(templateId);
+        if (template == null) {
+            throw new NoSuchElementException("Template not found with ID: " + templateId);
+        }
+        
+        // Update template groups using the service
+        templateGroupService.updateTemplateGroups(templateId, newGroupIds);
+        
+        // Get updated template to return current state
+        ManualTemplate updatedTemplate = templateDao.getTemplate(templateId);
+        
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("templateId", templateId);
+        responseData.put("templateTitle", updatedTemplate.getTemplateTitle());
+        responseData.put("groupIds", updatedTemplate.getAssignedGroups());
+        responseData.put("groupCount", updatedTemplate.getAssignedGroups() != null ? updatedTemplate.getAssignedGroups().size() : 0);
+        
+        String message = i18nService.getMessage("template.groups.updated", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, responseData));
+    }
+    
+    /**
      * Get submitted video data by composite ID (userId_templateId)
      * GET /content-manager/templates/submitted-videos/{compositeVideoId}
      */

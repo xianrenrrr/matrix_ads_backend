@@ -2,8 +2,10 @@ package com.example.demo.controller.contentmanager;
 
 import com.example.demo.dao.GroupDao;
 import com.example.demo.dao.UserDao;
+import com.example.demo.dao.TemplateDao;
 import com.example.demo.model.Invite;
 import com.example.demo.model.User;
+import com.example.demo.model.ManualTemplate;
 import com.example.demo.api.ApiResponse;
 import com.example.demo.service.I18nService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +26,9 @@ public class GroupController {
 
     @Autowired
     private UserDao userDao;
+    
+    @Autowired
+    private TemplateDao templateDao;
     
     @Autowired
     private I18nService i18nService;
@@ -229,6 +234,45 @@ public class GroupController {
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }
+    
+    // 6b. Remove Multiple Members from Group
+    @DeleteMapping("/{groupId}/members")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> removeMultipleMembers(
+            @PathVariable String groupId,
+            @RequestBody Map<String, Object> requestBody,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        @SuppressWarnings("unchecked")
+        List<String> userIds = (List<String>) requestBody.get("userIds");
+        if (userIds == null || userIds.isEmpty()) {
+            throw new IllegalArgumentException("userIds list is required");
+        }
+        
+        Invite group = groupDao.findById(groupId);
+        if (group == null || !"active".equals(group.getStatus())) {
+            throw new NoSuchElementException("Group not found with ID: " + groupId);
+        }
+
+        // Remove all specified members
+        int removedCount = 0;
+        for (String userId : userIds) {
+            if (group.getMemberIds().contains(userId)) {
+                group.removeMember(userId);
+                removedCount++;
+            }
+        }
+        
+        if (removedCount > 0) {
+            groupDao.update(group);
+        }
+
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("memberCount", group.getMemberCount());
+        responseData.put("removedCount", removedCount);
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, responseData));
+    }
 
     // 7. Get Group Members
     @GetMapping("/{groupId}/members")
@@ -321,6 +365,40 @@ public class GroupController {
 
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
+    }
+
+    // 10. Get Templates Assigned to Group
+    @GetMapping("/{groupId}/templates")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getGroupTemplates(
+            @PathVariable String groupId,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        Invite group = groupDao.findById(groupId);
+        if (group == null || !"active".equals(group.getStatus())) {
+            throw new NoSuchElementException("Group not found with ID: " + groupId);
+        }
+        
+        // Get all templates that include this group using TemplateDao
+        List<Map<String, Object>> templates = new ArrayList<>();
+        try {
+            List<ManualTemplate> groupTemplates = templateDao.getTemplatesAssignedToGroup(groupId);
+            
+            for (ManualTemplate template : groupTemplates) {
+                Map<String, Object> templateData = new HashMap<>();
+                templateData.put("templateId", template.getId());
+                templateData.put("templateTitle", template.getTemplateTitle());
+                templateData.put("templateSource", "manual"); // Since ManualTemplate doesn't have source field
+                templateData.put("sceneCount", template.getScenes() != null ? template.getScenes().size() : 0);
+                templates.add(templateData);
+            }
+        } catch (Exception e) {
+            // Log error but return empty list
+            System.err.println("Error fetching templates for group: " + e.getMessage());
+        }
+        
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, templates));
     }
 
     private String generateQRCodeUrl(String token) {
