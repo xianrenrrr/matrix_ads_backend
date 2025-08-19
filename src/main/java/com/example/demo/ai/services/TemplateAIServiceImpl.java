@@ -226,33 +226,56 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         try {
             // Try to use AI for metadata generation
             if (aiOrchestrator != null) {
-                var response = aiOrchestrator.<com.example.demo.ai.providers.llm.LLMProvider.SceneSuggestions>executeWithFallback(
+                var response = aiOrchestrator.<com.example.demo.ai.providers.llm.LLMProvider.TemplateMetadata>executeWithFallback(
                     com.example.demo.ai.core.AIModelType.LLM,
                     "generateTemplateMetadata",
                     provider -> {
                         var llmProvider = (com.example.demo.ai.providers.llm.LLMProvider) provider;
                         
-                        // Create a scene suggestions request for metadata
-                        var request = new com.example.demo.ai.providers.llm.LLMProvider.SceneSuggestionsRequest();
-                        request.setSceneTitle(video.getTitle());
+                        // Create a template metadata request
+                        var request = new com.example.demo.ai.providers.llm.LLMProvider.TemplateMetadataRequest();
+                        request.setVideoTitle(video.getTitle());
+                        request.setSceneCount(scenes.size());
+                        request.setTotalDuration(template.getTotalVideoLength());
+                        request.setSceneLabels(sceneLabels);
+                        request.setLanguage(language);
                         
-                        // Add scene context
-                        java.util.Map<String, Object> analysisData = new java.util.HashMap<>();
-                        analysisData.put("sceneCount", scenes.size());
-                        analysisData.put("totalDuration", template.getTotalVideoLength());
-                        analysisData.put("sceneLabels", sceneLabels);
-                        analysisData.put("language", language);
-                        request.setAnalysisData(analysisData);
+                        // NEW: Add individual scene timing information
+                        List<com.example.demo.ai.providers.llm.LLMProvider.SceneTimingInfo> sceneTimings = new ArrayList<>();
+                        for (Scene scene : scenes) {
+                            var timingInfo = new com.example.demo.ai.providers.llm.LLMProvider.SceneTimingInfo();
+                            timingInfo.setSceneNumber(scene.getSceneNumber());
+                            timingInfo.setStartSeconds(scene.getStartTime() != null ? (int) scene.getStartTime().getSeconds() : 0);
+                            timingInfo.setEndSeconds(scene.getEndTime() != null ? (int) scene.getEndTime().getSeconds() : (int) scene.getSceneDurationInSeconds());
+                            timingInfo.setDurationSeconds((int) scene.getSceneDurationInSeconds());
+                            
+                            // Add detected objects for this specific scene
+                            List<String> sceneObjects = new ArrayList<>();
+                            if (scene.getOverlayObjects() != null) {
+                                scene.getOverlayObjects().forEach(obj -> {
+                                    if (obj.getLabel() != null) sceneObjects.add(obj.getLabel());
+                                });
+                            }
+                            if (scene.getOverlayPolygons() != null) {
+                                scene.getOverlayPolygons().forEach(poly -> {
+                                    if (poly.getLabel() != null) sceneObjects.add(poly.getLabel());
+                                });
+                            }
+                            timingInfo.setDetectedObjects(sceneObjects);
+                            
+                            sceneTimings.add(timingInfo);
+                        }
+                        request.setSceneTimings(sceneTimings);
                         
-                        return llmProvider.generateSceneSuggestions(request);
+                        return llmProvider.generateTemplateMetadata(request);
                     }
                 );
                 
                 if (response.isSuccess() && response.getData() != null) {
-                    var suggestions = response.getData();
-                    // Extract metadata from suggestions
-                    applyAIGeneratedMetadata(template, suggestions, language);
-                    log.info("Applied AI-generated metadata using {}", response.getModelUsed());
+                    var metadata = response.getData();
+                    // Apply AI-generated metadata to template
+                    applyAIGeneratedTemplateMetadata(template, metadata, scenes, language);
+                    log.info("Applied AI-generated template metadata using {}", response.getModelUsed());
                     return;
                 }
             }
@@ -264,33 +287,57 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         applyDefaultMetadata(template, language);
     }
     
-    private void applyAIGeneratedMetadata(ManualTemplate template, 
-                                         com.example.demo.ai.providers.llm.LLMProvider.SceneSuggestions suggestions,
-                                         String language) {
-        // Use AI suggestions to set metadata
-        if (suggestions.getSuggestionsZh() != null && !suggestions.getSuggestionsZh().isEmpty()) {
-            // Parse first suggestion for video purpose
-            String firstSuggestion = suggestions.getSuggestionsZh().get(0);
-            if (firstSuggestion.length() <= 10) {
-                template.setVideoPurpose(firstSuggestion);
-            } else {
-                template.setVideoPurpose(firstSuggestion.substring(0, 10));
-            }
-            
-            // Use other suggestions for tone and requirements
-            if (suggestions.getSuggestionsZh().size() > 1) {
-                String tone = extractTone(suggestions.getSuggestionsZh().get(1));
-                template.setTone(tone);
-            }
+    private void applyAIGeneratedTemplateMetadata(ManualTemplate template, 
+                                                 com.example.demo.ai.providers.llm.LLMProvider.TemplateMetadata metadata,
+                                                 List<Scene> scenes, String language) {
+        // Apply basic template metadata
+        if (metadata.getVideoPurpose() != null) {
+            template.setVideoPurpose(metadata.getVideoPurpose());
+        }
+        if (metadata.getTone() != null) {
+            template.setTone(metadata.getTone());
+        }
+        if (metadata.getVideoFormat() != null) {
+            template.setVideoFormat(metadata.getVideoFormat());
+        }
+        if (metadata.getLightingRequirements() != null) {
+            template.setLightingRequirements(metadata.getLightingRequirements());
+        }
+        if (metadata.getBackgroundMusic() != null) {
+            template.setBackgroundMusic(metadata.getBackgroundMusic());
         }
         
-        // Set lighting and music based on analysis
-        if ("zh".equals(language) || "zh-CN".equals(language)) {
-            template.setLightingRequirements("智能分析建议的照明条件");
-            template.setBackgroundMusic("AI推荐的背景音乐");
-        } else {
-            template.setLightingRequirements("AI-analyzed lighting conditions");
-            template.setBackgroundMusic("AI-recommended background music");
+        // Apply scene-specific metadata if available
+        if (metadata.getSceneMetadataList() != null && !metadata.getSceneMetadataList().isEmpty()) {
+            for (int i = 0; i < scenes.size() && i < metadata.getSceneMetadataList().size(); i++) {
+                Scene scene = scenes.get(i);
+                com.example.demo.ai.providers.llm.LLMProvider.SceneMetadata sceneMetadata = metadata.getSceneMetadataList().get(i);
+                
+                // Update scene with AI-generated metadata
+                if (sceneMetadata.getSceneTitle() != null) {
+                    scene.setSceneTitle(sceneMetadata.getSceneTitle());
+                }
+                if (sceneMetadata.getScriptLine() != null) {
+                    scene.setScriptLine(sceneMetadata.getScriptLine());
+                }
+                scene.setPresenceOfPerson(sceneMetadata.isPresenceOfPerson());
+                if (sceneMetadata.getDeviceOrientation() != null) {
+                    scene.setDeviceOrientation(sceneMetadata.getDeviceOrientation());
+                }
+                if (sceneMetadata.getMovementInstructions() != null) {
+                    scene.setMovementInstructions(sceneMetadata.getMovementInstructions());
+                }
+                if (sceneMetadata.getBackgroundInstructions() != null) {
+                    scene.setBackgroundInstructions(sceneMetadata.getBackgroundInstructions());
+                }
+                if (sceneMetadata.getCameraInstructions() != null) {
+                    scene.setSpecificCameraInstructions(sceneMetadata.getCameraInstructions());
+                }
+                if (sceneMetadata.getAudioNotes() != null) {
+                    scene.setAudioNotes(sceneMetadata.getAudioNotes());
+                }
+                // Note: activeGridBlock might need mapping to grid overlay system
+            }
         }
     }
     
@@ -308,15 +355,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         }
     }
     
-    private String extractTone(String suggestion) {
-        // Extract tone from suggestion text
-        if (suggestion.contains("专业")) return "专业";
-        if (suggestion.contains("轻松")) return "轻松";
-        if (suggestion.contains("正式")) return "正式";
-        if (suggestion.contains("casual")) return "Casual";
-        if (suggestion.contains("formal")) return "Formal";
-        return "专业"; // Default
-    }
     
 }
 // Change Log: Removed block grid services, simplified to use AI object detection only

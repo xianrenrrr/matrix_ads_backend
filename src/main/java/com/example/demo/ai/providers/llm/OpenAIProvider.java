@@ -175,6 +175,7 @@ public class OpenAIProvider implements LLMProvider {
             case "generateVideoSummary":
             case "generateChineseLabels":
             case "generateSceneSuggestions":
+            case "generateTemplateMetadata":
                 return true;
             default:
                 return false;
@@ -252,5 +253,65 @@ public class OpenAIProvider implements LLMProvider {
         }
         
         return suggestions;
+    }
+    
+    @Override
+    public AIResponse<TemplateMetadata> generateTemplateMetadata(TemplateMetadataRequest request) {
+        if (!isAvailable()) {
+            return AIResponse.error("OpenAI provider not available");
+        }
+        
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            // TODO: Implement actual OpenAI API call for template metadata
+            TemplateMetadata metadata = createMockTemplateMetadata(request);
+            
+            AIResponse<TemplateMetadata> response = 
+                AIResponse.success(metadata, getProviderName(), getModelType());
+            response.setProcessingTimeMs(System.currentTimeMillis() - startTime);
+            
+            log.info("OpenAI generated template metadata in {}ms (fallback)", response.getProcessingTimeMs());
+            return response;
+            
+        } catch (Exception e) {
+            log.error("OpenAI template metadata failed: {}", e.getMessage(), e);
+            return AIResponse.error("OpenAI template metadata error: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Create mock template metadata - replace with actual OpenAI API call
+     */
+    private TemplateMetadata createMockTemplateMetadata(TemplateMetadataRequest request) {
+        TemplateMetadata metadata = new TemplateMetadata();
+        
+        // 基本信息
+        metadata.setVideoPurpose("产品展示与推广");
+        metadata.setTone("专业");
+        metadata.setVideoFormat("1080p 16:9");
+        metadata.setLightingRequirements("良好的自然光或人工照明");
+        metadata.setBackgroundMusic("轻柔的器乐或环境音乐");
+        
+        // 创建场景元数据
+        List<SceneMetadata> sceneMetadataList = new ArrayList<>();
+        for (int i = 1; i <= request.getSceneCount(); i++) {
+            SceneMetadata sceneMetadata = new SceneMetadata();
+            sceneMetadata.setSceneTitle("场景 " + i);
+            sceneMetadata.setDurationSeconds(request.getTotalDuration() / request.getSceneCount());
+            sceneMetadata.setScriptLine("请按照示例画面录制场景 " + i + " 的内容");
+            sceneMetadata.setPresenceOfPerson(false);
+            sceneMetadata.setDeviceOrientation("手机（竖屏 9:16）");
+            sceneMetadata.setMovementInstructions("静止");
+            sceneMetadata.setBackgroundInstructions("使用与示例画面相似的背景");
+            sceneMetadata.setCameraInstructions("按照示例中显示的构图拍摄");
+            sceneMetadata.setAudioNotes("说话清楚，配合场景的语调");
+            sceneMetadata.setActiveGridBlock(5); // 中心区域
+            
+            sceneMetadataList.add(sceneMetadata);
+        }
+        
+        metadata.setSceneMetadataList(sceneMetadataList);
+        return metadata;
     }
 }

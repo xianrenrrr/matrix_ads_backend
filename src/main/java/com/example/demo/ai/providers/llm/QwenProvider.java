@@ -184,6 +184,7 @@ public class QwenProvider implements LLMProvider {
             case "generateVideoSummary":
             case "generateChineseLabels":
             case "generateSceneSuggestions":
+            case "generateTemplateMetadata":
                 return true;
             default:
                 return false;
@@ -640,5 +641,199 @@ public class QwenProvider implements LLMProvider {
         }
         
         return suggestions;
+    }
+    
+    @Override
+    public AIResponse<TemplateMetadata> generateTemplateMetadata(TemplateMetadataRequest request) {
+        if (!isAvailable()) {
+            return AIResponse.error("Qwen provider not available");
+        }
+        
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            // Real Qwen VL API call for Chinese template metadata
+            TemplateMetadata metadata = callQwenForTemplateMetadata(request);
+            
+            AIResponse<TemplateMetadata> response = 
+                AIResponse.success(metadata, getProviderName(), getModelType());
+            response.setProcessingTimeMs(System.currentTimeMillis() - startTime);
+            
+            log.info("Qwen generated template metadata in {}ms", response.getProcessingTimeMs());
+            return response;
+            
+        } catch (Exception e) {
+            log.error("Qwen template metadata failed: {}", e.getMessage(), e);
+            return AIResponse.error("Qwen template metadata error: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Real Qwen VL API call for Chinese template metadata generation
+     */
+    private TemplateMetadata callQwenForTemplateMetadata(TemplateMetadataRequest request) throws Exception {
+        String prompt = buildTemplateMetadataPrompt(request);
+        Map<String, Object> response = callQwenAPI(prompt, null); // No image needed for metadata
+        String responseText = (String) response.get("output");
+        return parseTemplateMetadataResponse(responseText, request);
+    }
+    
+    /**
+     * Build prompt for template metadata generation
+     */
+    private String buildTemplateMetadataPrompt(TemplateMetadataRequest request) {
+        StringBuilder prompt = new StringBuilder();
+        
+        prompt.append("请为以下视频生成模板元数据，使用中文输出：\n")
+              .append("视频标题：").append(request.getVideoTitle()).append("\n")
+              .append("场景数量：").append(request.getSceneCount()).append("\n")
+              .append("总时长：").append(request.getTotalDuration()).append("秒\n")
+              .append("场景标签：").append(request.getSceneLabels() != null ? String.join(", ", request.getSceneLabels()) : "无").append("\n\n");
+        
+        // NEW: Add detailed scene timing information
+        if (request.getSceneTimings() != null && !request.getSceneTimings().isEmpty()) {
+            prompt.append("详细场景信息：\n");
+            for (SceneTimingInfo timing : request.getSceneTimings()) {
+                prompt.append("场景").append(timing.getSceneNumber())
+                      .append("：").append(timing.getStartSeconds()).append("-").append(timing.getEndSeconds()).append("秒")
+                      .append("（时长：").append(timing.getDurationSeconds()).append("秒）");
+                
+                if (timing.getDetectedObjects() != null && !timing.getDetectedObjects().isEmpty()) {
+                    prompt.append("，检测到对象：").append(String.join(", ", timing.getDetectedObjects()));
+                }
+                prompt.append("\n");
+            }
+            prompt.append("\n");
+        }
+        
+        prompt.append("请按以下格式输出：\n")
+              .append("视频目标：[简短描述]\n")
+              .append("语调：[专业/轻松/正式等]\n")
+              .append("视频格式：1080p 16:9\n")
+              .append("灯光要求：[照明建议]\n")
+              .append("背景音乐：[音乐建议]\n\n")
+              .append("对于每个场景，请生成：\n")
+              .append("场景[序号]：[场景标题]\n")
+              .append("脚本：[拍摄指导文字]\n")
+              .append("是否有人出现：是/否\n")
+              .append("设备方向：手机（竖屏 9:16）\n")
+              .append("动作：[动作指导]\n")
+              .append("背景说明：[背景要求]\n")
+              .append("摄像指导：[构图建议]\n")
+              .append("音频备注：[声音要求]\n");
+        
+        return prompt.toString();
+    }
+    
+    /**
+     * Parse Qwen API response for template metadata
+     */
+    private TemplateMetadata parseTemplateMetadataResponse(String responseText, TemplateMetadataRequest request) {
+        TemplateMetadata metadata = new TemplateMetadata();
+        
+        try {
+            String[] lines = responseText.split("\n");
+            List<SceneMetadata> sceneMetadataList = new ArrayList<>();
+            SceneMetadata currentScene = null;
+            
+            for (String line : lines) {
+                line = line.trim();
+                
+                // Parse basic metadata
+                if (line.startsWith("视频目标：")) {
+                    metadata.setVideoPurpose(line.substring(4).trim());
+                } else if (line.startsWith("语调：")) {
+                    metadata.setTone(line.substring(3).trim());
+                } else if (line.startsWith("视频格式：")) {
+                    metadata.setVideoFormat(line.substring(4).trim());
+                } else if (line.startsWith("灯光要求：")) {
+                    metadata.setLightingRequirements(line.substring(4).trim());
+                } else if (line.startsWith("背景音乐：")) {
+                    metadata.setBackgroundMusic(line.substring(4).trim());
+                }
+                // Parse scene metadata
+                else if (line.matches("场景\\d+：.*")) {
+                    if (currentScene != null) {
+                        sceneMetadataList.add(currentScene);
+                    }
+                    currentScene = new SceneMetadata();
+                    currentScene.setSceneTitle(line.substring(line.indexOf("：") + 1).trim());
+                    currentScene.setDurationSeconds(request.getTotalDuration() / request.getSceneCount());
+                    currentScene.setActiveGridBlock(5); // Default center
+                } else if (currentScene != null) {
+                    if (line.startsWith("脚本：")) {
+                        currentScene.setScriptLine(line.substring(3).trim());
+                    } else if (line.startsWith("是否有人出现：")) {
+                        currentScene.setPresenceOfPerson("是".equals(line.substring(6).trim()));
+                    } else if (line.startsWith("设备方向：")) {
+                        currentScene.setDeviceOrientation(line.substring(4).trim());
+                    } else if (line.startsWith("动作：")) {
+                        currentScene.setMovementInstructions(line.substring(3).trim());
+                    } else if (line.startsWith("背景说明：")) {
+                        currentScene.setBackgroundInstructions(line.substring(4).trim());
+                    } else if (line.startsWith("摄像指导：")) {
+                        currentScene.setCameraInstructions(line.substring(4).trim());
+                    } else if (line.startsWith("音频备注：")) {
+                        currentScene.setAudioNotes(line.substring(4).trim());
+                    }
+                }
+            }
+            
+            // Add the last scene
+            if (currentScene != null) {
+                sceneMetadataList.add(currentScene);
+            }
+            
+            metadata.setSceneMetadataList(sceneMetadataList);
+            
+            // Set defaults if not provided
+            if (metadata.getVideoPurpose() == null) metadata.setVideoPurpose("产品展示与推广");
+            if (metadata.getTone() == null) metadata.setTone("专业");
+            if (metadata.getVideoFormat() == null) metadata.setVideoFormat("1080p 16:9");
+            if (metadata.getLightingRequirements() == null) metadata.setLightingRequirements("良好的自然光或人工照明");
+            if (metadata.getBackgroundMusic() == null) metadata.setBackgroundMusic("轻柔的器乐或环境音乐");
+            
+        } catch (Exception e) {
+            log.warn("Failed to parse template metadata response: {}", e.getMessage());
+            // Return fallback
+            return createFallbackTemplateMetadata(request);
+        }
+        
+        return metadata;
+    }
+    
+    /**
+     * Create fallback template metadata when parsing fails
+     */
+    private TemplateMetadata createFallbackTemplateMetadata(TemplateMetadataRequest request) {
+        TemplateMetadata metadata = new TemplateMetadata();
+        
+        // 基本信息
+        metadata.setVideoPurpose("产品展示与推广");
+        metadata.setTone("专业");
+        metadata.setVideoFormat("1080p 16:9");
+        metadata.setLightingRequirements("良好的自然光或人工照明");
+        metadata.setBackgroundMusic("轻柔的器乐或环境音乐");
+        
+        // 创建场景元数据
+        List<SceneMetadata> sceneMetadataList = new ArrayList<>();
+        for (int i = 1; i <= request.getSceneCount(); i++) {
+            SceneMetadata sceneMetadata = new SceneMetadata();
+            sceneMetadata.setSceneTitle("场景 " + i);
+            sceneMetadata.setDurationSeconds(request.getTotalDuration() / request.getSceneCount());
+            sceneMetadata.setScriptLine("请按照示例画面录制场景 " + i + " 的内容");
+            sceneMetadata.setPresenceOfPerson(false);
+            sceneMetadata.setDeviceOrientation("手机（竖屏 9:16）");
+            sceneMetadata.setMovementInstructions("静止");
+            sceneMetadata.setBackgroundInstructions("使用与示例画面相似的背景");
+            sceneMetadata.setCameraInstructions("按照示例中显示的构图拍摄");
+            sceneMetadata.setAudioNotes("说话清楚，配合场景的语调");
+            sceneMetadata.setActiveGridBlock(5); // 中心区域
+            
+            sceneMetadataList.add(sceneMetadata);
+        }
+        
+        metadata.setSceneMetadataList(sceneMetadataList);
+        return metadata;
     }
 }
