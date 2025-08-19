@@ -7,15 +7,18 @@ import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import com.google.cloud.storage.Storage.SignUrlOption;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class KeyframeExtractionServiceImpl implements KeyframeExtractionService {
@@ -94,12 +97,18 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
                 
                 storage.create(blobInfo, keyframeBytes);
                 
-                // Note: Keyframes are publicly accessible via uniform bucket-level access
+                // Generate a signed URL for secure access (valid for 15 minutes)
+                URL signedUrl = storage.signUrl(
+                    blobInfo,
+                    15, TimeUnit.MINUTES,
+                    SignUrlOption.httpMethod(com.google.cloud.storage.HttpMethod.GET),
+                    SignUrlOption.withV4Signature()
+                );
                 
-                String keyframeUrl = String.format("https://storage.googleapis.com/%s/%s", bucketName, keyframeObjectName);
-                System.out.printf("Keyframe extracted and uploaded: %s%n", keyframeUrl);
+                String signedUrlString = signedUrl.toString();
+                System.out.printf("Keyframe extracted and uploaded with signed URL: %s%n", signedUrlString);
                 
-                return keyframeUrl;
+                return signedUrlString;
                 
             } finally {
                 // Clean up temporary files
