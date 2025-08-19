@@ -1,6 +1,8 @@
 package com.example.demo.ai.providers.vision;
 
+import com.example.demo.ai.shared.GcsFileResolver;
 import com.example.demo.model.SceneSegment;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -19,15 +21,21 @@ import java.util.regex.Pattern;
 @Service
 public class FFmpegSceneDetectionService {
     
+    @Autowired
+    private GcsFileResolver gcsFileResolver;
+    
     @Value("${ai.scenes.threshold:0.35}")
     private double sceneThreshold;
     
     @Value("${ffmpeg.path:ffmpeg}")
     private String ffmpegPath;
     
+    @Value("${ffprobe.path:ffprobe}")
+    private String ffprobePath;
+    
     /**
      * Detects scene cuts using FFmpeg scene change filter
-     * @param videoUrl URL or path to the video file
+     * @param videoUrl URL or path to the video file  
      * @return List of scene segments with start/end timestamps
      */
     public List<SceneSegment> detectScenes(String videoUrl) {
@@ -35,94 +43,163 @@ public class FFmpegSceneDetectionService {
         List<SceneSegment> scenes = new ArrayList<>();
         
         try {
-            // Build FFmpeg command for scene detection
-            String[] command = {
-                ffmpegPath,
-                "-i", videoUrl,
-                "-filter:v", String.format("select='gt(scene,%.2f)',showinfo", sceneThreshold),
-                "-f", "null",
-                "-"
-            };
-            
-            ProcessBuilder pb = new ProcessBuilder(command);
-            // Don't merge streams - capture stderr separately for debugging
-            Process process = pb.start();
-            
-            // Parse FFmpeg output for scene timestamps
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                Pattern timePattern = Pattern.compile("pts_time:([\\d.]+)");
-                List<Double> sceneTimestamps = new ArrayList<>();
-                sceneTimestamps.add(0.0); // Start of video
+            // Resolve GCS URL to local file to avoid 403 errors
+            try (GcsFileResolver.ResolvedFile resolvedFile = gcsFileResolver.resolve(videoUrl)) {
+                String localPath = resolvedFile.getPathAsString();
                 
-                while ((line = reader.readLine()) != null) {
-                    if (line.contains("pts_time:")) {
-                        Matcher matcher = timePattern.matcher(line);
-                        if (matcher.find()) {
-                            double timestamp = Double.parseDouble(matcher.group(1));
-                            sceneTimestamps.add(timestamp);
-                            System.out.printf("Scene cut detected at: %.2f seconds%n", timestamp);
-                        }
-                    }
-                }
+                // Get real video duration using ffprobe
+                Double videoDuration = getVideoDuration(localPath);
                 
-                // Capture stderr for debugging
-                BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-                StringBuilder errorOutput = new StringBuilder();
-                String errorLine;
-                while ((errorLine = errorReader.readLine()) != null) {
-                    errorOutput.append(errorLine).append("\n");
-                }
-                
-                // Wait for process to complete
-                int exitCode = process.waitFor();
-                if (exitCode != 0) {
-                    System.err.printf("FFmpeg process exited with code: %d%n", exitCode);
-                    System.err.printf("FFmpeg error output: %s%n", errorOutput.toString());
-                } else {
-                    System.out.println("FFmpeg process completed successfully");
-                }
+                // Detect scene change timestamps using FFmpeg
+                List<Double> sceneTimestamps = detectSceneTimestamps(localPath);
                 
                 // Create scene segments from timestamps
-                for (int i = 0; i < sceneTimestamps.size() - 1; i++) {
-                    SceneSegment segment = new SceneSegment();
-                    segment.setStartTime(Duration.ofMillis((long)(sceneTimestamps.get(i) * 1000)));
-                    segment.setEndTime(Duration.ofMillis((long)(sceneTimestamps.get(i + 1) * 1000)));
-                    scenes.add(segment);
-                }
+                scenes = createSceneSegments(sceneTimestamps, videoDuration);
                 
-                // Add final scene to end of video (estimate 30 seconds if no end detected)
-                if (!sceneTimestamps.isEmpty() && sceneTimestamps.size() > 1) {
-                    SceneSegment lastSegment = new SceneSegment();
-                    lastSegment.setStartTime(Duration.ofMillis((long)(sceneTimestamps.get(sceneTimestamps.size() - 1) * 1000)));
-                    // Get video duration or use a reasonable default
-                    lastSegment.setEndTime(Duration.ofMillis((long)((sceneTimestamps.get(sceneTimestamps.size() - 1) + 30) * 1000)));
-                    scenes.add(lastSegment);
-                }
-            }
-            
-            System.out.printf("FFmpeg scene detection completed: %d scenes detected%n", scenes.size());
-            
-            // If no scenes detected, create single scene for entire video
-            if (scenes.isEmpty()) {
-                SceneSegment fullVideo = new SceneSegment();
-                fullVideo.setStartTime(Duration.ZERO);
-                fullVideo.setEndTime(Duration.ofSeconds(30)); // Default duration
-                scenes.add(fullVideo);
-                System.out.println("No scene cuts detected, treating as single scene");
+                System.out.printf("FFmpeg scene detection completed: %d scenes detected%n", scenes.size());
             }
             
         } catch (Exception e) {
             System.err.printf("Error in FFmpeg scene detection: %s%n", e.getMessage());
             e.printStackTrace();
             
-            // Fallback: single scene
-            SceneSegment fallback = new SceneSegment();
-            fallback.setStartTime(Duration.ZERO);
-            fallback.setEndTime(Duration.ofSeconds(30));
-            scenes.add(fallback);
+            // Fallback: single scene with default duration
+            scenes = createFallbackScene();
         }
         
+        return scenes;
+    }
+    
+    /**
+     * Get video duration using ffprobe
+     */
+    private Double getVideoDuration(String localPath) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                ffprobePath,
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=nk=1:nw=1",
+                localPath
+            );
+            
+            Process process = pb.start();
+            
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String durationLine = reader.readLine();
+                
+                if (durationLine != null && !durationLine.trim().isEmpty()) {
+                    double duration = Double.parseDouble(durationLine.trim());
+                    System.out.printf("Video duration: %.3f seconds%n", duration);
+                    return duration;
+                }
+            }
+            
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                System.out.printf("ffprobe exited with code: %d%n", exitCode);
+            }
+            
+        } catch (Exception e) {
+            System.err.printf("Failed to get video duration: %s%n", e.getMessage());
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Detect scene change timestamps using FFmpeg
+     */
+    private List<Double> detectSceneTimestamps(String localPath) throws Exception {
+        List<Double> sceneTimestamps = new ArrayList<>();
+        sceneTimestamps.add(0.0); // Always start with 0
+        
+        // Build FFmpeg command (no shell quotes needed in ProcessBuilder)
+        String[] command = {
+            ffmpegPath,
+            "-i", localPath,
+            "-vf", String.format("select=gt(scene,%.2f),showinfo", sceneThreshold),
+            "-f", "null",
+            "-"
+        };
+        
+        System.out.printf("Running FFmpeg command: %s%n", String.join(" ", command));
+        
+        ProcessBuilder pb = new ProcessBuilder(command);
+        Process process = pb.start();
+        
+        // Parse stderr for showinfo output (showinfo writes to stderr)
+        Pattern timePattern = Pattern.compile("pts_time:([\\d.]+)");
+        
+        try (BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+            String line;
+            while ((line = errorReader.readLine()) != null) {
+                if (line.contains("pts_time:")) {
+                    Matcher matcher = timePattern.matcher(line);
+                    if (matcher.find()) {
+                        double timestamp = Double.parseDouble(matcher.group(1));
+                        sceneTimestamps.add(timestamp);
+                        System.out.printf("Scene cut detected at: %.3f seconds%n", timestamp);
+                    }
+                }
+            }
+        }
+        
+        // Wait for process completion
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            System.out.printf("FFmpeg scene detection exited with code: %d%n", exitCode);
+        }
+        
+        return sceneTimestamps;
+    }
+    
+    /**
+     * Create scene segments from timestamps and video duration
+     */
+    private List<SceneSegment> createSceneSegments(List<Double> sceneTimestamps, Double videoDuration) {
+        List<SceneSegment> scenes = new ArrayList<>();
+        
+        // Create segments between consecutive timestamps
+        for (int i = 0; i < sceneTimestamps.size() - 1; i++) {
+            SceneSegment segment = new SceneSegment();
+            segment.setStartTime(Duration.ofMillis((long)(sceneTimestamps.get(i) * 1000)));
+            segment.setEndTime(Duration.ofMillis((long)(sceneTimestamps.get(i + 1) * 1000)));
+            scenes.add(segment);
+        }
+        
+        // Add final scene that ends at real video duration
+        if (!sceneTimestamps.isEmpty()) {
+            SceneSegment lastSegment = new SceneSegment();
+            lastSegment.setStartTime(Duration.ofMillis((long)(sceneTimestamps.get(sceneTimestamps.size() - 1) * 1000)));
+            
+            // Use real duration from ffprobe, fallback to estimated duration
+            double endTime = videoDuration != null ? videoDuration : (sceneTimestamps.get(sceneTimestamps.size() - 1) + 30);
+            lastSegment.setEndTime(Duration.ofMillis((long)(endTime * 1000)));
+            scenes.add(lastSegment);
+        }
+        
+        // If no scenes detected, create single scene for entire video
+        if (scenes.isEmpty()) {
+            SceneSegment fullVideo = new SceneSegment();
+            fullVideo.setStartTime(Duration.ZERO);
+            fullVideo.setEndTime(Duration.ofMillis((long)((videoDuration != null ? videoDuration : 30) * 1000)));
+            scenes.add(fullVideo);
+            System.out.println("No scene cuts detected, treating as single scene");
+        }
+        
+        return scenes;
+    }
+    
+    /**
+     * Create fallback scene when detection fails
+     */
+    private List<SceneSegment> createFallbackScene() {
+        List<SceneSegment> scenes = new ArrayList<>();
+        SceneSegment fallback = new SceneSegment();
+        fallback.setStartTime(Duration.ZERO);
+        fallback.setEndTime(Duration.ofSeconds(30)); // Default 30 seconds
+        scenes.add(fallback);
         return scenes;
     }
 }

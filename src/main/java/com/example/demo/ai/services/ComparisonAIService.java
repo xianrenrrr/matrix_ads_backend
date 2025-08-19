@@ -3,6 +3,7 @@ package com.example.demo.ai.services;
 import com.example.demo.ai.core.AIModelType;
 import com.example.demo.ai.providers.llm.LLMProvider;
 import com.example.demo.ai.providers.vision.VisionProvider;
+import com.example.demo.ai.shared.GcsFileResolver;
 import com.example.demo.model.Scene;
 import com.example.demo.service.FirebaseStorageService;
 import org.slf4j.Logger;
@@ -27,6 +28,9 @@ public class ComparisonAIService {
     
     @Autowired(required = false)
     private FirebaseStorageService firebaseStorageService;
+    
+    @Autowired
+    private GcsFileResolver gcsFileResolver;
     
     @Value("${ai.comparison.frame-upload.enabled:false}")
     private boolean frameUploadEnabled;
@@ -463,32 +467,37 @@ public class ComparisonAIService {
         try {
             log.debug("Extracting duration for video: {}", videoUrl);
             
-            // Use FFprobe to get video duration
-            ProcessBuilder pb = new ProcessBuilder(
-                "ffprobe", 
-                "-v", "quiet",
-                "-show_entries", "format=duration",
-                "-of", "csv=p=0",
-                videoUrl
-            );
-            
-            Process process = pb.start();
-            
-            try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))) {
-                String output = reader.readLine();
+            // Resolve GCS URL to local file to avoid 403 errors
+            try (GcsFileResolver.ResolvedFile resolvedFile = gcsFileResolver.resolve(videoUrl)) {
+                String localPath = resolvedFile.getPathAsString();
                 
-                if (output != null && !output.trim().isEmpty()) {
-                    double durationSeconds = Double.parseDouble(output.trim());
-                    long durationMs = (long) (durationSeconds * 1000);
+                // Use FFprobe to get video duration
+                ProcessBuilder pb = new ProcessBuilder(
+                    "ffprobe", 
+                    "-v", "quiet",
+                    "-show_entries", "format=duration",
+                    "-of", "csv=p=0",
+                    localPath
+                );
+                
+                Process process = pb.start();
+                
+                try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))) {
+                    String output = reader.readLine();
                     
-                    log.debug("Video duration extracted: {}ms for {}", durationMs, videoUrl);
-                    return durationMs;
+                    if (output != null && !output.trim().isEmpty()) {
+                        double durationSeconds = Double.parseDouble(output.trim());
+                        long durationMs = (long) (durationSeconds * 1000);
+                        
+                        log.debug("Video duration extracted: {}ms for {}", durationMs, videoUrl);
+                        return durationMs;
+                    }
                 }
-            }
-            
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                log.warn("FFprobe process exited with code {} for video: {}", exitCode, videoUrl);
+                
+                int exitCode = process.waitFor();
+                if (exitCode != 0) {
+                    log.warn("FFprobe process exited with code {} for video: {}", exitCode, videoUrl);
+                }
             }
             
         } catch (Exception e) {
@@ -517,41 +526,46 @@ public class ComparisonAIService {
             // Convert milliseconds to seconds for FFmpeg
             double timestampSeconds = timestampMs / 1000.0;
             
-            // Use FFmpeg to extract frame at specific timestamp
-            ProcessBuilder pb = new ProcessBuilder(
-                "ffmpeg",
-                "-y", // Overwrite output file
-                "-ss", String.format("%.3f", timestampSeconds), // Seek to timestamp
-                "-i", videoUrl, // Input video
-                "-vframes", "1", // Extract only 1 frame
-                "-q:v", "2", // High quality JPEG
-                "-f", "image2", // Image format
-                tempFrame.getAbsolutePath()
-            );
-            
-            Process process = pb.start();
-            int exitCode = process.waitFor();
-            
-            if (exitCode == 0 && tempFrame.exists() && tempFrame.length() > 0) {
-                String frameUrl;
+            // Resolve GCS URL to local file to avoid 403 errors
+            try (GcsFileResolver.ResolvedFile resolvedFile = gcsFileResolver.resolve(videoUrl)) {
+                String localPath = resolvedFile.getPathAsString();
                 
-                // Production mode: Upload to Firebase Storage if enabled
-                if (frameUploadEnabled && firebaseStorageService != null) {
-                    frameUrl = uploadFrameToFirebase(tempFrame, videoUrl, timestampMs);
-                    tempFrame.delete(); // Clean up immediately after upload
+                // Use FFmpeg to extract frame at specific timestamp
+                ProcessBuilder pb = new ProcessBuilder(
+                    "ffmpeg",
+                    "-y", // Overwrite output file
+                    "-ss", String.format("%.3f", timestampSeconds), // Seek to timestamp
+                    "-i", localPath, // Input video (local path)
+                    "-vframes", "1", // Extract only 1 frame
+                    "-q:v", "2", // High quality JPEG
+                    "-f", "image2", // Image format
+                    tempFrame.getAbsolutePath()
+                );
+                
+                Process process = pb.start();
+                int exitCode = process.waitFor();
+                
+                if (exitCode == 0 && tempFrame.exists() && tempFrame.length() > 0) {
+                    String frameUrl;
+                    
+                    // Production mode: Upload to Firebase Storage if enabled
+                    if (frameUploadEnabled && firebaseStorageService != null) {
+                        frameUrl = uploadFrameToFirebase(tempFrame, videoUrl, timestampMs);
+                        tempFrame.delete(); // Clean up immediately after upload
+                    } else {
+                        // Development mode: Use local file with scheduled cleanup
+                        frameUrl = "file://" + tempFrame.getAbsolutePath();
+                        scheduleFrameCleanup(tempFrame, 300000); // 5 minutes
+                    }
+                    
+                    log.debug("Frame extracted successfully: {} for timestamp {}ms", frameUrl, timestampMs);
+                    return frameUrl;
                 } else {
-                    // Development mode: Use local file with scheduled cleanup
-                    frameUrl = "file://" + tempFrame.getAbsolutePath();
-                    scheduleFrameCleanup(tempFrame, 300000); // 5 minutes
+                    log.warn("FFmpeg frame extraction failed with exit code {} for video: {} at {}ms", 
+                            exitCode, videoUrl, timestampMs);
+                    tempFrame.delete();
                 }
-                
-                log.debug("Frame extracted successfully: {} for timestamp {}ms", frameUrl, timestampMs);
-                return frameUrl;
-            } else {
-                log.warn("FFmpeg frame extraction failed with exit code {} for video: {} at {}ms", 
-                        exitCode, videoUrl, timestampMs);
-                tempFrame.delete();
-            }
+            } // Close the try-with-resources block
             
         } catch (Exception e) {
             log.warn("Failed to extract frame from {} at {}ms: {}", videoUrl, timestampMs, e.getMessage());

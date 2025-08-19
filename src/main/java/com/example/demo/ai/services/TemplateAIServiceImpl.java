@@ -1,10 +1,7 @@
 package com.example.demo.ai.services;
 
-import com.example.demo.ai.services.OverlayLegendService;
 import com.example.demo.ai.providers.vision.FFmpegSceneDetectionService;
-import com.example.demo.ai.services.KeyframeExtractionService;
 import com.example.demo.ai.providers.llm.VideoSummaryService;
-import com.example.demo.ai.services.AIOrchestrator;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSegment;
