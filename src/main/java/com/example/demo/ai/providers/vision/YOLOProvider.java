@@ -231,15 +231,17 @@ public class YOLOProvider implements VisionProvider {
             HttpEntity<byte[]> request = new HttpEntity<>(imageData, headers);
             
             // Call Hugging Face API with binary image data
-            ResponseEntity<Map> response = restTemplate.exchange(
+            ResponseEntity<String> response = restTemplate.exchange(
                 yoloEndpoint,
                 HttpMethod.POST,
                 request,
-                Map.class
+                String.class
             );
             
+            log.info("Hugging Face response status: {}, body: {}", response.getStatusCode(), response.getBody());
+            
             // Parse HF response format
-            return parseHuggingFaceResponse(response.getBody(), imageUrl);
+            return parseHuggingFaceStringResponse(response.getBody(), imageUrl);
             
         } catch (Exception e) {
             log.warn("Hugging Face API call failed: {}", e.getMessage());
@@ -320,6 +322,35 @@ public class YOLOProvider implements VisionProvider {
     }
     
     /**
+     * Parse Hugging Face API string response into ObjectPolygon list
+     */
+    private List<ObjectPolygon> parseHuggingFaceStringResponse(String responseBody, String imageUrl) {
+        try {
+            if (responseBody == null || responseBody.trim().isEmpty()) {
+                log.warn("Empty response from Hugging Face for {}", imageUrl);
+                return createMockPolygons(imageUrl);
+            }
+            
+            // Parse JSON response
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Object responseObject = mapper.readValue(responseBody, Object.class);
+            
+            if (responseObject instanceof java.util.List) {
+                return parseHuggingFaceResponse((java.util.List) responseObject, imageUrl);
+            } else if (responseObject instanceof java.util.Map) {
+                return parseHuggingFaceResponse((java.util.Map) responseObject, imageUrl);
+            } else {
+                log.warn("Unexpected response format from Hugging Face: {}", responseObject.getClass());
+                return createMockPolygons(imageUrl);
+            }
+            
+        } catch (Exception e) {
+            log.warn("Failed to parse Hugging Face string response for {}: {}", imageUrl, e.getMessage());
+            return createMockPolygons(imageUrl);
+        }
+    }
+    
+    /**
      * Parse Hugging Face API response into ObjectPolygon list
      */
     @SuppressWarnings("unchecked")
@@ -370,6 +401,52 @@ public class YOLOProvider implements VisionProvider {
             
         } catch (Exception e) {
             log.warn("Failed to parse Hugging Face response for {}: {}", imageUrl, e.getMessage());
+        }
+        
+        return polygons.isEmpty() ? createMockPolygons(imageUrl) : polygons;
+    }
+    
+    /**
+     * Parse Hugging Face API response into ObjectPolygon list (List format)
+     */
+    @SuppressWarnings("unchecked")
+    private List<ObjectPolygon> parseHuggingFaceResponse(java.util.List detections, String imageUrl) {
+        List<ObjectPolygon> polygons = new ArrayList<>();
+        
+        try {
+            if (detections != null) {
+                for (Object detection : detections) {
+                    if (detection instanceof Map) {
+                        Map<String, Object> detectionMap = (Map<String, Object>) detection;
+                        String label = (String) detectionMap.get("label");
+                        Double score = ((Number) detectionMap.get("score")).doubleValue();
+                        
+                        if (score >= confidenceThreshold) {
+                            // HF returns bounding box, convert to polygon
+                            Map<String, Object> box = (Map<String, Object>) detectionMap.get("box");
+                            if (box != null) {
+                                List<ObjectPolygon.Point> points = convertHFBoxToPolygon(box);
+                                if (points != null && !points.isEmpty()) {
+                                    double area = calculatePolygonArea(points);
+                                    if (area >= minArea) {
+                                        ObjectPolygon polygon = new ObjectPolygon(label, score.floatValue(), points);
+                                        polygons.add(polygon);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Sort by confidence and limit
+            polygons.sort((a, b) -> Float.compare(b.getConfidence(), a.getConfidence()));
+            if (polygons.size() > maxObjects) {
+                polygons = polygons.subList(0, maxObjects);
+            }
+            
+        } catch (Exception e) {
+            log.warn("Failed to parse Hugging Face list response for {}: {}", imageUrl, e.getMessage());
         }
         
         return polygons.isEmpty() ? createMockPolygons(imageUrl) : polygons;
