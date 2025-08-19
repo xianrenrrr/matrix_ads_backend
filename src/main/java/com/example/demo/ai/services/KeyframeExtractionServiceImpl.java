@@ -92,10 +92,9 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
                     .setContentType("image/jpeg")
                     .build();
                 
-                Blob blob = storage.create(blobInfo, keyframeBytes);
+                storage.create(blobInfo, keyframeBytes);
                 
-                // Make the keyframe publicly readable for YOLO access
-                blob.createAcl(com.google.cloud.storage.Acl.of(com.google.cloud.storage.Acl.User.ofAllUsers(), com.google.cloud.storage.Acl.Role.READER));
+                // Note: Keyframes are publicly accessible via uniform bucket-level access
                 
                 String keyframeUrl = String.format("https://storage.googleapis.com/%s/%s", bucketName, keyframeObjectName);
                 System.out.printf("Keyframe extracted and uploaded: %s%n", keyframeUrl);
