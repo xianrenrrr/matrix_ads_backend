@@ -130,10 +130,12 @@ public class FFmpegSceneDetectionService {
         
         // Parse stderr for showinfo output (showinfo writes to stderr)
         Pattern timePattern = Pattern.compile("pts_time:([\\d.]+)");
+        StringBuilder errorOutput = new StringBuilder();
         
         try (BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
             String line;
             while ((line = errorReader.readLine()) != null) {
+                errorOutput.append(line).append("\n");
                 if (line.contains("pts_time:")) {
                     Matcher matcher = timePattern.matcher(line);
                     if (matcher.find()) {
@@ -149,6 +151,7 @@ public class FFmpegSceneDetectionService {
         int exitCode = process.waitFor();
         if (exitCode != 0) {
             System.out.printf("FFmpeg scene detection exited with code: %d%n", exitCode);
+            System.out.printf("FFmpeg error output:%n%s%n", errorOutput.toString());
         }
         
         return sceneTimestamps;
