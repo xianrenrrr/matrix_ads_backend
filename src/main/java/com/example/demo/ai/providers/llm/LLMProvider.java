@@ -44,6 +44,7 @@ public interface LLMProvider extends AIModelProvider {
      */
     class VideoSummaryRequest {
         private String videoTitle;
+        private String userDescription;   // User's input description for AI context
         private List<String> sceneLabels;
         private Map<String, String> sceneDescriptions;
         private String language = "zh-CN"; // Default to Chinese
@@ -51,6 +52,9 @@ public interface LLMProvider extends AIModelProvider {
         // Getters and setters
         public String getVideoTitle() { return videoTitle; }
         public void setVideoTitle(String videoTitle) { this.videoTitle = videoTitle; }
+        
+        public String getUserDescription() { return userDescription; }
+        public void setUserDescription(String userDescription) { this.userDescription = userDescription; }
         
         public List<String> getSceneLabels() { return sceneLabels; }
         public void setSceneLabels(List<String> sceneLabels) { this.sceneLabels = sceneLabels; }
@@ -124,15 +128,19 @@ public interface LLMProvider extends AIModelProvider {
      */
     class TemplateMetadataRequest {
         private String videoTitle;
+        private String userDescription;   // User's input description for AI context
         private int totalDuration;
         private int sceneCount;
         private List<String> sceneLabels;
-        private List<SceneTimingInfo> sceneTimings; // NEW: Individual scene timing
+        private List<SceneTimingInfo> sceneTimings; // Individual scene timing
         private String language = "zh-CN";
         
         // Getters and setters
         public String getVideoTitle() { return videoTitle; }
         public void setVideoTitle(String videoTitle) { this.videoTitle = videoTitle; }
+        
+        public String getUserDescription() { return userDescription; }
+        public void setUserDescription(String userDescription) { this.userDescription = userDescription; }
         
         public int getTotalDuration() { return totalDuration; }
         public void setTotalDuration(int totalDuration) { this.totalDuration = totalDuration; }

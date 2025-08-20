@@ -5,7 +5,13 @@ import java.util.List;
 import java.util.Map;
 
 public interface VideoSummaryService {
-    String generateSummary(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions);
+    default String generateSummary(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions) {
+        return generateSummary(video, sceneLabels, allBlockDescriptions, "en", null);
+    }
     
-    String generateSummary(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions, String language);
+    default String generateSummary(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions, String language) {
+        return generateSummary(video, sceneLabels, allBlockDescriptions, language, null);
+    }
+    
+    String generateSummary(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions, String language, String userDescription);
 }

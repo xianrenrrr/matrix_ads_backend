@@ -35,10 +35,11 @@ public class VideoController {
         return "en";
     }
     
-    private ManualTemplate generateAITemplate(Video video, String language) {
-        // Use AI template generator to create template
-        System.out.println("Generating AI template for video ID: " + video.getId() + " in language: " + language);
-        return aiTemplateGenerator.generateTemplate(video, language);
+    private ManualTemplate generateAITemplate(Video video, String language, String userDescription) {
+        // Use AI template generator to create template with user description
+        System.out.println("Generating AI template for video ID: " + video.getId() + " in language: " + language + 
+                          " with user description: " + (userDescription != null ? "provided" : "none"));
+        return aiTemplateGenerator.generateTemplate(video, language, userDescription);
     }
     
     @Autowired
@@ -127,7 +128,9 @@ public class VideoController {
         System.out.println("Accept-Language header: " + acceptLanguage);
         System.out.println("User ID: " + userId);
         System.out.println("Title: " + title);
+        System.out.println("Description: " + description);
         System.out.println("Template ID: " + templateId);
+        System.out.println("Group IDs: " + groupIdsStr);
         System.out.println("=============================");
         
         // Upload to Firebase Storage and extract thumbnail
@@ -153,7 +156,7 @@ public class VideoController {
             String language = detectLanguage(acceptLanguage);
             System.out.println("Detected language: " + language);
             
-            ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language);
+            ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language, description);
             aiGeneratedTemplate.setUserId(userId);
             aiGeneratedTemplate.setVideoId(savedVideo.getId());
             aiGeneratedTemplate.setTemplateTitle(title != null ? title : "AI Generated Template");

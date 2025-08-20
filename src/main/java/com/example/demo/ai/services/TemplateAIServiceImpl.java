@@ -49,7 +49,16 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     
     @Override
     public ManualTemplate generateTemplate(Video video, String language) {
-        log.info("Starting AI template generation for video ID: {} in language: {}", video.getId(), language);
+        return generateTemplate(video, language, null);
+    }
+    
+    @Override
+    public ManualTemplate generateTemplate(Video video, String language, String userDescription) {
+        log.info("Starting AI template generation for video ID: {} in language: {} with user description: {}", 
+                 video.getId(), language, userDescription != null ? "provided" : "none");
+        if (userDescription != null && !userDescription.trim().isEmpty()) {
+            log.info("User description content: {}", userDescription);
+        }
 
         try {
             // Step 1: Detect scenes using FFmpeg (Chinese-first workflow)
@@ -97,14 +106,15 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             
             // Generate AI-powered template metadata in the target language
             log.info("=== AI TEMPLATE METADATA GENERATION ===");
-            log.info("Generating template metadata using AI in language: {}", language);
+            log.info("Generating template metadata using AI in language: {} with user description: {}", 
+                     language, userDescription != null ? "provided" : "none");
             
-            // Use AI to generate metadata based on video analysis
-            generateAIMetadata(template, video, scenes, allSceneLabels, language);
+            // Use AI to generate metadata based on video analysis and user description
+            generateAIMetadata(template, video, scenes, allSceneLabels, language, userDescription);
 
             // Step 4: Generate summary (optional) - simplified without block descriptions
-            log.info("Step 4: Generating video summary...");
-            String summary = videoSummaryService.generateSummary(video, allSceneLabels, new HashMap<>(), language);
+            log.info("Step 4: Generating video summary with user description...");
+            String summary = videoSummaryService.generateSummary(video, allSceneLabels, new HashMap<>(), language, userDescription);
             log.info("Generated summary: {}", summary);
             
             log.info("AI template generation completed for video ID: {} with {} scenes", 
@@ -222,7 +232,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     }
     
     private void generateAIMetadata(ManualTemplate template, Video video, List<Scene> scenes, 
-                                   List<String> sceneLabels, String language) {
+                                   List<String> sceneLabels, String language, String userDescription) {
         try {
             // Try to use AI for metadata generation
             if (aiOrchestrator != null) {
@@ -232,9 +242,10 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                     provider -> {
                         var llmProvider = (com.example.demo.ai.providers.llm.LLMProvider) provider;
                         
-                        // Create a template metadata request
+                        // Create a template metadata request with user description
                         var request = new com.example.demo.ai.providers.llm.LLMProvider.TemplateMetadataRequest();
                         request.setVideoTitle(video.getTitle());
+                        request.setUserDescription(userDescription); // Include user's custom description
                         request.setSceneCount(scenes.size());
                         request.setTotalDuration(template.getTotalVideoLength());
                         request.setSceneLabels(sceneLabels);

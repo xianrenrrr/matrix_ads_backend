@@ -9,4 +9,8 @@ public interface TemplateAIService {
     default ManualTemplate generateTemplate(Video video, String language) {
         return generateTemplate(video);
     }
+    
+    default ManualTemplate generateTemplate(Video video, String language, String userDescription) {
+        return generateTemplate(video, language);
+    }
 }

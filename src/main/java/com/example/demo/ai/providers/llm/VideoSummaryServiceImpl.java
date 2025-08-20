@@ -14,13 +14,11 @@ public class VideoSummaryServiceImpl implements VideoSummaryService {
     @Autowired
     private AIOrchestrator aiOrchestrator;
 
-    @Override
-    public String generateSummary(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions) {
-        return generateSummary(video, sceneLabels, allBlockDescriptions, "en");
-    }
     
-    public String generateSummary(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions, String language) {
-        System.out.printf("Generating video summary for: %s using AI orchestrator%n", video.getTitle());
+    @Override
+    public String generateSummary(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions, String language, String userDescription) {
+        System.out.printf("Generating video summary for: %s using AI orchestrator with user description: %s%n", 
+                         video.getTitle(), userDescription != null ? "provided" : "none");
         
         try {
             // Use AI orchestrator to get the best available LLM (Qwen -> OpenAI)
@@ -30,9 +28,10 @@ public class VideoSummaryServiceImpl implements VideoSummaryService {
                 provider -> {
                     var llmProvider = (com.example.demo.ai.providers.llm.LLMProvider) provider;
                     
-                    // Create proper request object
+                    // Create proper request object with user description
                     var request = new LLMProvider.VideoSummaryRequest();
                     request.setVideoTitle(video.getTitle());
+                    request.setUserDescription(userDescription); // Include user's custom description
                     request.setSceneLabels(sceneLabels);
                     request.setSceneDescriptions(allBlockDescriptions);
                     request.setLanguage(language);

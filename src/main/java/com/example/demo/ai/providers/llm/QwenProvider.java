@@ -301,6 +301,13 @@ public class QwenProvider implements LLMProvider {
         StringBuilder prompt = new StringBuilder();
         prompt.append("请为以下视频内容生成中文总结。要求：\n\n");
         prompt.append("视频标题：").append(request.getVideoTitle()).append("\n");
+        
+        // Add user's custom description if provided
+        if (request.getUserDescription() != null && !request.getUserDescription().trim().isEmpty()) {
+            prompt.append("用户需求描述：").append(request.getUserDescription()).append("\n");
+            log.info("📝 Adding user description to video summary prompt: {}", request.getUserDescription());
+        }
+        
         prompt.append("场景标签：").append(String.join("、", request.getSceneLabels())).append("\n");
         
         if (request.getSceneDescriptions() != null && !request.getSceneDescriptions().isEmpty()) {
@@ -713,8 +720,15 @@ public class QwenProvider implements LLMProvider {
         StringBuilder prompt = new StringBuilder();
         
         prompt.append("请为以下视频生成模板元数据，使用中文输出：\n")
-              .append("视频标题：").append(request.getVideoTitle()).append("\n")
-              .append("场景数量：").append(request.getSceneCount()).append("\n")
+              .append("视频标题：").append(request.getVideoTitle()).append("\n");
+        
+        // Add user's custom description if provided
+        if (request.getUserDescription() != null && !request.getUserDescription().trim().isEmpty()) {
+            prompt.append("用户需求描述：").append(request.getUserDescription()).append("\n");
+            log.info("📝 Adding user description to template prompt: {}", request.getUserDescription());
+        }
+        
+        prompt.append("场景数量：").append(request.getSceneCount()).append("\n")
               .append("总时长：").append(request.getTotalDuration()).append("秒\n")
               .append("场景标签：").append(request.getSceneLabels() != null ? String.join(", ", request.getSceneLabels()) : "无").append("\n\n");
         
