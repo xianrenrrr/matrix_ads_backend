@@ -266,9 +266,12 @@ public class SceneSubmissionController {
             Double aiThreshold = groupDoc.getDouble("aiApprovalThreshold");
             Boolean aiAutoApprovalEnabled = groupDoc.getBoolean("aiAutoApprovalEnabled");
             
+            // Convert similarity score to percentage (0-100) for comparison
+            double similarityPercentage = similarityScore * 100;
+            
             // Auto-approve if enabled and score meets threshold
             return aiAutoApprovalEnabled != null && aiAutoApprovalEnabled && 
-                   aiThreshold != null && similarityScore >= aiThreshold;
+                   aiThreshold != null && similarityPercentage >= aiThreshold;
         } catch (Exception e) {
             return false; // Default to manual approval if error
         }
