@@ -3,7 +3,7 @@ package com.example.demo.controller.contentmanager;
 import com.example.demo.dao.GroupDao;
 import com.example.demo.dao.UserDao;
 import com.example.demo.dao.TemplateDao;
-import com.example.demo.model.Invite;
+import com.example.demo.model.Group;
 import com.example.demo.model.User;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.api.ApiResponse;
@@ -54,7 +54,7 @@ public class GroupController {
         }
 
         // Check if group name already exists for this manager
-        List<Invite> existingGroups = groupDao.findByManagerId(managerId);
+        List<Group> existingGroups = groupDao.findByManagerId(managerId);
         boolean groupExists = existingGroups.stream()
             .anyMatch(g -> groupName.equals(g.getGroupName()) && "active".equals(g.getStatus()));
         if (groupExists) {
@@ -64,18 +64,16 @@ public class GroupController {
         // Generate unique token for joining
         String token = "group_" + UUID.randomUUID().toString().replace("-", "");
 
-        // Create permanent group (no expiration)
-        Invite group = new Invite();
+        // Create permanent group
+        Group group = new Group();
         group.setManagerId(managerId);
         group.setManagerName(manager.getUsername() != null ? manager.getUsername() : manager.getEmail());
         group.setGroupName(groupName);
         group.setDescription(description);
-        group.setRole("content_creator");
         group.setToken(token);
         group.setStatus("active");
         group.setCreatedAt(new Date());
         group.setUpdatedAt(new Date());
-        group.setExpiresAt(null);
         group.setMemberIds(new ArrayList<>());
         group.setMemberCount(0);
         
@@ -112,10 +110,10 @@ public class GroupController {
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getGroupsByManager(@PathVariable String managerId,
                                                                                       @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        List<Invite> groups = groupDao.findByManagerId(managerId);
+        List<Group> groups = groupDao.findByManagerId(managerId);
         List<Map<String, Object>> groupSummaries = new ArrayList<>();
 
-        for (Invite group : groups) {
+        for (Group group : groups) {
             if ("active".equals(group.getStatus())) {
                 Map<String, Object> summary = new HashMap<>();
                 summary.put("id", group.getId());
@@ -140,7 +138,7 @@ public class GroupController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> getGroupQRCode(@PathVariable String groupId,
                                                                             @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        Invite group = groupDao.findById(groupId);
+        Group group = groupDao.findById(groupId);
         if (group == null || !"active".equals(group.getStatus())) {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
@@ -162,7 +160,7 @@ public class GroupController {
     public ResponseEntity<ApiResponse<Void>> deleteGroup(@PathVariable String groupId,
                                                          @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        Invite group = groupDao.findById(groupId);
+        Group group = groupDao.findById(groupId);
         if (group == null) {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
@@ -187,7 +185,7 @@ public class GroupController {
             throw new IllegalArgumentException("Either userId or userEmail is required");
         }
 
-        Invite group = groupDao.findById(groupId);
+        Group group = groupDao.findById(groupId);
         if (group == null || !"active".equals(group.getStatus())) {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
@@ -221,7 +219,7 @@ public class GroupController {
             @PathVariable String userId,
             @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        Invite group = groupDao.findById(groupId);
+        Group group = groupDao.findById(groupId);
         if (group == null || !"active".equals(group.getStatus())) {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
@@ -249,7 +247,7 @@ public class GroupController {
             throw new IllegalArgumentException("userIds list is required");
         }
         
-        Invite group = groupDao.findById(groupId);
+        Group group = groupDao.findById(groupId);
         if (group == null || !"active".equals(group.getStatus())) {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
@@ -279,7 +277,7 @@ public class GroupController {
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getGroupMembers(@PathVariable String groupId,
                                                                                    @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        Invite group = groupDao.findById(groupId);
+        Group group = groupDao.findById(groupId);
         if (group == null || !"active".equals(group.getStatus())) {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
@@ -308,7 +306,7 @@ public class GroupController {
             @RequestBody Map<String, Object> aiSettings,
             @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        Invite group = groupDao.findById(groupId);
+        Group group = groupDao.findById(groupId);
         if (group == null || !"active".equals(group.getStatus())) {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
@@ -348,7 +346,7 @@ public class GroupController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> getGroupAISettings(@PathVariable String groupId,
                                                                                @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        Invite group = groupDao.findById(groupId);
+        Group group = groupDao.findById(groupId);
         if (group == null || !"active".equals(group.getStatus())) {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
@@ -374,7 +372,7 @@ public class GroupController {
             @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
-        Invite group = groupDao.findById(groupId);
+        Group group = groupDao.findById(groupId);
         if (group == null || !"active".equals(group.getStatus())) {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }

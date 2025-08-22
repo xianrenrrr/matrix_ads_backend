@@ -4,6 +4,7 @@ import com.example.demo.dao.SceneSubmissionDao;
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.model.SceneSubmission;
 import com.example.demo.model.ManualTemplate;
+import com.example.demo.api.ApiResponse;
 import com.google.cloud.firestore.Firestore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -39,7 +40,7 @@ public class SceneReviewController {
      * POST /content-manager/scenes/{sceneId}/manual-override
      */
     @PostMapping("/{sceneId}/manual-override")
-    public ResponseEntity<Map<String, Object>> manualOverrideScene(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> manualOverrideScene(
             @PathVariable String sceneId,
             @RequestParam String reviewerId,
             @RequestBody Map<String, Object> requestBody) throws Exception {
@@ -65,12 +66,12 @@ public class SceneReviewController {
         
         sceneSubmissionDao.update(submission);
         
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", true);
-        response.put("action", isApproval ? "approved" : "rejected");
-        response.put("sceneSubmission", submission);
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("action", isApproval ? "approved" : "rejected");
+        responseData.put("sceneSubmission", submission);
         
-        return ResponseEntity.ok(response);
+        String message = isApproval ? "Scene approved successfully" : "Scene rejected with feedback";
+        return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }
     
     // Helper Methods

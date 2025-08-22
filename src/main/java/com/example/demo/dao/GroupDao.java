@@ -1,19 +1,19 @@
 package com.example.demo.dao;
 
-import com.example.demo.model.Invite;
+import com.example.demo.model.Group;
 import java.util.List;
 
 public interface GroupDao {
-    void save(Invite group);
-    void update(Invite group);
-    Invite findByToken(String token);
-    Invite findById(String id);
-    List<Invite> findByManagerId(String managerId);
-    List<Invite> findByStatus(String status);
+    void save(Group group);
+    void update(Group group);
+    Group findByToken(String token);
+    Group findById(String id);
+    List<Group> findByManagerId(String managerId);
+    List<Group> findByStatus(String status);
     void delete(String id);
     void updateStatus(String id, String status);
     
-    // New method for getting user's group
+    // Get user's group ID
     String getUserGroupId(String userId);
     
     // Template-group relationship methods

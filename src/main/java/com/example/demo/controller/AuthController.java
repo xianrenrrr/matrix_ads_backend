@@ -3,7 +3,7 @@ package com.example.demo.controller;
 import com.example.demo.dao.UserDao;
 import com.example.demo.dao.GroupDao;
 import com.example.demo.model.User;
-import com.example.demo.model.Invite;
+import com.example.demo.model.Group;
 import com.example.demo.service.I18nService;
 import com.example.demo.api.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -147,21 +147,21 @@ public class AuthController {
                                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
-        Invite invite = groupDao.findByToken(token);
-        if (invite == null) {
-            throw new NoSuchElementException("Invite not found with token: " + token);
+        Group group = groupDao.findByToken(token);
+        if (group == null) {
+            throw new NoSuchElementException("Group not found with token: " + token);
         }
 
-        // Use InviteValidity utility for centralized validation logic
-        if (!com.example.demo.util.InviteValidity.isActive(invite)) {
+        // Check if group is active
+        if (!"active".equals(group.getStatus())) {
             throw new IllegalArgumentException("Group is inactive");
         }
 
-            // Return invite data
+            // Return group data
             Map<String, Object> responseData = new HashMap<>();
-            responseData.put("groupName", invite.getGroupName());
-            responseData.put("managerName", invite.getManagerName());
-            responseData.put("role", invite.getRole());
+            responseData.put("groupName", group.getGroupName());
+            responseData.put("managerName", group.getManagerName());
+            responseData.put("role", "content_creator");
             
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
@@ -205,18 +205,18 @@ public class AuthController {
             throw new IllegalArgumentException("Email is required for content managers");
         }
 
-        // Validate invite
-        Invite invite = groupDao.findByToken(inviteToken);
+        // Validate group invite
+        Group group = groupDao.findByToken(inviteToken);
         
-        // Since invites are permanent now, just check if it exists and is active
-        if (invite == null) {
-            throw new NoSuchElementException("Invite not found with token: " + inviteToken);
+        // Check if group exists and is active
+        if (group == null) {
+            throw new NoSuchElementException("Group not found with token: " + inviteToken);
         }
         
-        System.out.println("DEBUG: Found invite - Role: " + invite.getRole() + ", GroupId: " + invite.getId() + ", GroupName: " + invite.getGroupName());
+        System.out.println("DEBUG: Found group - GroupId: " + group.getId() + ", GroupName: " + group.getGroupName());
         
-        // Use InviteValidity utility for centralized validation logic
-        if (!com.example.demo.util.InviteValidity.isActive(invite)) {
+        // Check if group is active
+        if (!"active".equals(group.getStatus())) {
             throw new IllegalArgumentException("Group is inactive");
         }
 
@@ -237,7 +237,7 @@ public class AuthController {
         // Check if email already exists for content managers (only if email is provided)
         if (role != null && role.equals("content_manager") 
             && email != null && !email.trim().isEmpty()) {
-            if (userDao.findByEmailAndRole(email, invite.getRole()) != null) {
+            if (userDao.findByEmailAndRole(email, "content_creator") != null) {
                 throw new IllegalArgumentException("Email already exists for this role");
             }
         }
@@ -247,15 +247,15 @@ public class AuthController {
             user.setId(UUID.randomUUID().toString());
             user.setUsername(username);
             user.setPassword(password);
-            user.setRole(invite.getRole()); // Use role from invite
+            user.setRole("content_creator"); // Content creators join through groups
             
             // Set role-specific fields
-            if ("content_creator".equals(invite.getRole())) {
+            if ("content_creator".equals(user.getRole())) {
                 user.setPhone(phone);     // Content creators use phone
                 user.setProvince(province); // Content creators have location
                 user.setCity(city);
                 user.setEmail(null);      // No email for content creators
-            } else if ("content_manager".equals(invite.getRole())) {
+            } else if ("content_manager".equals(user.getRole())) {
                 user.setEmail(email);     // Content managers use email
                 user.setPhone(null);      // No phone for content managers
                 user.setProvince(null);   // No location for content managers
@@ -264,8 +264,8 @@ public class AuthController {
 
             // Initialize fields based on role
             if ("content_creator".equals(user.getRole())) {
-                // Content creators get assigned through groups - invite ID IS the group ID
-                String groupId = invite.getId();
+                // Content creators get assigned through groups
+                String groupId = group.getId();
                 System.out.println("DEBUG: Setting groupId for content creator " + user.getId() + " to: " + groupId);
                 user.setGroupId(groupId);
             } else if ("content_manager".equals(user.getRole())) {
@@ -276,15 +276,15 @@ public class AuthController {
             // Save user
             userDao.save(user);
 
-            // Handle group membership for group invites
-            if (invite.getGroupName() != null && !invite.getGroupName().trim().isEmpty()) {
+            // Handle group membership
+            if (group.getGroupName() != null && !group.getGroupName().trim().isEmpty()) {
                 // Add the new user to the group's member list
-                invite.addMember(user.getId());
+                group.addMember(user.getId());
                 
-                // Update the invite with the new member
-                groupDao.update(invite);
+                // Update the group with the new member
+                groupDao.update(group);
                 
-                System.out.println("User " + user.getId() + " added to group " + invite.getGroupName());
+                System.out.println("User " + user.getId() + " added to group " + group.getGroupName());
             }
 
             // Keep invite active for group invites (don't mark as accepted)
@@ -295,10 +295,10 @@ public class AuthController {
             Map<String, Object> responseData = new HashMap<>();
             responseData.put("user", user);
             
-            // Include group information for group invites
-            if (invite.getGroupName() != null && !invite.getGroupName().trim().isEmpty()) {
-                responseData.put("groupName", invite.getGroupName());
-                responseData.put("managerName", invite.getManagerName());
+            // Include group information
+            if (group.getGroupName() != null && !group.getGroupName().trim().isEmpty()) {
+                responseData.put("groupName", group.getGroupName());
+                responseData.put("managerName", group.getManagerName());
             }
             
         String message = i18nService.getMessage("registration.success", language);

@@ -4,6 +4,7 @@ import com.example.demo.dao.SceneSubmissionDao;
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.VideoDao;
 import com.example.demo.model.SceneSubmission;
+import com.example.demo.api.ApiResponse;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Video;
 import com.example.demo.service.FirebaseStorageService;
@@ -46,7 +47,7 @@ public class SceneSubmissionController {
     private VideoDao videoDao;
     
     @PostMapping("/upload")
-    public ResponseEntity<Map<String, Object>> uploadScene(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> uploadScene(
             @RequestParam("file") MultipartFile file,
             @RequestParam("templateId") String templateId,
             @RequestParam("userId") String userId,
@@ -111,15 +112,13 @@ public class SceneSubmissionController {
         
         updateSubmittedVideoWithScene(compositeVideoId, templateId, userId, sceneSubmission);
         
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", true);
-        response.put("message", "Scene uploaded successfully");
-        response.put("sceneSubmission", sceneSubmission);
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("sceneSubmission", sceneSubmission);
         
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.ok("Scene uploaded successfully", responseData));
     }
     @GetMapping("/submitted-videos/{compositeVideoId}")
-    public ResponseEntity<Map<String, Object>> getSubmittedVideo(@PathVariable String compositeVideoId) throws Exception {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getSubmittedVideo(@PathVariable String compositeVideoId) throws Exception {
         DocumentSnapshot videoDoc = db.collection("submittedVideos").document(compositeVideoId).get().get();
         
         if (!videoDoc.exists()) {
@@ -164,7 +163,7 @@ public class SceneSubmissionController {
         response.put("success", true);
         response.putAll(videoData);
         
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.ok("Submitted video retrieved successfully", response));
     }
 
     @SuppressWarnings("unchecked")
@@ -260,7 +259,7 @@ public class SceneSubmissionController {
             if (groupId == null) return false;
             
             // Get group's AI threshold
-            DocumentSnapshot groupDoc = db.collection("invites").document(groupId).get().get();
+            DocumentSnapshot groupDoc = db.collection("groups").document(groupId).get().get();
             if (!groupDoc.exists()) return false;
             
             Double aiThreshold = groupDoc.getDouble("aiApprovalThreshold");

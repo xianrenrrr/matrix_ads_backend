@@ -1,6 +1,6 @@
 package com.example.demo.dao;
 
-import com.example.demo.model.Invite;
+import com.example.demo.model.Group;
 import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,15 +19,15 @@ public class GroupDaoImpl implements GroupDao {
     private static final String COLLECTION_NAME = "groups";
 
     @Override
-    public void save(Invite invite) {
+    public void save(Group group) {
         try {
             CollectionReference groupsRef = db.collection(COLLECTION_NAME);
-            if (invite.getId() == null || invite.getId().isEmpty()) {
+            if (group.getId() == null || group.getId().isEmpty()) {
                 // Auto-generate ID for new groups
                 DocumentReference docRef = groupsRef.document();
-                invite.setId(docRef.getId());
+                group.setId(docRef.getId());
             }
-            ApiFuture<WriteResult> result = groupsRef.document(invite.getId()).set(invite);
+            ApiFuture<WriteResult> result = groupsRef.document(group.getId()).set(group);
             result.get(); // Wait for completion
         } catch (InterruptedException | ExecutionException e) {
             throw new RuntimeException("Failed to save group", e);
@@ -35,13 +35,13 @@ public class GroupDaoImpl implements GroupDao {
     }
 
     @Override
-    public void update(Invite invite) {
+    public void update(Group group) {
         try {
-            if (invite.getId() == null || invite.getId().isEmpty()) {
+            if (group.getId() == null || group.getId().isEmpty()) {
                 throw new IllegalArgumentException("Group ID cannot be null or empty for update");
             }
             CollectionReference groupsRef = db.collection(COLLECTION_NAME);
-            ApiFuture<WriteResult> result = groupsRef.document(invite.getId()).set(invite);
+            ApiFuture<WriteResult> result = groupsRef.document(group.getId()).set(group);
             result.get(); // Wait for completion
         } catch (InterruptedException | ExecutionException e) {
             throw new RuntimeException("Failed to update group", e);
@@ -49,13 +49,13 @@ public class GroupDaoImpl implements GroupDao {
     }
 
     @Override
-    public Invite findByToken(String token) {
+    public Group findByToken(String token) {
         try {
             CollectionReference groupsRef = db.collection(COLLECTION_NAME);
             Query query = groupsRef.whereEqualTo("token", token).limit(1);
             ApiFuture<QuerySnapshot> querySnapshot = query.get();
             for (DocumentSnapshot document : querySnapshot.get().getDocuments()) {
-                return document.toObject(Invite.class);
+                return document.toObject(Group.class);
             }
             return null;
         } catch (InterruptedException | ExecutionException e) {
@@ -64,13 +64,13 @@ public class GroupDaoImpl implements GroupDao {
     }
 
     @Override
-    public Invite findById(String id) {
+    public Group findById(String id) {
         try {
             DocumentReference docRef = db.collection(COLLECTION_NAME).document(id);
             ApiFuture<DocumentSnapshot> future = docRef.get();
             DocumentSnapshot document = future.get();
             if (document.exists()) {
-                return document.toObject(Invite.class);
+                return document.toObject(Group.class);
             }
             return null;
         } catch (InterruptedException | ExecutionException e) {
@@ -79,15 +79,15 @@ public class GroupDaoImpl implements GroupDao {
     }
 
     @Override
-    public List<Invite> findByManagerId(String managerId) {
+    public List<Group> findByManagerId(String managerId) {
         try {
             CollectionReference groupsRef = db.collection(COLLECTION_NAME);
             Query query = groupsRef.whereEqualTo("managerId", managerId);
             ApiFuture<QuerySnapshot> querySnapshot = query.get();
             
-            List<Invite> groups = new ArrayList<>();
+            List<Group> groups = new ArrayList<>();
             for (DocumentSnapshot document : querySnapshot.get().getDocuments()) {
-                groups.add(document.toObject(Invite.class));
+                groups.add(document.toObject(Group.class));
             }
             return groups;
         } catch (InterruptedException | ExecutionException e) {
@@ -97,15 +97,15 @@ public class GroupDaoImpl implements GroupDao {
 
 
     @Override
-    public List<Invite> findByStatus(String status) {
+    public List<Group> findByStatus(String status) {
         try {
             CollectionReference groupsRef = db.collection(COLLECTION_NAME);
             Query query = groupsRef.whereEqualTo("status", status);
             ApiFuture<QuerySnapshot> querySnapshot = query.get();
             
-            List<Invite> groups = new ArrayList<>();
+            List<Group> groups = new ArrayList<>();
             for (DocumentSnapshot document : querySnapshot.get().getDocuments()) {
-                groups.add(document.toObject(Invite.class));
+                groups.add(document.toObject(Group.class));
             }
             return groups;
         } catch (InterruptedException | ExecutionException e) {
