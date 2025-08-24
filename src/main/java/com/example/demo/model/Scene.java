@@ -39,11 +39,14 @@ public class Scene {
  // Color legend for overlays (same order as overlays) // Source aspect ratio, e.g., "9:16" or "16:9"
     private List<LegendItem> legend;  // color-coded legend for overlays
     private String sourceAspect;  // e.g., "9:16" for mini-app pixel mapping
+    private String shortLabelZh;  // Chinese short label for the dominant object
+    private String sceneDescriptionZh;  // Chinese scene description
     
     // Inner class for object overlay data
     public static class ObjectOverlay {
         private String label;
         private String labelLocalized;  // Localized label (e.g., Chinese translation)
+        private String labelZh;  // Chinese label
         private float confidence;
         private float x;  // normalized [0,1], top-left corner
         private float y;  // normalized [0,1], top-left corner
@@ -66,6 +69,9 @@ public class Scene {
         
         public String getLabelLocalized() { return labelLocalized; }
         public void setLabelLocalized(String labelLocalized) { this.labelLocalized = labelLocalized; }
+        
+        public String getLabelZh() { return labelZh; }
+        public void setLabelZh(String labelZh) { this.labelZh = labelZh; }
         
         public float getConfidence() { return confidence; }
         public void setConfidence(float confidence) { this.confidence = confidence; }
@@ -349,6 +355,22 @@ public class Scene {
     
     public void setOverlayPolygons(List<OverlayPolygon> overlayPolygons) {
         this.overlayPolygons = overlayPolygons;
+    }
+    
+    public String getShortLabelZh() {
+        return shortLabelZh;
+    }
+    
+    public void setShortLabelZh(String shortLabelZh) {
+        this.shortLabelZh = shortLabelZh;
+    }
+    
+    public String getSceneDescriptionZh() {
+        return sceneDescriptionZh;
+    }
+    
+    public void setSceneDescriptionZh(String sceneDescriptionZh) {
+        this.sceneDescriptionZh = sceneDescriptionZh;
     }
     
 }

@@ -15,6 +15,7 @@ public class ManualTemplate {
     private String backgroundMusic;
     private String id;
     private String videoId;
+    private String localeUsed;  // Locale used for template generation (e.g., "zh-CN")
     
     // Additional database fields to prevent Firestore warnings
     private List<String> assignedGroups;
@@ -136,6 +137,14 @@ public class ManualTemplate {
     
     public void setSubmittedVideos(List<String> submittedVideos) {
         this.submittedVideos = submittedVideos;
+    }
+    
+    public String getLocaleUsed() {
+        return localeUsed;
+    }
+    
+    public void setLocaleUsed(String localeUsed) {
+        this.localeUsed = localeUsed;
     }
 
 }

@@ -2,6 +2,10 @@ package com.example.demo.ai.services;
 
 import com.example.demo.ai.providers.vision.FFmpegSceneDetectionService;
 import com.example.demo.ai.providers.llm.VideoSummaryService;
+import com.example.demo.ai.seg.SegmentationService;
+import com.example.demo.ai.seg.dto.*;
+import com.example.demo.ai.label.ObjectLabelService;
+import com.example.demo.ai.util.ImageCropper;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSegment;
@@ -23,6 +27,11 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Autowired
     private FFmpegSceneDetectionService sceneDetectionService;
     
+    @Autowired
+    private SegmentationService segmentationService;
+    
+    @Autowired
+    private ObjectLabelService objectLabelService;
     
     @Autowired
     private AIOrchestrator aiOrchestrator;
@@ -44,7 +53,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
 
     @Override
     public ManualTemplate generateTemplate(Video video) {
-        return generateTemplate(video, "zh-CN"); // Chinese-first approach
+        ManualTemplate template = generateTemplate(video, "zh-CN"); // Chinese-first approach
+        template.setLocaleUsed("zh-CN");
+        return template;
     }
     
     @Override
@@ -136,14 +147,119 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         if (keyframeUrl != null) {
             scene.setKeyframeUrl(keyframeUrl);
             scene.setExampleFrame(keyframeUrl);
+            
+            // NEW: Use segmentation service for shape detection
+            processSceneWithShapes(scene, keyframeUrl);
         }
         
-        // Process overlays in a clean, separated way using AI orchestrator
-        OverlayProcessor overlayProcessor = new OverlayProcessor(
-            aiOrchestrator, overlayLegendService);
-        overlayProcessor.processOverlays(scene, segment, keyframeUrl);
+        // Process overlays in a clean, separated way using AI orchestrator (fallback)
+        if (scene.getOverlayType() == null) {
+            OverlayProcessor overlayProcessor = new OverlayProcessor(
+                aiOrchestrator, overlayLegendService);
+            overlayProcessor.processOverlays(scene, segment, keyframeUrl);
+        }
         
         return scene;
+    }
+    
+    private void processSceneWithShapes(Scene scene, String keyframeUrl) {
+        try {
+            // Detect shapes using segmentation service
+            List<OverlayShape> shapes = segmentationService.detect(keyframeUrl);
+            
+            if (!shapes.isEmpty()) {
+                // Process shapes and add Chinese labels
+                boolean hasPolygons = false;
+                boolean hasBoxes = false;
+                
+                for (OverlayShape shape : shapes) {
+                    // Crop and get Chinese label
+                    byte[] cropBytes = ImageCropper.crop(keyframeUrl, shape);
+                    String labelZh = objectLabelService.labelZh(cropBytes);
+                    
+                    // Create new shape with Chinese label
+                    if (shape instanceof OverlayPolygon polygon) {
+                        hasPolygons = true;
+                        OverlayPolygon newPolygon = new OverlayPolygon(
+                            polygon.label(),
+                            labelZh,
+                            polygon.confidence(),
+                            polygon.points()
+                        );
+                        if (scene.getOverlayPolygons() == null) {
+                            scene.setOverlayPolygons(new ArrayList<>());
+                        }
+                        // Convert our DTO polygon to GoogleVisionProvider.OverlayPolygon
+                        com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon scenePolygon = new com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon();
+                        scenePolygon.setLabel(newPolygon.label());
+                        scenePolygon.setLabelZh(newPolygon.labelZh());
+                        scenePolygon.setConfidence((float) newPolygon.confidence());
+                        
+                        // Convert points using the nested Point class
+                        List<com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point> scenePoints = new ArrayList<>();
+                        for (com.example.demo.ai.seg.dto.Point p : newPolygon.points()) {
+                            com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point scenePoint = new com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point((float) p.x(), (float) p.y());
+                            scenePoints.add(scenePoint);
+                        }
+                        scenePolygon.setPoints(scenePoints);
+                        
+                        scene.getOverlayPolygons().add(scenePolygon);
+                    } else if (shape instanceof OverlayBox box) {
+                        hasBoxes = true;
+                        OverlayBox newBox = new OverlayBox(
+                            box.label(),
+                            labelZh,
+                            box.confidence(),
+                            box.x(), box.y(), box.w(), box.h()
+                        );
+                        if (scene.getOverlayObjects() == null) {
+                            scene.setOverlayObjects(new ArrayList<>());
+                        }
+                        scene.getOverlayObjects().add(convertToSceneBox(newBox));
+                    }
+                }
+                
+                // Set overlay type priority: polygons > objects > grid
+                if (hasPolygons) {
+                    scene.setOverlayType("polygons");
+                } else if (hasBoxes) {
+                    scene.setOverlayType("objects");
+                } else {
+                    scene.setOverlayType("grid");
+                }
+                
+                // Set dominant object's Chinese label as scene's short label
+                if (!shapes.isEmpty()) {
+                    OverlayShape dominant = shapes.get(0); // Already sorted by conf×area
+                    scene.setShortLabelZh(dominant.labelZh());
+                    
+                    // Generate scene description in Chinese
+                    String fullFrameLabel = objectLabelService.labelZh(ImageCropper.crop(keyframeUrl, 
+                        new OverlayBox("", "", 1.0, 0, 0, 1, 1)));
+                    scene.setSceneDescriptionZh("场景包含" + fullFrameLabel);
+                }
+            } else {
+                // Fallback to grid
+                scene.setOverlayType("grid");
+            }
+        } catch (Exception e) {
+            log.error("Failed to process scene with shapes: {}", e.getMessage());
+            scene.setOverlayType("grid");
+        }
+    }
+    
+    // Removed convertToScenePolygon method - conversion now done inline
+    
+    private com.example.demo.model.Scene.ObjectOverlay convertToSceneBox(OverlayBox box) {
+        com.example.demo.model.Scene.ObjectOverlay model = new com.example.demo.model.Scene.ObjectOverlay();
+        model.setLabel(box.label());
+        model.setLabelZh(box.labelZh());
+        model.setConfidence((float) box.confidence());
+        model.setX((float) box.x());
+        model.setY((float) box.y());
+        model.setWidth((float) box.w());
+        model.setHeight((float) box.h());
+        return model;
     }
     
     private String extractKeyframe(Scene scene, SceneSegment segment, String videoUrl) {

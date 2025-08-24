@@ -326,6 +326,7 @@ public class GoogleVisionProvider implements VisionProvider {
     public static class OverlayPolygon {
         private String label;
         private String labelLocalized;
+        private String labelZh;  // Chinese label
         private float confidence;
         private List<Point> points;
         
@@ -339,6 +340,8 @@ public class GoogleVisionProvider implements VisionProvider {
         
         // Getters and setters
         public String getLabel() { return label; }
+        public String getLabelZh() { return labelZh; }
+        public void setLabelZh(String labelZh) { this.labelZh = labelZh; }
         public void setLabel(String label) { this.label = label; }
         
         public String getLabelLocalized() { return labelLocalized; }

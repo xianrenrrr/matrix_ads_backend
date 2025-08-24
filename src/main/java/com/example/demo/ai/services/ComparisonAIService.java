@@ -3,6 +3,11 @@ package com.example.demo.ai.services;
 import com.example.demo.ai.core.AIModelType;
 import com.example.demo.ai.providers.llm.LLMProvider;
 import com.example.demo.ai.providers.vision.VisionProvider;
+import com.example.demo.ai.seg.SegmentationService;
+import com.example.demo.ai.seg.dto.*;
+import com.example.demo.ai.label.ObjectLabelService;
+import com.example.demo.ai.suggest.SuggestionService;
+import com.example.demo.ai.util.ImageCropper;
 import com.example.demo.ai.shared.GcsFileResolver;
 import com.example.demo.model.Scene;
 import com.example.demo.service.FirebaseStorageService;
@@ -26,6 +31,15 @@ public class ComparisonAIService {
     @Autowired
     private AIOrchestrator aiOrchestrator;
     
+    @Autowired
+    private SegmentationService segmentationService;
+    
+    @Autowired
+    private ObjectLabelService objectLabelService;
+    
+    @Autowired
+    private SuggestionService suggestionService;
+    
     @Autowired(required = false)
     private FirebaseStorageService firebaseStorageService;
     
@@ -35,11 +49,16 @@ public class ComparisonAIService {
     @Value("${ai.comparison.frame-upload.enabled:false}")
     private boolean frameUploadEnabled;
     
-    // Default comparison settings
+    // Stricter comparison settings
     private static final int MAX_WINDOW_MS = 3000;
     private static final int MIN_WINDOW_MS = 2000;
     private static final int MAX_WINDOW_MS_LIMIT = 6000;
     private static final int SAMPLING_RATE_MS = 1000; // 1 Hz
+    
+    // Stricter weights as per requirements
+    private static final double GEOMETRY_WEIGHT = 0.50;
+    private static final double VISUAL_WEIGHT = 0.35;
+    private static final double LABEL_WEIGHT = 0.15;
     
     /**
      * Compare user-submitted scene with template scene
@@ -135,8 +154,29 @@ public class ComparisonAIService {
                 // Label comparison using Qwen (if needed)
                 double labelScore = calculateLabelScore(refFrameUrl, subFrameUrl);
                 
-                // Combined score: 0.45*geom + 0.40*vis + 0.15*label
-                double combinedScore = 0.45 * geometryScore + 0.40 * visualScore + 0.15 * labelScore;
+                // Apply stricter penalties
+                double penalizedGeomScore = geometryScore;
+                double penalizedVisScore = visualScore;
+                
+                if (geometryScore < 0.5) {
+                    penalizedGeomScore *= 0.7;  // Harsh penalty for poor geometry
+                }
+                if (visualScore < 0.6) {
+                    penalizedVisScore *= 0.85;  // Penalty for poor visual match
+                }
+                
+                // Combined score with stricter weights
+                double combinedScore = GEOMETRY_WEIGHT * penalizedGeomScore + 
+                                     VISUAL_WEIGHT * penalizedVisScore + 
+                                     LABEL_WEIGHT * labelScore;
+                
+                // Cap maximum score
+                combinedScore = Math.min(combinedScore, 0.95);
+                
+                // Apply extra penalty if both geometry and visual are low
+                if (geometryScore < 0.5 && visualScore < 0.6) {
+                    combinedScore *= 0.8;
+                }
                 
                 metrics.add(new PerSecondMetric(i, tRef, tSub, geometryScore, visualScore, labelScore, combinedScore));
             }
@@ -146,36 +186,124 @@ public class ComparisonAIService {
     }
     
     /**
-     * Calculate geometry score using YOLO segmentation (via AI orchestrator)
+     * Calculate geometry score using new segmentation service
      */
     private double calculateGeometryScore(String refFrameUrl, String subFrameUrl) {
         try {
-            // Get object polygons from both frames using YOLO -> Google Vision fallback
-            var refResponse = aiOrchestrator.executeWithFallback(
-                AIModelType.VISION, "detectObjectPolygons",
-                provider -> ((com.example.demo.ai.providers.vision.VisionProvider) provider)
-                    .detectObjectPolygons(refFrameUrl)
-            );
+            // Use new segmentation service (PaddleDet preferred, YOLO fallback)
+            List<OverlayShape> refShapes = segmentationService.detect(refFrameUrl);
+            List<OverlayShape> subShapes = segmentationService.detect(subFrameUrl);
             
-            var subResponse = aiOrchestrator.executeWithFallback(
-                AIModelType.VISION, "detectObjectPolygons", 
-                provider -> ((com.example.demo.ai.providers.vision.VisionProvider) provider)
-                    .detectObjectPolygons(subFrameUrl)
-            );
-            
-            if (refResponse.isSuccess() && subResponse.isSuccess()) {
-                var refPolygons = refResponse.getData();
-                var subPolygons = subResponse.getData();
+            if (!refShapes.isEmpty() && !subShapes.isEmpty()) {
+                // Match dominant objects by Chinese label if available
+                OverlayShape refDominant = refShapes.get(0);
+                OverlayShape subDominant = findBestMatch(refDominant, subShapes);
                 
-                // Calculate IoU + centroid + scale matching
-                return calculatePolygonSimilarity(refPolygons, subPolygons);
+                if (subDominant != null) {
+                    // Calculate IoU + centroid + scale
+                    double iou = calculateShapeIoU(refDominant, subDominant);
+                    double centroidDist = calculateCentroidDistance(refDominant, subDominant);
+                    double scaleRatio = calculateScaleRatio(refDominant, subDominant);
+                    
+                    // Weighted combination
+                    double score = 0.5 * iou + 0.3 * (1.0 - centroidDist) + 0.2 * scaleRatio;
+                    
+                    log.debug("Geometry score: IoU={}, centroid={}, scale={}, final={}", 
+                             iou, 1.0 - centroidDist, scaleRatio, score);
+                    
+                    return score;
+                }
             }
             
         } catch (Exception e) {
             log.warn("Geometry score calculation failed: {}", e.getMessage());
         }
         
-        return 0.5; // Fallback score
+        return 0.3; // Lower fallback for missing shapes
+    }
+    
+    private OverlayShape findBestMatch(OverlayShape ref, List<OverlayShape> candidates) {
+        // First try to match by Chinese label
+        for (OverlayShape candidate : candidates) {
+            if (ref.labelZh() != null && ref.labelZh().equals(candidate.labelZh())) {
+                return candidate;
+            }
+        }
+        
+        // Fallback to highest confidence×area
+        return candidates.get(0);
+    }
+    
+    private double calculateShapeIoU(OverlayShape shape1, OverlayShape shape2) {
+        double[] bbox1 = shapeToBoundingBox(shape1);
+        double[] bbox2 = shapeToBoundingBox(shape2);
+        return calculateBoundingBoxIoU(bbox1, bbox2);
+    }
+    
+    private double[] shapeToBoundingBox(OverlayShape shape) {
+        if (shape instanceof OverlayBox box) {
+            return new double[]{box.x(), box.y(), box.x() + box.w(), box.y() + box.h()};
+        } else if (shape instanceof OverlayPolygon polygon) {
+            double xmin = 1.0, ymin = 1.0, xmax = 0.0, ymax = 0.0;
+            for (Point p : polygon.points()) {
+                xmin = Math.min(xmin, p.x());
+                ymin = Math.min(ymin, p.y());
+                xmax = Math.max(xmax, p.x());
+                ymax = Math.max(ymax, p.y());
+            }
+            return new double[]{xmin, ymin, xmax, ymax};
+        }
+        return new double[]{0, 0, 0, 0};
+    }
+    
+    private double calculateCentroidDistance(OverlayShape shape1, OverlayShape shape2) {
+        double[] c1 = getShapeCentroid(shape1);
+        double[] c2 = getShapeCentroid(shape2);
+        double dist = Math.sqrt(Math.pow(c1[0] - c2[0], 2) + Math.pow(c1[1] - c2[1], 2));
+        return Math.min(dist / Math.sqrt(2.0), 1.0);
+    }
+    
+    private double[] getShapeCentroid(OverlayShape shape) {
+        if (shape instanceof OverlayBox box) {
+            return new double[]{box.x() + box.w()/2, box.y() + box.h()/2};
+        } else if (shape instanceof OverlayPolygon polygon) {
+            double sumX = 0, sumY = 0;
+            for (Point p : polygon.points()) {
+                sumX += p.x();
+                sumY += p.y();
+            }
+            return new double[]{sumX / polygon.points().size(), sumY / polygon.points().size()};
+        }
+        return new double[]{0.5, 0.5};
+    }
+    
+    private double calculateScaleRatio(OverlayShape shape1, OverlayShape shape2) {
+        double area1 = getShapeArea(shape1);
+        double area2 = getShapeArea(shape2);
+        
+        if (area1 == 0 || area2 == 0) return 0.0;
+        
+        double ratio = area1 / area2;
+        if (ratio > 1) ratio = 1 / ratio;
+        
+        return ratio;  // Returns value between 0 and 1
+    }
+    
+    private double getShapeArea(OverlayShape shape) {
+        if (shape instanceof OverlayBox box) {
+            return box.w() * box.h();
+        } else if (shape instanceof OverlayPolygon polygon) {
+            // Shoelace formula
+            double area = 0;
+            int n = polygon.points().size();
+            for (int i = 0; i < n; i++) {
+                Point p1 = polygon.points().get(i);
+                Point p2 = polygon.points().get((i + 1) % n);
+                area += p1.x() * p2.y() - p2.x() * p1.y();
+            }
+            return Math.abs(area) / 2.0;
+        }
+        return 0.0;
     }
     
     /**
@@ -289,56 +417,57 @@ public class ComparisonAIService {
     }
     
     /**
-     * Calculate label similarity using Chinese text comparison (Qwen)
-     * Extracts objects from both frames and compares Chinese labels using AI providers
+     * Calculate label similarity using Chinese labeling service (Qwen-VL-Plus)
      */
     private double calculateLabelScore(String refFrameUrl, String subFrameUrl) {
         try {
-            // Skip computation for placeholder URLs
-            if (refFrameUrl.contains("_frame_") && subFrameUrl.contains("_frame_")) {
-                final double FALLBACK_LABEL_SCORE = 0.6;
-                log.debug("Using fallback label score for placeholder URLs: {}", FALLBACK_LABEL_SCORE);
-                return FALLBACK_LABEL_SCORE;
-            }
+            // Use segmentation service to get dominant objects
+            List<OverlayShape> refShapes = segmentationService.detect(refFrameUrl);
+            List<OverlayShape> subShapes = segmentationService.detect(subFrameUrl);
             
-            log.debug("Calculating Chinese label similarity between {} and {}", refFrameUrl, subFrameUrl);
-            
-            // Extract objects from reference frame using YOLO
-            var refResponse = aiOrchestrator.executeWithFallback(
-                AIModelType.VISION, "detectObjectPolygons",
-                provider -> ((VisionProvider) provider).detectObjectPolygons(refFrameUrl)
-            );
-            
-            // Extract objects from submission frame using YOLO  
-            var subResponse = aiOrchestrator.executeWithFallback(
-                AIModelType.VISION, "detectObjectPolygons",
-                provider -> ((VisionProvider) provider).detectObjectPolygons(subFrameUrl)
-            );
-            
-            if (refResponse.isSuccess() && subResponse.isSuccess()) {
-                var refPolygons = refResponse.getData();
-                var subPolygons = subResponse.getData();
+            if (!refShapes.isEmpty() && !subShapes.isEmpty()) {
+                // Get dominant object from each frame
+                OverlayShape refDominant = refShapes.get(0);
+                OverlayShape subDominant = subShapes.get(0);
                 
-                // Get Chinese labels for detected objects using Qwen
-                List<String> refLabels = extractChineseLabels(refPolygons);
-                List<String> subLabels = extractChineseLabels(subPolygons);
+                // Crop and get Chinese labels
+                byte[] refCrop = ImageCropper.crop(refFrameUrl, refDominant);
+                byte[] subCrop = ImageCropper.crop(subFrameUrl, subDominant);
                 
-                // Compare Chinese label sets
-                double labelSimilarity = compareChineseLabelSets(refLabels, subLabels);
+                String refLabelZh = objectLabelService.labelZh(refCrop);
+                String subLabelZh = objectLabelService.labelZh(subCrop);
                 
-                log.debug("Chinese label similarity calculated: {} (ref={}, sub={})", 
-                         labelSimilarity, refLabels, subLabels);
-                return labelSimilarity;
+                log.debug("Chinese labels: ref='{}', sub='{}'", refLabelZh, subLabelZh);
+                
+                // Exact match = 1.0, near match = 0.7, no match = 0.3
+                if (refLabelZh.equals(subLabelZh)) {
+                    return 1.0;
+                } else if (isNearMatch(refLabelZh, subLabelZh)) {
+                    return 0.7;
+                } else {
+                    return 0.3;
+                }
             }
             
         } catch (Exception e) {
-            log.warn("Chinese label comparison failed: {}, using fallback", e.getMessage());
+            log.warn("Label score calculation failed: {}", e.getMessage());
         }
         
-        // Fallback score when AI providers unavailable
-        final double FALLBACK_LABEL_SCORE = 0.6;
-        log.debug("Using fallback label score: {}", FALLBACK_LABEL_SCORE);
-        return FALLBACK_LABEL_SCORE;
+        return 0.5; // Fallback
+    }
+    
+    private boolean isNearMatch(String label1, String label2) {
+        // Simple heuristic: check if labels share characters
+        if (label1.length() == 0 || label2.length() == 0) return false;
+        
+        int commonChars = 0;
+        for (char c : label1.toCharArray()) {
+            if (label2.indexOf(c) >= 0) {
+                commonChars++;
+            }
+        }
+        
+        return commonChars >= Math.min(label1.length(), label2.length()) / 2;
     }
     
     /**
@@ -419,37 +548,77 @@ public class ComparisonAIService {
     }
     
     /**
-     * Generate Chinese suggestions using Qwen
+     * Generate Chinese suggestions using new suggestion service (Qwen-2.5-instruct)
      */
     private List<String> generateChineseSuggestions(Scene templateScene, SimilarityScores scores, 
                                                    List<PerSecondMetric> metrics) {
         try {
-            var request = new LLMProvider.SceneSuggestionsRequest();
-            request.setSimilarityScore(scores.overallSimilarity);
-            request.setSceneTitle(templateScene.getSceneTitle());
-            request.setAnalysisData(buildAnalysisData(scores, metrics));
+            // Build compact facts for suggestion service
+            Map<String, Object> facts = new HashMap<>();
+            facts.put("sceneTitle", templateScene.getSceneTitle());
+            facts.put("overallScore", scores.overallSimilarity);
+            facts.put("geometryScore", scores.geometryMean);
+            facts.put("visualScore", scores.visualMean);
+            facts.put("labelScore", scores.labelMean);
             
-            var response = aiOrchestrator.executeWithFallback(
-                AIModelType.LLM, "generateSceneSuggestions",
-                provider -> ((LLMProvider) provider).generateSceneSuggestions(request)
-            );
+            // Add per-second deltas
+            List<Map<String, Object>> perSecondData = new ArrayList<>();
+            for (PerSecondMetric metric : metrics) {
+                Map<String, Object> secondData = new HashMap<>();
+                secondData.put("t", metric.second);
+                secondData.put("geom", metric.geometryScore);
+                secondData.put("vis", metric.visualScore);
+                secondData.put("label", metric.labelScore);
+                perSecondData.add(secondData);
+            }
+            facts.put("perSecond", perSecondData);
             
-            if (response.isSuccess() && response.getData() != null) {
-                return response.getData().getSuggestionsZh();
+            // Get suggestions from service
+            SuggestionService.SuggestionsResult result = suggestionService.suggestCn(facts);
+            
+            if (result != null && result.suggestionsZh() != null && !result.suggestionsZh().isEmpty()) {
+                return result.suggestionsZh();
             }
             
         } catch (Exception e) {
             log.warn("Chinese suggestions generation failed: {}", e.getMessage());
         }
         
-        // Fallback suggestions
-        return Arrays.asList("画质良好", "构图需要调整");
+        // Fallback suggestions based on scores
+        List<String> fallback = new ArrayList<>();
+        if (scores.geometryMean < 0.5) {
+            fallback.add("请调整拍摄角度和位置");
+        }
+        if (scores.visualMean < 0.6) {
+            fallback.add("注意光线和画质");
+        }
+        if (scores.labelMean < 0.5) {
+            fallback.add("确保主要物体清晰可见");
+        }
+        if (fallback.isEmpty()) {
+            fallback.add("基本符合要求");
+        }
+        return fallback;
     }
     
     private List<String> generateNextActions(SimilarityScores scores) {
-        if (scores.overallSimilarity > 0.85) {
+        // Use suggestion service for next actions
+        try {
+            Map<String, Object> facts = new HashMap<>();
+            facts.put("overallScore", scores.overallSimilarity);
+            
+            SuggestionService.SuggestionsResult result = suggestionService.suggestCn(facts);
+            if (result != null && result.nextActionsZh() != null && !result.nextActionsZh().isEmpty()) {
+                return result.nextActionsZh();
+            }
+        } catch (Exception e) {
+            log.debug("Failed to get next actions from suggestion service");
+        }
+        
+        // Stricter thresholds for next actions
+        if (scores.overallSimilarity > 0.90) {  // Raised from 0.85
             return Arrays.asList("可以提交审核");
-        } else if (scores.overallSimilarity > 0.7) {
+        } else if (scores.overallSimilarity > 0.75) {  // Raised from 0.7
             return Arrays.asList("稍作调整后重新录制");
         } else {
             return Arrays.asList("重新录制", "参考模板示例");
@@ -889,7 +1058,9 @@ public class ComparisonAIService {
         double geometryMean = metrics.stream().mapToDouble(m -> m.geometryScore).average().orElse(0.5);
         double visualMean = metrics.stream().mapToDouble(m -> m.visualScore).average().orElse(0.5);
         double labelMean = metrics.stream().mapToDouble(m -> m.labelScore).average().orElse(0.5);
+        // Apply per-scene final multiplier of 0.9 as per requirements
         double overallSimilarity = metrics.stream().mapToDouble(m -> m.combinedScore).average().orElse(0.5);
+        overallSimilarity *= 0.9;  // Per-scene final penalty
         
         return new SimilarityScores(overallSimilarity, geometryMean, visualMean, labelMean);
     }
