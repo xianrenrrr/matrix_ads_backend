@@ -15,8 +15,8 @@ import java.util.stream.Collectors;
 @Service
 public class PaddleDetSegService implements SegmentationService {
     
-    private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper;
+    private final RestTemplate restTemplate = new RestTemplate();
+    private final ObjectMapper objectMapper = new ObjectMapper();
     
     @Value("${PADDLE_SEG_URL:https://paddledet-service.onrender.com/detect}")
     private String paddleSegUrl;
@@ -32,11 +32,6 @@ public class PaddleDetSegService implements SegmentationService {
     
     @Value("${ai.overlay.maxObjects:4}")
     private int maxObjects;
-    
-    public PaddleDetSegService() {
-        this.restTemplate = new RestTemplate();
-        this.objectMapper = new ObjectMapper();
-    }
     
     @Override
     public List<OverlayShape> detect(String keyframeUrl) {
