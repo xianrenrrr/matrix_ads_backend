@@ -18,8 +18,11 @@ public class PaddleDetSegService implements SegmentationService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     
-    @Value("${PADDLE_SEG_URL:http://localhost:5001/segment}")
+    @Value("${PADDLE_SEG_URL:https://paddledet-service.onrender.com/detect}")
     private String paddleSegUrl;
+    
+    @Value("${PADDLE_SEG_TOKEN:}")
+    private String paddleSegToken;
     
     @Value("${ai.overlay.minConf:0.60}")
     private double minConfidence;
@@ -38,12 +41,22 @@ public class PaddleDetSegService implements SegmentationService {
     @Override
     public List<OverlayShape> detect(String keyframeUrl) {
         try {
-            Map<String, String> request = new HashMap<>();
-            request.put("image_url", keyframeUrl);
+            // Build request body matching new API format
+            Map<String, Object> request = new HashMap<>();
+            request.put("imageUrl", keyframeUrl);
+            request.put("maxObjects", maxObjects);
+            request.put("minConf", minConfidence);
+            request.put("minArea", minArea);
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, String>> entity = new HttpEntity<>(request, headers);
+            
+            // Add Authorization header if token is configured
+            if (paddleSegToken != null && !paddleSegToken.trim().isEmpty()) {
+                headers.set("Authorization", "Bearer " + paddleSegToken);
+            }
+            
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
             
             ResponseEntity<String> response = restTemplate.exchange(
                 paddleSegUrl,
@@ -67,51 +80,54 @@ public class PaddleDetSegService implements SegmentationService {
         
         try {
             JsonNode root = objectMapper.readTree(responseBody);
-            JsonNode detections = root.path("detections");
             
-            if (detections.isArray()) {
-                for (JsonNode detection : detections) {
-                    double confidence = detection.path("confidence").asDouble();
-                    String label = detection.path("class").asText();
+            // Parse polygons from new API response format
+            JsonNode polygons = root.path("polygons");
+            if (polygons.isArray()) {
+                for (JsonNode polygon : polygons) {
+                    String label = polygon.path("label").asText();
+                    String labelZh = polygon.path("labelZh").asText();
+                    double confidence = polygon.path("confidence").asDouble();
                     
-                    // Check if it's a polygon
-                    JsonNode polygon = detection.path("polygon");
-                    if (polygon.isArray() && polygon.size() > 0) {
-                        List<Point> points = new ArrayList<>();
-                        for (JsonNode point : polygon) {
+                    List<Point> points = new ArrayList<>();
+                    JsonNode pointsArray = polygon.path("points");
+                    if (pointsArray.isArray()) {
+                        for (JsonNode point : pointsArray) {
                             double x = point.path("x").asDouble();
                             double y = point.path("y").asDouble();
                             points.add(new Point(x, y));
                         }
-                        
-                        double area = calculatePolygonArea(points);
-                        
-                        if (confidence >= minConfidence && area >= minArea) {
-                            shapes.add(new OverlayPolygon(
-                                label,
-                                "",  // labelZh will be filled later
-                                confidence,
-                                points
-                            ));
-                        }
-                    } else {
-                        // Fall back to box
-                        double x = detection.path("x").asDouble();
-                        double y = detection.path("y").asDouble();
-                        double w = detection.path("width").asDouble();
-                        double h = detection.path("height").asDouble();
-                        
-                        double area = w * h;
-                        
-                        if (confidence >= minConfidence && area >= minArea) {
-                            shapes.add(new OverlayBox(
-                                label,
-                                "",  // labelZh will be filled later
-                                confidence,
-                                x, y, w, h
-                            ));
-                        }
                     }
+                    
+                    if (!points.isEmpty()) {
+                        shapes.add(new OverlayPolygon(
+                            label,
+                            labelZh,
+                            confidence,
+                            points
+                        ));
+                    }
+                }
+            }
+            
+            // Parse boxes from new API response format
+            JsonNode boxes = root.path("boxes");
+            if (boxes.isArray()) {
+                for (JsonNode box : boxes) {
+                    String label = box.path("label").asText();
+                    String labelZh = box.path("labelZh").asText();
+                    double confidence = box.path("confidence").asDouble();
+                    double x = box.path("x").asDouble();
+                    double y = box.path("y").asDouble();
+                    double w = box.path("w").asDouble();
+                    double h = box.path("h").asDouble();
+                    
+                    shapes.add(new OverlayBox(
+                        label,
+                        labelZh,
+                        confidence,
+                        x, y, w, h
+                    ));
                 }
             }
         } catch (Exception e) {
