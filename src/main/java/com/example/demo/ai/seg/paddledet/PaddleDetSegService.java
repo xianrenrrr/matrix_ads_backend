@@ -18,10 +18,10 @@ public class PaddleDetSegService implements SegmentationService {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
     
-    @Value("${PADDLE_SEG_URL:https://paddledet-service.onrender.com/detect}")
+    @Value("${paddle.seg.url:https://paddledet-service.onrender.com/detect}")
     private String paddleSegUrl;
     
-    @Value("${PADDLE_SEG_TOKEN:}")
+    @Value("${paddle.seg.token:}")
     private String paddleSegToken;
     
     @Value("${ai.overlay.minConf:0.60}")
