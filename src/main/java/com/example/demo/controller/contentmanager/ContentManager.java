@@ -34,10 +34,25 @@ public class ContentManager {
     @Autowired
     private SceneSubmissionDao sceneSubmissionDao;
     
+    @Autowired
+    private com.example.demo.dao.GroupDao groupDao;
+    
     // --- Submissions grouped by status ---
     @GetMapping("/submissions")
-    public ResponseEntity<ApiResponse<Map<String, List<Map<String, Object>>>>> getAllSubmissions(@RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+    public ResponseEntity<ApiResponse<Map<String, List<Map<String, Object>>>>> getAllSubmissions(
+            @RequestParam String managerId,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        // Get manager's groups and their templates/members
+        List<com.example.demo.model.Group> groups = groupDao.findByManagerId(managerId);
+        Set<String> templateIds = new HashSet<>();
+        Set<String> memberIds = new HashSet<>();
+        
+        for (com.example.demo.model.Group group : groups) {
+            if (group.getAssignedTemplates() != null) templateIds.addAll(group.getAssignedTemplates());
+            if (group.getMemberIds() != null) memberIds.addAll(group.getMemberIds());
+        }
         com.google.cloud.firestore.CollectionReference submissionsRef = db.collection("submittedVideos");
         com.google.api.core.ApiFuture<com.google.cloud.firestore.QuerySnapshot> querySnapshot = submissionsRef.get();
         List<Map<String, Object>> pending = new ArrayList<>();
@@ -49,11 +64,15 @@ public class ContentManager {
             Map<String, Object> data = doc.getData();
             if (data == null) continue;
             
+            // Filter by template and member
+            String templateId = (String) data.get("templateId");
+            String uploadedBy = (String) data.get("uploadedBy");
+            if (!templateIds.contains(templateId) || !memberIds.contains(uploadedBy)) continue;
+            
             // Add document ID for frontend use
             data.put("id", doc.getId());
             
             // Enrich with user information
-            String uploadedBy = (String) data.get("uploadedBy");
             if (uploadedBy != null) {
                 try {
                     com.google.cloud.firestore.DocumentSnapshot userDoc = db.collection("users").document(uploadedBy).get().get();
@@ -69,7 +88,6 @@ public class ContentManager {
             }
             
             // Enrich with template information
-            String templateId = (String) data.get("templateId");
             if (templateId != null) {
                 try {
                     ManualTemplate template = templateDao.getTemplate(templateId);
