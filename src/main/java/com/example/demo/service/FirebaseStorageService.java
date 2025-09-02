@@ -3,6 +3,8 @@ package com.example.demo.service;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.firebase.FirebaseApp;
+import java.net.URL;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -90,6 +92,32 @@ public class FirebaseStorageService {
         System.out.println("[2025-05-01] Uploaded thumbnail to: " + thumbnailUrl);
         return new UploadResult(videoUrl, thumbnailUrl);
     }   
+
+    public String generateSignedUrl(String firebaseUrl) {
+        try {
+            // Extract object name from Firebase Storage URL
+            // URL format: https://storage.googleapis.com/bucket-name/path/to/object
+            if (!firebaseUrl.contains("storage.googleapis.com")) {
+                return firebaseUrl; // Return as-is if not a Firebase Storage URL
+            }
+            
+            String objectName = firebaseUrl.substring(firebaseUrl.indexOf(bucketName) + bucketName.length() + 1);
+            
+            // Generate signed URL with 15 minutes expiration
+            URL signedUrl = storage.signUrl(
+                BlobInfo.newBuilder(bucketName, objectName).build(),
+                15, TimeUnit.MINUTES
+            );
+            
+            System.out.println("Generated signed URL for: " + objectName);
+            System.out.println("Signed URL: " + signedUrl.toString());
+            
+            return signedUrl.toString();
+        } catch (Exception e) {
+            System.err.println("Error generating signed URL: " + e.getMessage());
+            return firebaseUrl; // Fallback to original URL
+        }
+    }
 
 }
 

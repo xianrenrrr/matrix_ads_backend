@@ -61,6 +61,41 @@ public class VideoController {
     @Autowired
     private TemplateGroupService templateGroupService;
 
+    @GetMapping("/{videoId}")
+    public ResponseEntity<ApiResponse<Video>> getVideo(@PathVariable String videoId) {
+        try {
+            Video video = videoDao.getVideoById(videoId);
+            if (video == null) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.ok(ApiResponse.ok("Video found", video));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(ApiResponse.fail("Failed to get video: " + e.getMessage()));
+        }
+    }
+    
+    @GetMapping("/{videoId}/stream")
+    public ResponseEntity<ApiResponse<String>> streamVideo(@PathVariable String videoId) {
+        try {
+            Video video = videoDao.getVideoById(videoId);
+            if (video == null) {
+                return ResponseEntity.status(404).body(ApiResponse.fail("Video not found"));
+            }
+            
+            // Generate signed URL with long expiration for development
+            if (firebaseStorageService != null) {
+                String signedUrl = firebaseStorageService.generateSignedUrl(video.getUrl());
+                return ResponseEntity.ok(ApiResponse.ok("Signed URL generated", signedUrl));
+            }
+            
+            // Fallback: return original URL
+            return ResponseEntity.ok(ApiResponse.ok("Direct URL returned", video.getUrl()));
+                
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(ApiResponse.fail("Failed to generate video URL"));
+        }
+    }
+
     // REMOVED: /{videoId}/approve and /{videoId}/reject endpoints
     // These bypassed the scene-by-scene review workflow
     // Use scene manual override instead: /content-manager/scenes/{sceneId}/manual-override
