@@ -18,10 +18,15 @@ import org.springframework.web.client.RestTemplate;
 import java.net.URI;
 import java.net.URISyntaxException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @RestController
 @RequestMapping("/api/images")
 @CrossOrigin(origins = {"http://localhost:4040", "https://matrix-ads-frontend.onrender.com"})
 public class ImageProxyController {
+
+    private static final Logger log = LoggerFactory.getLogger(ImageProxyController.class);
 
     @Value("${firebase.storage.bucket}")
     private String bucketName;
@@ -34,16 +39,23 @@ public class ImageProxyController {
     @GetMapping("/proxy")
     public ResponseEntity<byte[]> proxy(@RequestParam("path") String path) {
         if (path == null || path.isBlank()) {
+            log.warn("[images/proxy] Missing path parameter");
             return ResponseEntity.badRequest().build();
         }
 
         // Decode the incoming path (it often contains percent-encoded '/' and a percent-encoded query)
         String decoded = decode(path);
+        log.info("[images/proxy] request path(len={}): {}", decoded.length(), safeTrim(decoded));
 
         // First attempt: use provided path as full URL or build GCS URL (preserving query if present)
         String targetUrl = normalizeToUrl(decoded);
+        log.info("[images/proxy] first targetUrl: {}", redact(targetUrl));
 
         ResponseEntity<byte[]> resp = fetch(targetUrl);
+        log.info("[images/proxy] first fetch status: {} contentType: {} bytes: {}", 
+                resp.getStatusCodeValue(), 
+                resp.getHeaders().getContentType(),
+                (resp.getBody() == null ? 0 : resp.getBody().length));
         if (resp.getStatusCode().is2xxSuccessful()) {
             return passThrough(resp);
         }
@@ -55,13 +67,19 @@ public class ImageProxyController {
             try {
                 String objectPath = extractObjectPath(decoded);
                 String unsignedUrl = "https://storage.googleapis.com/" + bucketName + "/" + objectPath;
+                log.info("[images/proxy] refresh attempt for object: {} unsigned: {}", objectPath, unsignedUrl);
                 String freshSigned = firebaseStorageService.generateSignedUrl(unsignedUrl);
+                log.info("[images/proxy] fresh signed generated: {}", redact(freshSigned));
                 ResponseEntity<byte[]> retry = fetch(freshSigned);
+                log.info("[images/proxy] retry fetch status: {} contentType: {} bytes: {}",
+                        retry.getStatusCodeValue(), retry.getHeaders().getContentType(),
+                        (retry.getBody() == null ? 0 : retry.getBody().length));
                 if (retry.getStatusCode().is2xxSuccessful()) {
                     return passThrough(retry);
                 }
                 return ResponseEntity.status(retry.getStatusCode()).build();
             } catch (Exception e) {
+                log.error("[images/proxy] refresh failed: {}", e.toString(), e);
                 return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
             }
         }
@@ -74,8 +92,10 @@ public class ImageProxyController {
             var entity = new org.springframework.http.HttpEntity<Void>(new HttpHeaders());
             return restTemplate.exchange(new URI(url), HttpMethod.GET, entity, byte[].class);
         } catch (URISyntaxException e) {
+            log.warn("[images/proxy] bad URI: {}", url);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         } catch (Exception e) {
+            log.error("[images/proxy] fetch error for {}: {}", redact(url), e.toString());
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
         }
     }
@@ -135,5 +155,16 @@ public class ImageProxyController {
         } catch (Exception e) {
             return value;
         }
+    }
+
+    private String redact(String url) {
+        if (url == null) return null;
+        // hide signature to avoid leaking secrets in logs
+        return url.replaceAll("(X-Goog-Signature=)[A-Fa-f0-9]+", "$1<redacted>");
+    }
+
+    private String safeTrim(String s) {
+        if (s == null) return null;
+        return s.length() > 256 ? s.substring(0, 256) + "..." : s;
     }
 }
