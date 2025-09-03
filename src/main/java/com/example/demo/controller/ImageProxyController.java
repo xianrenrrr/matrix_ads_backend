@@ -60,13 +60,26 @@ public class ImageProxyController {
             return passThrough(resp);
         }
 
-        // If signed URL expired (403/400), regenerate a fresh signed URL and retry
+        // Decode to object path for fallback attempts
+        String objectPath = extractObjectPath(decoded);
+        String unsignedUrl = "https://storage.googleapis.com/" + bucketName + "/" + objectPath;
+
+        // Fallback 1: try unsigned public URL (works if bucket allows public read)
+        log.info("[images/proxy] unsigned attempt: {}", unsignedUrl);
+        ResponseEntity<byte[]> unsignedResp = fetch(unsignedUrl);
+        log.info("[images/proxy] unsigned status: {} contentType: {} bytes: {}",
+                unsignedResp.getStatusCodeValue(), unsignedResp.getHeaders().getContentType(),
+                (unsignedResp.getBody() == null ? 0 : unsignedResp.getBody().length));
+        if (unsignedResp.getStatusCode().is2xxSuccessful()) {
+            return passThrough(unsignedResp);
+        }
+
+        // Fallback 2: If expired/unauthorized and Firebase available, mint fresh signed URL
         if ((resp.getStatusCode() == HttpStatus.FORBIDDEN || resp.getStatusCode() == HttpStatus.BAD_REQUEST
-                || resp.getStatusCode() == HttpStatus.UNAUTHORIZED)
+                || resp.getStatusCode() == HttpStatus.UNAUTHORIZED
+                || unsignedResp.getStatusCode() == HttpStatus.FORBIDDEN || unsignedResp.getStatusCode() == HttpStatus.UNAUTHORIZED)
                 && firebaseStorageService != null) {
             try {
-                String objectPath = extractObjectPath(decoded);
-                String unsignedUrl = "https://storage.googleapis.com/" + bucketName + "/" + objectPath;
                 log.info("[images/proxy] refresh attempt for object: {} unsigned: {}", objectPath, unsignedUrl);
                 String freshSigned = firebaseStorageService.generateSignedUrl(unsignedUrl);
                 log.info("[images/proxy] fresh signed generated: {}", redact(freshSigned));
@@ -94,6 +107,12 @@ public class ImageProxyController {
         } catch (URISyntaxException e) {
             log.warn("[images/proxy] bad URI: {}", url);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            log.error("[images/proxy] client error for {}: {}", redact(url), e.getStatusCode());
+            return new ResponseEntity<>(e.getResponseBodyAsByteArray(), e.getResponseHeaders(), e.getStatusCode());
+        } catch (org.springframework.web.client.HttpServerErrorException e) {
+            log.error("[images/proxy] server error for {}: {}", redact(url), e.getStatusCode());
+            return new ResponseEntity<>(e.getResponseBodyAsByteArray(), e.getResponseHeaders(), e.getStatusCode());
         } catch (Exception e) {
             log.error("[images/proxy] fetch error for {}: {}", redact(url), e.toString());
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
