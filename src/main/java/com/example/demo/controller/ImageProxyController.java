@@ -37,8 +37,11 @@ public class ImageProxyController {
             return ResponseEntity.badRequest().build();
         }
 
-        // First attempt: use provided path as full URL or build GCS URL
-        String targetUrl = normalizeToUrl(path);
+        // Decode the incoming path (it often contains percent-encoded '/' and a percent-encoded query)
+        String decoded = decode(path);
+
+        // First attempt: use provided path as full URL or build GCS URL (preserving query if present)
+        String targetUrl = normalizeToUrl(decoded);
 
         ResponseEntity<byte[]> resp = fetch(targetUrl);
         if (resp.getStatusCode().is2xxSuccessful()) {
@@ -46,10 +49,11 @@ public class ImageProxyController {
         }
 
         // If signed URL expired (403/400), regenerate a fresh signed URL and retry
-        if ((resp.getStatusCode() == HttpStatus.FORBIDDEN || resp.getStatusCode() == HttpStatus.BAD_REQUEST)
+        if ((resp.getStatusCode() == HttpStatus.FORBIDDEN || resp.getStatusCode() == HttpStatus.BAD_REQUEST
+                || resp.getStatusCode() == HttpStatus.UNAUTHORIZED)
                 && firebaseStorageService != null) {
             try {
-                String objectPath = extractObjectPath(path);
+                String objectPath = extractObjectPath(decoded);
                 String unsignedUrl = "https://storage.googleapis.com/" + bucketName + "/" + objectPath;
                 String freshSigned = firebaseStorageService.generateSignedUrl(unsignedUrl);
                 ResponseEntity<byte[]> retry = fetch(freshSigned);
@@ -90,9 +94,17 @@ public class ImageProxyController {
         if (p.startsWith("http://") || p.startsWith("https://")) {
             return p;
         }
-        // If caller passed bucket-prefixed path, strip leading slashes
-        if (p.startsWith("/")) p = p.substring(1);
-        return "https://storage.googleapis.com/" + bucketName + "/" + p;
+        // Support form: "keyframes/abc.jpg?X-Goog-..." (decoded already)
+        String pathOnly = p;
+        String query = null;
+        int q = p.indexOf('?');
+        if (q >= 0) {
+            pathOnly = p.substring(0, q);
+            query = p.substring(q + 1);
+        }
+        if (pathOnly.startsWith("/")) pathOnly = pathOnly.substring(1);
+        String base = "https://storage.googleapis.com/" + bucketName + "/" + pathOnly;
+        return (query != null && !query.isBlank()) ? base + "?" + query : base;
     }
 
     private String extractObjectPath(String pathOrUrl) {
@@ -116,5 +128,12 @@ public class ImageProxyController {
         }
         return p;
     }
-}
 
+    private String decode(String value) {
+        try {
+            return java.net.URLDecoder.decode(value, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return value;
+        }
+    }
+}
