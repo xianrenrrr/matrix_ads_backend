@@ -18,6 +18,7 @@ import java.util.*;
  */
 @RestController
 @RequestMapping("/content-manager/scenes")
+@CrossOrigin(origins = {"http://localhost:4040", "https://matrix-ads-frontend.onrender.com"})
 public class SceneReviewController {
     
     @Autowired
@@ -25,9 +26,15 @@ public class SceneReviewController {
     
     @Autowired
     private TemplateDao templateDao;
-    
+
     @Autowired
     private Firestore db;
+
+    @Autowired(required = false)
+    private com.example.demo.service.FirebaseStorageService firebaseStorageService;
+
+    @Autowired
+    private com.example.demo.service.I18nService i18nService;
     
     // REMOVED getSubmittedVideo() - DUPLICATE of ContentManager.java endpoint
     // Frontend uses: /content-manager/templates/submitted-videos/{compositeVideoId}
@@ -148,5 +155,32 @@ public class SceneReviewController {
     private int getTemplateTotalScenes(String templateId) throws Exception {
         ManualTemplate template = templateDao.getTemplate(templateId);
         return (template != null && template.getScenes() != null) ? template.getScenes().size() : 0;
+    }
+
+    /**
+     * Return a playable (optionally signed) URL for a scene submission video
+     * GET /content-manager/scenes/{sceneId}/stream
+     */
+    @GetMapping("/{sceneId}/stream")
+    public ResponseEntity<com.example.demo.api.ApiResponse<String>> streamScene(@PathVariable String sceneId,
+                                                                                @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+
+        SceneSubmission submission = sceneSubmissionDao.findById(sceneId);
+        if (submission == null || submission.getVideoUrl() == null || submission.getVideoUrl().isEmpty()) {
+            throw new NoSuchElementException("Scene not found or missing videoUrl: " + sceneId);
+        }
+
+        String url = submission.getVideoUrl();
+        // If Firebase signing available, generate a fresh signed URL for reliable playback in browser
+        if (firebaseStorageService != null) {
+            try {
+                url = firebaseStorageService.generateSignedUrl(url);
+            } catch (Exception e) {
+                // fallback to original URL
+            }
+        }
+
+        return ResponseEntity.ok(com.example.demo.api.ApiResponse.ok(i18nService.getMessage("operation.success", language), url));
     }
 }
