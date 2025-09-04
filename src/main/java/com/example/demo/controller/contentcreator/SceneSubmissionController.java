@@ -46,8 +46,6 @@ public class SceneSubmissionController {
     @Autowired
     private VideoDao videoDao;
 
-    @org.springframework.beans.factory.annotation.Value("${ai.auto-approve.force:false}")
-    private boolean forceAutoApprove;
     
     @PostMapping("/upload")
     public ResponseEntity<ApiResponse<Map<String, Object>>> uploadScene(
@@ -104,9 +102,9 @@ public class SceneSubmissionController {
             sceneSubmission.setAiSuggestions(Arrays.asList("AI分析暂时不可用", "请检查视频质量"));
         }
         
-        // Auto-approval logic: global override or per-group threshold
+        // Auto-approval logic: per-group threshold only
         double finalSimilarityScore = sceneSubmission.getSimilarityScore();
-        if (forceAutoApprove || checkGroupAIThreshold(userId, finalSimilarityScore)) {
+        if (checkGroupAIThreshold(userId, finalSimilarityScore)) {
             sceneSubmission.setStatus("approved");
         }
         
