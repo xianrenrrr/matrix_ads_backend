@@ -4,6 +4,10 @@ public class User {
     private String id;
     private String username;    
     private String email;
+    // Notification preferences
+    private String notificationEmail;
+    private Boolean emailNotificationsEnabled;
+    private Boolean inAppNotificationsEnabled;
     private String phone;
     private String province;
     private String city;
@@ -41,6 +45,15 @@ public class User {
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
 
+    public String getNotificationEmail() { return notificationEmail; }
+    public void setNotificationEmail(String notificationEmail) { this.notificationEmail = notificationEmail; }
+
+    public Boolean getEmailNotificationsEnabled() { return emailNotificationsEnabled; }
+    public void setEmailNotificationsEnabled(Boolean emailNotificationsEnabled) { this.emailNotificationsEnabled = emailNotificationsEnabled; }
+
+    public Boolean getInAppNotificationsEnabled() { return inAppNotificationsEnabled; }
+    public void setInAppNotificationsEnabled(Boolean inAppNotificationsEnabled) { this.inAppNotificationsEnabled = inAppNotificationsEnabled; }
+
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
 
@@ -65,4 +78,3 @@ public class User {
     public java.util.Map<String, Notification> getNotifications() { return notifications; }
     public void setNotifications(java.util.Map<String, Notification> notifications) { this.notifications = notifications; }
 }
-

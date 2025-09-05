@@ -141,6 +141,68 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }
 
+    // Update profile (username and email)
+    @PutMapping("/profile/{userId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateProfile(@PathVariable String userId,
+                                                                          @RequestBody Map<String, Object> request,
+                                                                          @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+
+        User existing = userDao.findById(userId);
+        if (existing == null) {
+            throw new NoSuchElementException("User not found");
+        }
+
+        String newUsername = (String) request.get("username");
+        String newEmail = (String) request.get("email");
+
+        if (newUsername != null && !newUsername.trim().isEmpty()) {
+            existing.setUsername(newUsername.trim());
+        }
+        if (newEmail != null && !newEmail.trim().isEmpty()) {
+            existing.setEmail(newEmail.trim());
+        }
+
+        userDao.save(existing);
+
+        Map<String, Object> userResponse = new HashMap<>();
+        userResponse.put("id", existing.getId());
+        userResponse.put("username", existing.getUsername());
+        userResponse.put("email", existing.getEmail());
+        userResponse.put("role", existing.getRole());
+
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, userResponse));
+    }
+
+    // Change password
+    @PutMapping("/change-password")
+    public ResponseEntity<ApiResponse<Void>> changePassword(@RequestBody Map<String, String> request,
+                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        String userId = request.get("userId");
+        String currentPassword = request.get("currentPassword");
+        String newPassword = request.get("newPassword");
+
+        if (userId == null || currentPassword == null || newPassword == null) {
+            throw new IllegalArgumentException("Missing required fields");
+        }
+
+        User user = userDao.findById(userId);
+        if (user == null) {
+            throw new NoSuchElementException("User not found");
+        }
+
+        if (!currentPassword.equals(user.getPassword())) {
+            throw new IllegalArgumentException("Invalid credentials");
+        }
+
+        user.setPassword(newPassword);
+        userDao.save(user);
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message));
+    }
+
     // Validate invite token
     @GetMapping("/validate-invite/{token}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> validateInvite(@PathVariable String token,
