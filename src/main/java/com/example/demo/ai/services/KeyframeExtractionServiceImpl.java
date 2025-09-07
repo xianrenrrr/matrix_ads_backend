@@ -40,9 +40,9 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
             // Get credentials using utility (environment or file)
             GoogleCredentials credentials = firebaseCredentialsUtil.getCredentials();
             
-            // Calculate midpoint timestamp
-            Duration midpoint = startTime.plus(endTime.minus(startTime).dividedBy(2));
-            double midpointSeconds = midpoint.getSeconds() + midpoint.getNano() / 1_000_000_000.0;
+            // Use scene start timestamp
+            Duration target = startTime;
+            double targetSeconds = target.getSeconds() + target.getNano() / 1_000_000_000.0;
             
             // Extract bucket name and object name from GCS URL
             String objectName = videoUrl.replace("https://storage.googleapis.com/" + bucketName + "/", "");
@@ -66,11 +66,11 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
                 // Download video
                 videoBlob.downloadTo(tempVideoPath);
                 
-                // Build FFmpeg command
+                // Build FFmpeg command (seek to scene start)
                 ProcessBuilder processBuilder = new ProcessBuilder(
                     "ffmpeg",
                     "-i", tempVideoPath.toString(),
-                    "-ss", String.valueOf(midpointSeconds),
+                    "-ss", String.valueOf(targetSeconds),
                     "-vframes", "1",
                     "-q:v", "2",
                     "-y",
