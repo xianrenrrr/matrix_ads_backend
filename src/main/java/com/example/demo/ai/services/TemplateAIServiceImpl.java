@@ -149,7 +149,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             scene.setExampleFrame(keyframeUrl);
             
             // NEW: Use segmentation service for shape detection
-            processSceneWithShapes(scene, keyframeUrl);
+            processSceneWithShapes(scene, keyframeUrl, language);
         }
         
         // Process overlays in a clean, separated way using AI orchestrator (fallback)
@@ -162,7 +162,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         return scene;
     }
     
-    private void processSceneWithShapes(Scene scene, String keyframeUrl) {
+    private void processSceneWithShapes(Scene scene, String keyframeUrl, String language) {
         try {
             // Detect shapes using segmentation service
             List<OverlayShape> shapes = segmentationService.detect(keyframeUrl);
@@ -193,6 +193,8 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                         com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon scenePolygon = new com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon();
                         scenePolygon.setLabel(newPolygon.label());
                         scenePolygon.setLabelZh(newPolygon.labelZh());
+                        // Ensure localized label is populated for frontend legend/UI
+                        scenePolygon.setLabelLocalized(newPolygon.labelZh());
                         scenePolygon.setConfidence((float) newPolygon.confidence());
                         
                         // Convert points using the nested Point class
@@ -228,6 +230,12 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                     scene.setOverlayType("grid");
                 }
                 
+                // Build legend to drive mini‑app overlay UI if not grid
+                if (!"grid".equals(scene.getOverlayType()) && overlayLegendService != null) {
+                    var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
+                    scene.setLegend(legend);
+                }
+
                 // Set dominant object's Chinese label as scene's short label
                 if (!shapes.isEmpty()) {
                     OverlayShape dominant = shapes.get(0); // Already sorted by conf×area
@@ -239,12 +247,13 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                     scene.setSceneDescriptionZh("场景包含" + fullFrameLabel);
                 }
             } else {
-                // Fallback to grid
-                scene.setOverlayType("grid");
+                // No shapes detected here; leave overlayType unset so downstream
+                // OverlayProcessor can attempt orchestrator-based polygon detection
+                // or apply grid as a final fallback.
             }
         } catch (Exception e) {
             log.error("Failed to process scene with shapes: {}", e.getMessage());
-            scene.setOverlayType("grid");
+            // Leave overlayType unset to allow downstream fallback processing
         }
     }
     
@@ -254,6 +263,8 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         com.example.demo.model.Scene.ObjectOverlay model = new com.example.demo.model.Scene.ObjectOverlay();
         model.setLabel(box.label());
         model.setLabelZh(box.labelZh());
+        // Populate labelLocalized for UI that prefers localized labels
+        model.setLabelLocalized(box.labelZh());
         model.setConfidence((float) box.confidence());
         model.setX((float) box.x());
         model.setY((float) box.y());

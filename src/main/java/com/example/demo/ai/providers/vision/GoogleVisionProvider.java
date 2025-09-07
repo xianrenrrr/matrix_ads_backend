@@ -74,10 +74,16 @@ public class GoogleVisionProvider implements VisionProvider {
         }
         
         try (ImageAnnotatorClient visionClient = createVisionClient()) {
-            // Create image source from GCS URL
-            ImageSource imageSource = ImageSource.newBuilder()
-                .setGcsImageUri(imageUrl)
-                .build();
+            // Create image source from URL/URI
+            ImageSource.Builder srcBuilder = ImageSource.newBuilder();
+            if (imageUrl != null && (imageUrl.startsWith("http://") || imageUrl.startsWith("https://"))) {
+                // Use web URL for signed/public links
+                srcBuilder.setImageUri(imageUrl);
+            } else {
+                // Assume GCS URI (gs:// or storage.googleapis.com/bucket/path)
+                srcBuilder.setGcsImageUri(imageUrl);
+            }
+            ImageSource imageSource = srcBuilder.build();
             
             Image image = Image.newBuilder()
                 .setSource(imageSource)
