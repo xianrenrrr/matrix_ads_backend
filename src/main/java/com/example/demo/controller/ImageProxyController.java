@@ -22,7 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @RestController
-@RequestMapping("/api/images")
+@RequestMapping({"/api/images", "/images"})
 @CrossOrigin(origins = {"http://localhost:4040", "https://matrix-ads-frontend.onrender.com"})
 public class ImageProxyController {
 
