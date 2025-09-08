@@ -52,6 +52,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             String payloadJson = objectMapper.writeValueAsString(payload);
             StringBuilder sb = new StringBuilder();
             sb.append("你是视频画面理解助手。请基于整段视频信息，生成中文模板“基本信息”和每个场景指导，严格使用JSON输出，不要任何解释文字。\n")
+              .append("如果输入中存在 template.userDescription，请参考该描述进行撰写。\n")
               .append("输入（JSON）：\n")
               .append(payloadJson).append("\n")
               .append("输出格式（仅 JSON）：\n")

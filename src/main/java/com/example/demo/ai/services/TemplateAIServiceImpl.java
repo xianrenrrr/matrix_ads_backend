@@ -536,6 +536,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             tpl.put("language", language);
             tpl.put("totalDurationSeconds", template.getTotalVideoLength());
             tpl.put("videoFormat", template.getVideoFormat());
+            if (userDescription != null && !userDescription.isBlank()) {
+                tpl.put("userDescription", userDescription);
+            }
             payload.put("template", tpl);
 
             java.util.List<Map<String, Object>> sceneArr = new java.util.ArrayList<>();
