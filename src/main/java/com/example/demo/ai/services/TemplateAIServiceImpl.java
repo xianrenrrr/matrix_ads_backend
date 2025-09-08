@@ -2,10 +2,12 @@ package com.example.demo.ai.services;
 
 import com.example.demo.ai.providers.vision.FFmpegSceneDetectionService;
 import com.example.demo.ai.providers.llm.VideoSummaryService;
+import com.example.demo.ai.providers.vision.GoogleVisionProvider;
+import com.example.demo.ai.providers.vision.VisionProvider;
+import com.example.demo.ai.core.AIResponse;
 import com.example.demo.ai.seg.SegmentationService;
 import com.example.demo.ai.seg.dto.*;
 import com.example.demo.ai.label.ObjectLabelService;
-import com.example.demo.ai.util.ImageCropper;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSegment;
@@ -49,6 +51,12 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     
     @Value("${firebase.storage.bucket}")
     private String bucketName;
+
+    @Autowired(required = false)
+    private GoogleVisionProvider googleVisionProvider;
+
+    @Value("${ai.overlay.visionFallback.enabled:true}")
+    private boolean visionFallbackEnabled;
 
     @Override
     public ManualTemplate generateTemplate(Video video) {
@@ -275,9 +283,80 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                     scene.setShortLabelZh(dom);
                 }
             } else {
-                // No shapes detected; default to grid overlay
-                scene.setOverlayType("grid");
-                scene.setScreenGridOverlay(java.util.List.of(5));
+                // No shapes detected by primary segmentation – try Google Vision polygon fallback
+                boolean visionApplied = false;
+                if (visionFallbackEnabled && googleVisionProvider != null) {
+                    try {
+                        AIResponse<java.util.List<VisionProvider.ObjectPolygon>> resp = googleVisionProvider.detectObjectPolygons(keyframeUrl);
+                        if (resp != null && resp.isSuccess() && resp.getData() != null && !resp.getData().isEmpty()) {
+                            // Convert to legacy polygon DTOs used by Scene
+                            java.util.List<GoogleVisionProvider.OverlayPolygon> legacy = new java.util.ArrayList<>();
+
+                            // Prepare region boxes for one-shot Chinese labeling
+                            java.util.List<com.example.demo.ai.label.ObjectLabelService.RegionBox> regions = new java.util.ArrayList<>();
+                            int idCounter = 1;
+                            for (VisionProvider.ObjectPolygon vp : resp.getData()) {
+                                // Convert points
+                                java.util.List<GoogleVisionProvider.OverlayPolygon.Point> pts = new java.util.ArrayList<>();
+                                double minX = 1.0, minY = 1.0, maxX = 0.0, maxY = 0.0;
+                                for (VisionProvider.ObjectPolygon.Point p : vp.getPoints()) {
+                                    float x = p.getX();
+                                    float y = p.getY();
+                                    pts.add(new GoogleVisionProvider.OverlayPolygon.Point(x, y));
+                                    minX = Math.min(minX, x); minY = Math.min(minY, y);
+                                    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+                                }
+                                GoogleVisionProvider.OverlayPolygon lp = new GoogleVisionProvider.OverlayPolygon(vp.getLabel(), vp.getConfidence(), pts);
+                                legacy.add(lp);
+
+                                // Region box for labeling
+                                String id = "p" + (idCounter++);
+                                double bx = clamp01(minX), by = clamp01(minY), bw = clamp01(maxX - minX), bh = clamp01(maxY - minY);
+                                regions.add(new com.example.demo.ai.label.ObjectLabelService.RegionBox(id, bx, by, bw, bh));
+                            }
+
+                            // Batch label regions in Chinese
+                            java.util.Map<String, com.example.demo.ai.label.ObjectLabelService.LabelResult> regionLabels = java.util.Collections.emptyMap();
+                            try {
+                                // Build id map in the same order
+                                java.util.Map<Integer, String> indexId = new java.util.HashMap<>();
+                                for (int i = 0; i < regions.size(); i++) indexId.put(i, "p" + (i + 1));
+                                regionLabels = objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
+                            } catch (Exception ignore) {}
+
+                            // Apply labels to polygons
+                            for (int i = 0; i < legacy.size(); i++) {
+                                GoogleVisionProvider.OverlayPolygon lp = legacy.get(i);
+                                String sid = "p" + (i + 1);
+                                String zh = null; double conf = 0.0;
+                                if (regionLabels != null && regionLabels.containsKey(sid)) {
+                                    var lr = regionLabels.get(sid);
+                                    if (lr != null && lr.labelZh != null && !lr.labelZh.isBlank() && lr.conf >= getRegionsMinConf()) {
+                                        zh = lr.labelZh; conf = lr.conf;
+                                    }
+                                }
+                                if (zh == null) zh = "未知";
+                                lp.setLabelZh(zh);
+                                lp.setLabelLocalized(zh);
+                            }
+
+                            scene.setOverlayPolygons(legacy);
+                            scene.setOverlayType("polygons");
+                            // Legend
+                            if (overlayLegendService != null) {
+                                var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
+                                scene.setLegend(legend);
+                            }
+                            visionApplied = true;
+                        }
+                    } catch (Exception ignore) {}
+                }
+
+                if (!visionApplied) {
+                    // Fallback to grid overlay
+                    scene.setOverlayType("grid");
+                    scene.setScreenGridOverlay(java.util.List.of(5));
+                }
             }
         } catch (Exception e) {
             log.error("Failed to process scene with shapes: {}", e.getMessage());
