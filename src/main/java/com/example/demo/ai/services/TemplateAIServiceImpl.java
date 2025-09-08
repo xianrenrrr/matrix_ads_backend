@@ -423,6 +423,18 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         if (v < 0) return 0; if (v > 1) return 1; return v;
     }
 
+    private String safeEndpoint(String url) {
+        try {
+            java.net.URI u = java.net.URI.create(url);
+            String host = u.getHost();
+            String scheme = u.getScheme();
+            if (host == null || scheme == null) return "<invalid-endpoint>";
+            return scheme + "://" + host;
+        } catch (Exception e) {
+            return "<invalid-endpoint>";
+        }
+    }
+
     private boolean applyHuggingFaceYoloFallback(Scene scene, String keyframeUrl, String language) {
         if (!yoloFallbackEnabled || hfYoloEndpoint == null || hfYoloEndpoint.isBlank()) return false;
         try {
