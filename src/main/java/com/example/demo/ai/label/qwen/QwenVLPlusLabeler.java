@@ -9,8 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.*;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
-import jakarta.annotation.PostConstruct;
+// no custom request factory to avoid Spring version API mismatch
 
 import java.nio.charset.StandardCharsets;
 import java.io.InputStream;
@@ -42,24 +41,9 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
     private static final String DEFAULT_LABEL = "未知";
     
     public QwenVLPlusLabeler() {
-        int connectMs = 5000;
-        int readMs = 15000;
-        HttpComponentsClientHttpRequestFactory rf = new HttpComponentsClientHttpRequestFactory();
-        rf.setConnectTimeout(connectMs);
-        rf.setReadTimeout(readMs);
-        this.restTemplate = new RestTemplate(rf);
+        this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
         this.labelCache = new LabelCache(256);
-    }
-
-    @PostConstruct
-    private void applyTimeouts() {
-        try {
-            if (qwenTimeout > 0 && restTemplate.getRequestFactory() instanceof HttpComponentsClientHttpRequestFactory rf) {
-                rf.setConnectTimeout(Math.min(qwenTimeout / 3, 7000));
-                rf.setReadTimeout(qwenTimeout);
-            }
-        } catch (Exception ignored) {}
     }
 
     @Override
@@ -87,7 +71,6 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
               .append("      \"sceneNumber\": 1,\n")
               .append("      \"scriptLine\": \"...\",\n")
               .append("      \"presenceOfPerson\": false,\n")
-              .append("      \"deviceOrientation\": \"手机（竖屏 9:16）\",\n")
               .append("      \"movementInstructions\": \"...\",\n")
               .append("      \"backgroundInstructions\": \"...\",\n")
               .append("      \"specificCameraInstructions\": \"...\",\n")
