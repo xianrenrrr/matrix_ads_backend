@@ -459,9 +459,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 Object bgm = t.get("backgroundMusic"); if (bgm instanceof String s) template.setBackgroundMusic(trim40(s));
             }
 
-            // Device orientation: derive from video/keyframe, not AI
-            String orientationZh = deriveDeviceOrientationFromFirstScene(scenes, language);
-
             // Apply per-scene guidance
             @SuppressWarnings("unchecked")
             java.util.List<Map<String, Object>> rs = (java.util.List<Map<String, Object>>) result.get("scenes");
@@ -476,16 +473,28 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                     if (one == null) continue;
                     Object script = one.get("scriptLine"); if (script instanceof String v) s.setScriptLine(trim60(v));
                     Object person = one.get("presenceOfPerson"); if (person instanceof Boolean b) s.setPresenceOfPerson(b);
-                    // Override deviceOrientation with derived value
-                    if (orientationZh != null) s.setDeviceOrientation(orientationZh);
                     Object move = one.get("movementInstructions"); if (move instanceof String v) s.setMovementInstructions(trim60(v));
                     Object bg = one.get("backgroundInstructions"); if (bg instanceof String v) s.setBackgroundInstructions(trim60(v));
                     Object cam = one.get("specificCameraInstructions"); if (cam instanceof String v) s.setSpecificCameraInstructions(trim60(v));
                     Object audio = one.get("audioNotes"); if (audio instanceof String v) s.setAudioNotes(trim60(v));
                 }
             }
+            // Device orientation: derive from keyframe and apply to all scenes (independent of AI)
+            String orientationZh = deriveDeviceOrientationFromFirstScene(scenes, language);
+            if (orientationZh != null) {
+                for (Scene s : scenes) {
+                    s.setDeviceOrientation(orientationZh);
+                }
+            }
         } catch (Exception e) {
             log.info("AI guidance generation failed: {}. Leaving fields empty.", e.getMessage());
+            // Still derive and set device orientation even if AI guidance failed
+            String orientationZh = deriveDeviceOrientationFromFirstScene(scenes, language);
+            if (orientationZh != null) {
+                for (Scene s : scenes) {
+                    s.setDeviceOrientation(orientationZh);
+                }
+            }
         }
     }
 

@@ -194,7 +194,11 @@ public class VideoController {
             ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language, description);
             aiGeneratedTemplate.setUserId(userId);
             aiGeneratedTemplate.setVideoId(savedVideo.getId());
-            aiGeneratedTemplate.setTemplateTitle(title != null ? title : "AI Generated Template");
+            // Preserve AI-generated title; only prepend user title if provided
+            if (title != null && !title.isBlank()) {
+                String today = java.time.LocalDate.now().toString();
+                aiGeneratedTemplate.setTemplateTitle(title + " - AI 模版 " + today);
+            }
             
             // Use TemplateGroupService wrapper to create template with group assignments
             List<String> groupIds = null;

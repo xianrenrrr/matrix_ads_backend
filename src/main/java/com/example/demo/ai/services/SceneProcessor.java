@@ -37,8 +37,8 @@ public class SceneProcessor {
         scene.setPresenceOfPerson(segment.isPersonPresent());
         scene.setScriptLine(formatLabels(segment));
         
-        // Set defaults - no conditionals
-        setDefaults(scene, segment, language);
+        // Do not apply guidance presets here; guidance is AI-driven later.
+        // Device orientation will be derived from keyframe image (not preset).
         
         return scene;
     }
@@ -59,27 +59,6 @@ public class SceneProcessor {
     }
     
     private static void setDefaults(Scene scene, SceneSegment segment, String language) {
-        // Set language-specific defaults
-        scene.setSourceAspect("9:16");
-        
-        if ("zh".equals(language) || "zh-CN".equals(language)) {
-            // Chinese defaults
-            scene.setDeviceOrientation("手机（竖屏 9:16）");
-            scene.setPersonPosition(segment.isPersonPresent() ? "居中" : "无偏好");
-            scene.setPreferredGender("无偏好");
-            scene.setMovementInstructions("静止");
-            scene.setBackgroundInstructions("使用与示例画面相似的背景");
-            scene.setSpecificCameraInstructions("按照示例中显示的构图拍摄");
-            scene.setAudioNotes("说话清楚，配合场景的语调");
-        } else {
-            // English defaults
-            scene.setDeviceOrientation("Phone (Portrait 9:16)");
-            scene.setPersonPosition(segment.isPersonPresent() ? "Center" : "No Preference");
-            scene.setPreferredGender("No Preference");
-            scene.setMovementInstructions("Static");
-            scene.setBackgroundInstructions("Use similar background as shown in example frame");
-            scene.setSpecificCameraInstructions("Follow the framing shown in the example");
-            scene.setAudioNotes("Clear speech, match the tone of the scene");
-        }
+        // Intentionally left blank: no default guidance presets.
     }
 }
