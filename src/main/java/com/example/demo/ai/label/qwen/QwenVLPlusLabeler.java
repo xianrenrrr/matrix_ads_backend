@@ -11,6 +11,8 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.http.*;
 
 import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -154,7 +156,8 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             Map<String, Object> imageContent = new HashMap<>();
             imageContent.put("type", "image_url");
             Map<String, Object> imageUrl = new HashMap<>();
-            imageUrl.put("url", keyframeUrl);
+            String dataUrl = toDataUrlSafe(keyframeUrl);
+            imageUrl.put("url", dataUrl);
             imageContent.put("image_url", imageUrl);
             content.add(imageContent);
 
@@ -224,6 +227,29 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         } catch (Exception ignored) {}
         // Otherwise assume fully-qualified endpoint already points to chat
         return base;
+    }
+
+    /**
+     * Convert remote image URL to data:image/jpeg;base64,.... If download fails, return original URL.
+     */
+    private String toDataUrlSafe(String imageUrl) {
+        try {
+            java.net.URL url = new java.net.URL(imageUrl);
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(15000);
+            try (InputStream in = conn.getInputStream(); ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+                String b64 = Base64.getEncoder().encodeToString(bos.toByteArray());
+                return "data:image/jpeg;base64," + b64;
+            }
+        } catch (Exception e) {
+            // Fallback to original URL if we cannot embed
+            return imageUrl;
+        }
     }
 
     private String safeHost(String endpoint) {
