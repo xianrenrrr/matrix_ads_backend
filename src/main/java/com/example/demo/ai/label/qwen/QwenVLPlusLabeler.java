@@ -205,7 +205,17 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
     private String normalizeChatEndpoint(String base) {
         if (base == null || base.isBlank()) return "/chat/completions";
         if (base.endsWith("/chat/completions")) return base;
+        // Dashscope compatible base
         if (base.endsWith("/v1") || base.contains("compatible-mode")) return base + "/chat/completions";
+        // If user passed the non-compatible generation endpoint for Dashscope, coerce to compatible chat
+        // e.g., https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation
+        try {
+            java.net.URI u = java.net.URI.create(base);
+            if (u.getHost() != null && u.getHost().contains("dashscope.aliyuncs.com")) {
+                return "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+            }
+        } catch (Exception ignored) {}
+        // Otherwise assume fully-qualified endpoint already points to chat
         return base;
     }
 

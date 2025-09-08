@@ -426,6 +426,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     private boolean applyHuggingFaceYoloFallback(Scene scene, String keyframeUrl, String language) {
         if (!yoloFallbackEnabled || hfYoloEndpoint == null || hfYoloEndpoint.isBlank()) return false;
         try {
+            log.info("[HF-YOLO] fallback enabled; endpoint host={}", safeEndpoint(hfYoloEndpoint));
             // Download keyframe to compute image dimensions and for HF binary post
             BufferedImage img = ImageIO.read(new URL(keyframeUrl));
             if (img == null) return false;
@@ -445,6 +446,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             if (hfYoloApiKey != null && !hfYoloApiKey.isBlank()) headers.set("Authorization", "Bearer " + hfYoloApiKey);
             org.springframework.http.HttpEntity<byte[]> req = new org.springframework.http.HttpEntity<>(imageBytes, headers);
             org.springframework.http.ResponseEntity<String> resp = rt.postForEntity(hfYoloEndpoint, req, String.class);
+            log.info("[HF-YOLO] status={} bodyLen={}", resp.getStatusCodeValue(), resp.getBody() == null ? 0 : resp.getBody().length());
             if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null || resp.getBody().isBlank()) return false;
 
             // Parse HF response
@@ -453,9 +455,10 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             try {
                 dets = mapper.readValue(resp.getBody(), new com.fasterxml.jackson.core.type.TypeReference<java.util.List<java.util.Map<String, Object>>>(){});
             } catch (Exception e) {
+                log.warn("[HF-YOLO] parse error: {}", e.toString());
                 return false;
             }
-            if (dets.isEmpty()) return false;
+            if (dets.isEmpty()) { log.info("[HF-YOLO] no detections"); return false; }
 
             // Convert to normalized boxes and post-process
             java.util.List<com.example.demo.model.Scene.ObjectOverlay> boxes = new java.util.ArrayList<>();
@@ -479,7 +482,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 m.setX((float) x); m.setY((float) y); m.setWidth((float) w); m.setHeight((float) h);
                 boxes.add(m);
             }
-            if (boxes.isEmpty()) return false;
+            if (boxes.isEmpty()) { log.info("[HF-YOLO] no boxes after filter"); return false; }
 
             // Keep top-K by score*area
             boxes.sort((a,b) -> Double.compare(
@@ -520,8 +523,10 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
                 scene.setLegend(legend);
             }
+            log.info("[HF-YOLO] applied {} boxes", boxes.size());
             return true;
         } catch (Exception e) {
+            log.warn("[HF-YOLO] error: {}", e.toString());
             return false;
         }
     }
