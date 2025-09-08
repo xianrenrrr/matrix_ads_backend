@@ -2,9 +2,9 @@ package com.example.demo.ai.services;
 
 import com.example.demo.ai.providers.vision.FFmpegSceneDetectionService;
 import com.example.demo.ai.providers.llm.VideoSummaryService;
-import com.example.demo.ai.providers.vision.GoogleVisionProvider;
-import com.example.demo.ai.providers.vision.VisionProvider;
-import com.example.demo.ai.core.AIResponse;
+import java.net.URL;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import com.example.demo.ai.seg.SegmentationService;
 import com.example.demo.ai.seg.dto.*;
 import com.example.demo.ai.label.ObjectLabelService;
@@ -52,11 +52,20 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Value("${firebase.storage.bucket}")
     private String bucketName;
 
-    @Autowired(required = false)
-    private GoogleVisionProvider googleVisionProvider;
+    @Value("${AI_YOLO_ENABLED:${ai.overlay.yoloFallback.enabled:true}}")
+    private boolean yoloFallbackEnabled;
 
-    @Value("${ai.overlay.visionFallback.enabled:true}")
-    private boolean visionFallbackEnabled;
+    @Value("${AI_YOLO_ENDPOINT:}")
+    private String hfYoloEndpoint;
+
+    @Value("${AI_YOLO_API_KEY:}")
+    private String hfYoloApiKey;
+
+    @Value("${AI_YOLO_MIN_AREA:0.02}")
+    private double hfMinArea;
+
+    @Value("${AI_YOLO_MAX_OBJECTS:4}")
+    private int hfMaxObjects;
 
     @Override
     public ManualTemplate generateTemplate(Video video) {
@@ -283,77 +292,8 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                     scene.setShortLabelZh(dom);
                 }
             } else {
-                // No shapes detected by primary segmentation – try Google Vision polygon fallback
-                boolean visionApplied = false;
-                if (visionFallbackEnabled && googleVisionProvider != null) {
-                    try {
-                        AIResponse<java.util.List<VisionProvider.ObjectPolygon>> resp = googleVisionProvider.detectObjectPolygons(keyframeUrl);
-                        if (resp != null && resp.isSuccess() && resp.getData() != null && !resp.getData().isEmpty()) {
-                            // Convert to legacy polygon DTOs used by Scene
-                            java.util.List<GoogleVisionProvider.OverlayPolygon> legacy = new java.util.ArrayList<>();
-
-                            // Prepare region boxes for one-shot Chinese labeling
-                            java.util.List<com.example.demo.ai.label.ObjectLabelService.RegionBox> regions = new java.util.ArrayList<>();
-                            int idCounter = 1;
-                            for (VisionProvider.ObjectPolygon vp : resp.getData()) {
-                                // Convert points
-                                java.util.List<GoogleVisionProvider.OverlayPolygon.Point> pts = new java.util.ArrayList<>();
-                                double minX = 1.0, minY = 1.0, maxX = 0.0, maxY = 0.0;
-                                for (VisionProvider.ObjectPolygon.Point p : vp.getPoints()) {
-                                    float x = p.getX();
-                                    float y = p.getY();
-                                    pts.add(new GoogleVisionProvider.OverlayPolygon.Point(x, y));
-                                    minX = Math.min(minX, x); minY = Math.min(minY, y);
-                                    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
-                                }
-                                GoogleVisionProvider.OverlayPolygon lp = new GoogleVisionProvider.OverlayPolygon(vp.getLabel(), vp.getConfidence(), pts);
-                                legacy.add(lp);
-
-                                // Region box for labeling
-                                String id = "p" + (idCounter++);
-                                double bx = clamp01(minX), by = clamp01(minY), bw = clamp01(maxX - minX), bh = clamp01(maxY - minY);
-                                regions.add(new com.example.demo.ai.label.ObjectLabelService.RegionBox(id, bx, by, bw, bh));
-                            }
-
-                            // Batch label regions in Chinese
-                            java.util.Map<String, com.example.demo.ai.label.ObjectLabelService.LabelResult> regionLabels = java.util.Collections.emptyMap();
-                            try {
-                                // Build id map in the same order
-                                java.util.Map<Integer, String> indexId = new java.util.HashMap<>();
-                                for (int i = 0; i < regions.size(); i++) indexId.put(i, "p" + (i + 1));
-                                regionLabels = objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
-                            } catch (Exception ignore) {}
-
-                            // Apply labels to polygons
-                            for (int i = 0; i < legacy.size(); i++) {
-                                GoogleVisionProvider.OverlayPolygon lp = legacy.get(i);
-                                String sid = "p" + (i + 1);
-                                String zh = null; double conf = 0.0;
-                                if (regionLabels != null && regionLabels.containsKey(sid)) {
-                                    var lr = regionLabels.get(sid);
-                                    if (lr != null && lr.labelZh != null && !lr.labelZh.isBlank() && lr.conf >= getRegionsMinConf()) {
-                                        zh = lr.labelZh; conf = lr.conf;
-                                    }
-                                }
-                                if (zh == null) zh = "未知";
-                                lp.setLabelZh(zh);
-                                lp.setLabelLocalized(zh);
-                            }
-
-                            scene.setOverlayPolygons(legacy);
-                            scene.setOverlayType("polygons");
-                            // Legend
-                            if (overlayLegendService != null) {
-                                var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
-                                scene.setLegend(legend);
-                            }
-                            visionApplied = true;
-                        }
-                    } catch (Exception ignore) {}
-                }
-
-                if (!visionApplied) {
-                    // Fallback to grid overlay
+                boolean yoloApplied = applyHuggingFaceYoloFallback(scene, keyframeUrl, language);
+                if (!yoloApplied) {
                     scene.setOverlayType("grid");
                     scene.setScreenGridOverlay(java.util.List.of(5));
                 }
@@ -481,6 +421,109 @@ public class TemplateAIServiceImpl implements TemplateAIService {
 
     private double clamp01(double v) {
         if (v < 0) return 0; if (v > 1) return 1; return v;
+    }
+
+    private boolean applyHuggingFaceYoloFallback(Scene scene, String keyframeUrl, String language) {
+        if (!yoloFallbackEnabled || hfYoloEndpoint == null || hfYoloEndpoint.isBlank()) return false;
+        try {
+            // Download keyframe to compute image dimensions and for HF binary post
+            BufferedImage img = ImageIO.read(new URL(keyframeUrl));
+            if (img == null) return false;
+            int width = img.getWidth();
+            int height = img.getHeight();
+
+            // Encode as JPEG bytes
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            ImageIO.write(img, "jpg", baos);
+            byte[] imageBytes = baos.toByteArray();
+
+            // Call HuggingFace Inference API
+            org.springframework.web.client.RestTemplate rt = new org.springframework.web.client.RestTemplate();
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.set("Accept", "application/json");
+            headers.set("Content-Type", "image/jpeg");
+            if (hfYoloApiKey != null && !hfYoloApiKey.isBlank()) headers.set("Authorization", "Bearer " + hfYoloApiKey);
+            org.springframework.http.HttpEntity<byte[]> req = new org.springframework.http.HttpEntity<>(imageBytes, headers);
+            org.springframework.http.ResponseEntity<String> resp = rt.postForEntity(hfYoloEndpoint, req, String.class);
+            if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null || resp.getBody().isBlank()) return false;
+
+            // Parse HF response
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            java.util.List<java.util.Map<String, Object>> dets;
+            try {
+                dets = mapper.readValue(resp.getBody(), new com.fasterxml.jackson.core.type.TypeReference<java.util.List<java.util.Map<String, Object>>>(){});
+            } catch (Exception e) {
+                return false;
+            }
+            if (dets.isEmpty()) return false;
+
+            // Convert to normalized boxes and post-process
+            java.util.List<com.example.demo.model.Scene.ObjectOverlay> boxes = new java.util.ArrayList<>();
+            for (java.util.Map<String, Object> d : dets) {
+                double score = ((Number) d.getOrDefault("score", 0.0)).doubleValue();
+                @SuppressWarnings("unchecked") java.util.Map<String, Object> box = (java.util.Map<String, Object>) d.get("box");
+                if (box == null) continue;
+                double xmin = ((Number) box.getOrDefault("xmin", 0)).doubleValue();
+                double ymin = ((Number) box.getOrDefault("ymin", 0)).doubleValue();
+                double xmax = ((Number) box.getOrDefault("xmax", 0)).doubleValue();
+                double ymax = ((Number) box.getOrDefault("ymax", 0)).doubleValue();
+                double x = xmin / width;
+                double y = ymin / height;
+                double w = Math.max(0, xmax - xmin) / width;
+                double h = Math.max(0, ymax - ymin) / height;
+                double area = w * h;
+                if (area < hfMinArea) continue;
+                com.example.demo.model.Scene.ObjectOverlay m = new com.example.demo.model.Scene.ObjectOverlay();
+                m.setLabel((String) d.getOrDefault("label", ""));
+                m.setConfidence((float) score);
+                m.setX((float) x); m.setY((float) y); m.setWidth((float) w); m.setHeight((float) h);
+                boxes.add(m);
+            }
+            if (boxes.isEmpty()) return false;
+
+            // Keep top-K by score*area
+            boxes.sort((a,b) -> Double.compare(
+                ((double) b.getConfidence()) * b.getWidth() * b.getHeight(),
+                ((double) a.getConfidence()) * a.getWidth() * a.getHeight()));
+            if (boxes.size() > hfMaxObjects) boxes = boxes.subList(0, hfMaxObjects);
+
+            // Build regions p1..pn and label via Qwen
+            java.util.List<com.example.demo.ai.label.ObjectLabelService.RegionBox> regions = new java.util.ArrayList<>();
+            for (int i = 0; i < boxes.size(); i++) {
+                var b = boxes.get(i);
+                regions.add(new com.example.demo.ai.label.ObjectLabelService.RegionBox("p" + (i+1), b.getX(), b.getY(), b.getWidth(), b.getHeight()));
+            }
+            java.util.Map<String, com.example.demo.ai.label.ObjectLabelService.LabelResult> regionLabels = java.util.Collections.emptyMap();
+            try {
+                regionLabels = objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
+            } catch (Exception ignore) {}
+
+            // Apply labels
+            for (int i = 0; i < boxes.size(); i++) {
+                var b = boxes.get(i);
+                String sid = "p" + (i+1);
+                String zh = null; double conf = 0.0;
+                if (regionLabels != null && regionLabels.containsKey(sid)) {
+                    var lr = regionLabels.get(sid);
+                    if (lr != null && lr.labelZh != null && !lr.labelZh.isBlank() && lr.conf >= getRegionsMinConf()) {
+                        zh = lr.labelZh; conf = lr.conf;
+                    }
+                }
+                if (zh == null) zh = "未知";
+                b.setLabelZh(zh);
+                b.setLabelLocalized(zh);
+            }
+
+            scene.setOverlayObjects(boxes);
+            scene.setOverlayType("objects");
+            if (overlayLegendService != null) {
+                var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
+                scene.setLegend(legend);
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
     
     private void generateAIMetadata(ManualTemplate template, Video video, List<Scene> scenes, 

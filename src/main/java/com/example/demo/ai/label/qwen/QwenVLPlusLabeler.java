@@ -22,13 +22,13 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
     private final ObjectMapper objectMapper;
     private final LabelCache labelCache;
     
-    @Value("${qwen.api.base:}")
+    @Value("${AI_QWEN_ENDPOINT:${qwen.api.base:}}")
     private String qwenApiBase;
     
-    @Value("${qwen.api.key:}")
+    @Value("${AI_QWEN_API_KEY:${qwen.api.key:}}")
     private String qwenApiKey;
     
-    @Value("${qwen.model:qwen-vl-plus}")
+    @Value("${AI_QWEN_MODEL:${qwen.model:qwen-vl-plus}}")
     private String qwenModel;
     
     @Value("${qwen.timeout.ms:15000}")
@@ -97,7 +97,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
 
             ResponseEntity<String> response = restTemplate.exchange(
-                qwenApiBase + "/chat/completions",
+                normalizeChatEndpoint(qwenApiBase),
                 HttpMethod.POST,
                 entity,
                 String.class
@@ -164,7 +164,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
 
             ResponseEntity<String> response = restTemplate.exchange(
-                qwenApiBase + "/chat/completions",
+                normalizeChatEndpoint(qwenApiBase),
                 HttpMethod.POST,
                 entity,
                 String.class
@@ -200,6 +200,12 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             return choices.get(0).path("message").path("content").asText("").trim();
         }
         return null;
+    }
+    private String normalizeChatEndpoint(String base) {
+        if (base == null || base.isBlank()) return "/chat/completions";
+        if (base.endsWith("/chat/completions")) return base;
+        if (base.endsWith("/v1") || base.contains("compatible-mode")) return base + "/chat/completions";
+        return base;
     }
 
     private String sanitize(String s) {
@@ -275,7 +281,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
             
             ResponseEntity<String> response = restTemplate.exchange(
-                qwenApiBase + "/chat/completions",
+                normalizeChatEndpoint(qwenApiBase),
                 HttpMethod.POST,
                 entity,
                 String.class
