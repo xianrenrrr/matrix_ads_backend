@@ -97,15 +97,18 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             headers.set("Authorization", "Bearer " + qwenApiKey);
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
 
+            String endpointG = normalizeChatEndpoint(qwenApiBase);
             ResponseEntity<String> response = restTemplate.exchange(
-                normalizeChatEndpoint(qwenApiBase),
+                endpointG,
                 HttpMethod.POST,
                 entity,
                 String.class
             );
+            String bodyG = response.getBody();
+            System.out.println("[QWEN] guidance host=" + safeHost(endpointG) + " model=" + qwenModel +
+                " status=" + response.getStatusCodeValue() + " bodyLen=" + (bodyG == null ? 0 : bodyG.length()));
             if (!response.getStatusCode().is2xxSuccessful()) return null;
-
-            String contentStr = extractContent(response.getBody());
+            String contentStr = extractContent(bodyG);
             if (contentStr == null || contentStr.isBlank()) return null;
 
             // Parse JSON object
@@ -164,17 +167,21 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             headers.set("Authorization", "Bearer " + qwenApiKey);
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
 
+            String endpointR = normalizeChatEndpoint(qwenApiBase);
             ResponseEntity<String> response = restTemplate.exchange(
-                normalizeChatEndpoint(qwenApiBase),
+                endpointR,
                 HttpMethod.POST,
                 entity,
                 String.class
             );
+            String bodyR = response.getBody();
+            System.out.println("[QWEN] regions host=" + safeHost(endpointR) + " model=" + qwenModel +
+                " status=" + response.getStatusCodeValue() + " bodyLen=" + (bodyR == null ? 0 : bodyR.length()));
 
             if (!response.getStatusCode().is2xxSuccessful()) {
                 return out;
             }
-            String contentStr = extractContent(response.getBody());
+            String contentStr = extractContent(bodyR);
             if (contentStr == null || contentStr.isBlank()) return out;
 
             // Parse JSON array
@@ -217,6 +224,15 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         } catch (Exception ignored) {}
         // Otherwise assume fully-qualified endpoint already points to chat
         return base;
+    }
+
+    private String safeHost(String endpoint) {
+        try {
+            java.net.URI u = java.net.URI.create(endpoint);
+            return u.getScheme() + "://" + u.getHost();
+        } catch (Exception e) {
+            return "<invalid-endpoint>";
+        }
     }
 
     private String sanitize(String s) {
