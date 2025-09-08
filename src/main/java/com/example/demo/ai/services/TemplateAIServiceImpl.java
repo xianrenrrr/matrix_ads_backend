@@ -136,13 +136,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             
             // AI-driven template metadata & per-scene guidance (no presets if AI fails)
             log.info("=== AI TEMPLATE GUIDANCE GENERATION ===");
-            generateAIMetadata(template, video, scenes, allSceneLabels, language, userDescription);
-
-            // Step 4: Generate summary (optional) - simplified without block descriptions
-            log.info("Step 4: Generating video summary with user description...");
-            String summary = videoSummaryService.generateSummary(video, allSceneLabels, new HashMap<>(), language, userDescription);
-            log.info("Generated summary: {}", summary);
-            
+            generateAIMetadata(template, video, scenes, allSceneLabels, language, userDescription);            
             log.info("AI template generation completed for video ID: {} with {} scenes", 
                              video.getId(), scenes.size());
             return template;

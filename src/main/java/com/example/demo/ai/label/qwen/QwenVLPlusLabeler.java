@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.*;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import jakarta.annotation.PostConstruct;
 
 import java.nio.charset.StandardCharsets;
 import java.io.InputStream;
@@ -40,9 +42,24 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
     private static final String DEFAULT_LABEL = "未知";
     
     public QwenVLPlusLabeler() {
-        this.restTemplate = new RestTemplate();
+        int connectMs = 5000;
+        int readMs = 15000;
+        HttpComponentsClientHttpRequestFactory rf = new HttpComponentsClientHttpRequestFactory();
+        rf.setConnectTimeout(connectMs);
+        rf.setReadTimeout(readMs);
+        this.restTemplate = new RestTemplate(rf);
         this.objectMapper = new ObjectMapper();
         this.labelCache = new LabelCache(256);
+    }
+
+    @PostConstruct
+    private void applyTimeouts() {
+        try {
+            if (qwenTimeout > 0 && restTemplate.getRequestFactory() instanceof HttpComponentsClientHttpRequestFactory rf) {
+                rf.setConnectTimeout(Math.min(qwenTimeout / 3, 7000));
+                rf.setReadTimeout(qwenTimeout);
+            }
+        } catch (Exception ignored) {}
     }
 
     @Override
@@ -109,6 +126,10 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             String bodyG = response.getBody();
             System.out.println("[QWEN] guidance host=" + safeHost(endpointG) + " model=" + qwenModel +
                 " status=" + response.getStatusCodeValue() + " bodyLen=" + (bodyG == null ? 0 : bodyG.length()));
+            if (bodyG != null) {
+                String head = bodyG.substring(0, Math.min(200, bodyG.length()));
+                System.out.println("[QWEN] guidance body head=" + head.replaceAll("\n", " "));
+            }
             if (!response.getStatusCode().is2xxSuccessful()) return null;
             String contentStr = extractContent(bodyG);
             if (contentStr == null || contentStr.isBlank()) return null;
@@ -180,6 +201,10 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             String bodyR = response.getBody();
             System.out.println("[QWEN] regions host=" + safeHost(endpointR) + " model=" + qwenModel +
                 " status=" + response.getStatusCodeValue() + " bodyLen=" + (bodyR == null ? 0 : bodyR.length()));
+            if (bodyR != null) {
+                String head = bodyR.substring(0, Math.min(200, bodyR.length()));
+                System.out.println("[QWEN] regions body head=" + head.replaceAll("\n", " "));
+            }
 
             if (!response.getStatusCode().is2xxSuccessful()) {
                 return out;
@@ -205,49 +230,66 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
     }
 
     private String extractContent(String responseBody) throws Exception {
+        if (responseBody == null || responseBody.isBlank()) return null;
         JsonNode root = objectMapper.readTree(responseBody);
         JsonNode choices = root.path("choices");
         if (choices.isArray() && choices.size() > 0) {
             JsonNode message = choices.get(0).path("message");
-            JsonNode content = message.path("content");
-            // Compatible-mode can return an array of content parts
-            if (content.isArray()) {
+            JsonNode contentNode = message.path("content");
+
+            // A) Array of parts
+            if (contentNode.isArray()) {
                 StringBuilder sb = new StringBuilder();
-                for (JsonNode part : content) {
+                for (JsonNode part : contentNode) {
                     String type = part.path("type").asText("");
-                    if ("text".equals(type)) {
+                    if ("text".equals(type) || "output_text".equals(type)) {
                         String t = part.path("text").asText("");
                         if (t != null) sb.append(t);
                     }
                 }
-                String s = sb.toString().trim();
+                String s = stripCodeFences(sb.toString().trim());
                 if (!s.isEmpty()) return s;
             }
-            // Or a plain string
-            if (content.isTextual()) {
-                return content.asText("").trim();
+
+            // B) Plain string
+            if (contentNode.isTextual()) {
+                String s = stripCodeFences(contentNode.asText("").trim());
+                if (!s.isEmpty()) return s;
             }
+
+            // C) message.output_text
+            String mo = stripCodeFences(message.path("output_text").asText("").trim());
+            if (!mo.isEmpty()) return mo;
         }
-        // Some providers put text under output_text
-        String alt = root.path("output_text").asText("").trim();
+        // D) Top-level fallbacks
+        String alt = stripCodeFences(root.path("output_text").asText("").trim());
         if (!alt.isEmpty()) return alt;
-        return null;
+        String plain = stripCodeFences(choices.path(0).path("text").asText("").trim());
+        return plain.isEmpty() ? null : plain;
+    }
+
+    private String stripCodeFences(String s) {
+        if (s == null) return null;
+        s = s.replaceAll("(?s)```json\\s*(.*?)\\s*```", "$1");
+        s = s.replaceAll("(?s)```\\s*(.*?)\\s*```", "$1");
+        return s.trim();
     }
     private String normalizeChatEndpoint(String base) {
-        if (base == null || base.isBlank()) return "/chat/completions";
-        if (base.endsWith("/chat/completions")) return base;
-        // Dashscope compatible base
-        if (base.endsWith("/v1") || base.contains("compatible-mode")) return base + "/chat/completions";
-        // If user passed the non-compatible generation endpoint for Dashscope, coerce to compatible chat
-        // e.g., https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation
-        try {
-            java.net.URI u = java.net.URI.create(base);
-            if (u.getHost() != null && u.getHost().contains("dashscope.aliyuncs.com")) {
-                return "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
-            }
-        } catch (Exception ignored) {}
-        // Otherwise assume fully-qualified endpoint already points to chat
-        return base;
+        String def = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+        if (base == null || base.isBlank()) return def;
+
+        if (base.startsWith("http")) {
+            if (base.endsWith("/chat/completions")) return base;
+            if (base.contains("/compatible-mode/") && base.endsWith("/v1")) return base + "/chat/completions";
+            try {
+                var u = java.net.URI.create(base);
+                if (u.getHost() != null && u.getHost().contains("dashscope.aliyuncs.com")) {
+                    return def;
+                }
+            } catch (Exception ignored) {}
+            return base; // assume already a full chat URL
+        }
+        return def;
     }
 
     /**
