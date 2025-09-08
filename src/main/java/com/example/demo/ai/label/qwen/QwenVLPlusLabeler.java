@@ -208,8 +208,29 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         JsonNode root = objectMapper.readTree(responseBody);
         JsonNode choices = root.path("choices");
         if (choices.isArray() && choices.size() > 0) {
-            return choices.get(0).path("message").path("content").asText("").trim();
+            JsonNode message = choices.get(0).path("message");
+            JsonNode content = message.path("content");
+            // Compatible-mode can return an array of content parts
+            if (content.isArray()) {
+                StringBuilder sb = new StringBuilder();
+                for (JsonNode part : content) {
+                    String type = part.path("type").asText("");
+                    if ("text".equals(type)) {
+                        String t = part.path("text").asText("");
+                        if (t != null) sb.append(t);
+                    }
+                }
+                String s = sb.toString().trim();
+                if (!s.isEmpty()) return s;
+            }
+            // Or a plain string
+            if (content.isTextual()) {
+                return content.asText("").trim();
+            }
         }
+        // Some providers put text under output_text
+        String alt = root.path("output_text").asText("").trim();
+        if (!alt.isEmpty()) return alt;
         return null;
     }
     private String normalizeChatEndpoint(String base) {

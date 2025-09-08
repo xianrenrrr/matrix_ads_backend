@@ -15,7 +15,7 @@ public class VideoSummaryServiceImpl implements VideoSummaryService {
     
     @Override
     public String generateSummary(Video video, List<String> sceneLabels, Map<String, String> allBlockDescriptions, String language, String userDescription) {
-        System.out.printf("Generating video summary for: %s using AI orchestrator with user description: %s%n", 
+        System.out.printf("Generating fallback video summary for: %s (description: %s)\n", 
                          video.getTitle(), userDescription != null ? "provided" : "none");
         
         // Dev: return fallback summary without orchestrator
