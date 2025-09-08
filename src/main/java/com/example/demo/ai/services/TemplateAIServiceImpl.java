@@ -33,8 +33,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Autowired
     private ObjectLabelService objectLabelService;
     
-    @Autowired
-    private AIOrchestrator aiOrchestrator;
     
     @Autowired
     private OverlayLegendService overlayLegendService;
@@ -108,19 +106,18 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             ManualTemplate template = new ManualTemplate();
             template.setVideoId(video.getId());
             template.setUserId(video.getUserId());
-            template.setTemplateTitle(video.getTitle() + " - AI Generated Template");
+            String today = java.time.LocalDate.now().toString();
+            template.setTemplateTitle((video.getTitle() != null && !video.getTitle().isBlank())
+                ? (video.getTitle() + " - AI 模版 " + today)
+                : ("AI 模版 " + today));
             template.setScenes(scenes);
             
             // Set some default values (note: these are hardcoded and not AI-generated)
             template.setVideoFormat("1080p 16:9");
             template.setTotalVideoLength(calculateTotalDuration(sceneSegments));
             
-            // Generate AI-powered template metadata in the target language
-            log.info("=== AI TEMPLATE METADATA GENERATION ===");
-            log.info("Generating template metadata using AI in language: {} with user description: {}", 
-                     language, userDescription != null ? "provided" : "none");
-            
-            // Use AI to generate metadata based on video analysis and user description
+            // AI-driven template metadata & per-scene guidance (no presets if AI fails)
+            log.info("=== AI TEMPLATE GUIDANCE GENERATION ===");
             generateAIMetadata(template, video, scenes, allSceneLabels, language, userDescription);
 
             // Step 4: Generate summary (optional) - simplified without block descriptions
@@ -152,11 +149,10 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             processSceneWithShapes(scene, keyframeUrl, language);
         }
         
-        // Process overlays in a clean, separated way using AI orchestrator (fallback)
+        // Removed AI orchestrator fallback; if no overlays after segmentation, we'll default to grid.
         if (scene.getOverlayType() == null) {
-            OverlayProcessor overlayProcessor = new OverlayProcessor(
-                aiOrchestrator, overlayLegendService);
-            overlayProcessor.processOverlays(scene, segment, keyframeUrl);
+            scene.setOverlayType("grid");
+            scene.setScreenGridOverlay(java.util.List.of(5));
         }
         
         return scene;
@@ -172,10 +168,43 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 boolean hasPolygons = false;
                 boolean hasBoxes = false;
                 
+                // Build region list (one-shot labeling)
+                java.util.Map<OverlayShape, String> idMap = new java.util.HashMap<>();
+                java.util.List<com.example.demo.ai.label.ObjectLabelService.RegionBox> regions = new java.util.ArrayList<>();
+                int idCounter = 1;
+                for (OverlayShape s : shapes) {
+                    String id = "p" + (idCounter++);
+                    idMap.put(s, id);
+                    double x, y, w, h;
+                    if (s instanceof OverlayBox b) {
+                        x = clamp01(b.x()); y = clamp01(b.y()); w = clamp01(b.w()); h = clamp01(b.h());
+                    } else if (s instanceof OverlayPolygon p) {
+                        double minX = 1.0, minY = 1.0, maxX = 0.0, maxY = 0.0;
+                        for (com.example.demo.ai.seg.dto.Point pt : p.points()) {
+                            minX = Math.min(minX, pt.x()); minY = Math.min(minY, pt.y());
+                            maxX = Math.max(maxX, pt.x()); maxY = Math.max(maxY, pt.y());
+                        }
+                        x = clamp01(minX); y = clamp01(minY); w = clamp01(maxX - minX); h = clamp01(maxY - minY);
+                    } else { continue; }
+                    regions.add(new com.example.demo.ai.label.ObjectLabelService.RegionBox(id, x, y, w, h));
+                }
+
+                java.util.Map<String, com.example.demo.ai.label.ObjectLabelService.LabelResult> regionLabels = java.util.Collections.emptyMap();
+                try {
+                    regionLabels = objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
+                } catch (Exception ignore) {}
+
                 for (OverlayShape shape : shapes) {
-                    // Crop and get Chinese label
-                    byte[] cropBytes = ImageCropper.crop(keyframeUrl, shape);
-                    String labelZh = objectLabelService.labelZh(cropBytes);
+                    String labelZh = null;
+                    String sid = idMap.get(shape);
+                    if (sid != null && regionLabels.containsKey(sid)) {
+                        var lr = regionLabels.get(sid);
+                        // Threshold controlled by property, default 0.8
+                        if (lr != null && lr.labelZh != null && !lr.labelZh.isBlank() && lr.conf >= getRegionsMinConf()) {
+                            labelZh = lr.labelZh;
+                        }
+                    }
+                    if (labelZh == null) labelZh = "未知";
                     
                     // Create new shape with Chinese label
                     if (shape instanceof OverlayPolygon polygon) {
@@ -236,20 +265,18 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                     scene.setLegend(legend);
                 }
 
-                // Set dominant object's Chinese label as scene's short label
+                // Set dominant object's Chinese label as scene's short label (no recrop)
                 if (!shapes.isEmpty()) {
-                    OverlayShape dominant = shapes.get(0); // Already sorted by conf×area
-                    scene.setShortLabelZh(dominant.labelZh());
-                    
-                    // Generate scene description in Chinese
-                    String fullFrameLabel = objectLabelService.labelZh(ImageCropper.crop(keyframeUrl, 
-                        new OverlayBox("", "", 1.0, 0, 0, 1, 1)));
-                    scene.setSceneDescriptionZh("场景包含" + fullFrameLabel);
+                    OverlayShape dominant = shapes.get(0);
+                    String dom = null;
+                    if (dominant instanceof OverlayBox db) dom = db.labelZh();
+                    else if (dominant instanceof OverlayPolygon dp) dom = dp.labelZh();
+                    scene.setShortLabelZh(dom);
                 }
             } else {
-                // No shapes detected here; leave overlayType unset so downstream
-                // OverlayProcessor can attempt orchestrator-based polygon detection
-                // or apply grid as a final fallback.
+                // No shapes detected; default to grid overlay
+                scene.setOverlayType("grid");
+                scene.setScreenGridOverlay(java.util.List.of(5));
             }
         } catch (Exception e) {
             log.error("Failed to process scene with shapes: {}", e.getMessage());
@@ -357,126 +384,127 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         template.setScenes(List.of(defaultScene));
         return template;
     }
+
+    // Configurable threshold (defaults to 0.8 if property is absent)
+    private double getRegionsMinConf() {
+        try {
+            String val = System.getProperty("ai.labeling.regions.minConf");
+            if (val == null) {
+                val = System.getenv("AI_LABELING_REGIONS_MINCONF");
+            }
+            if (val != null) {
+                return Double.parseDouble(val);
+            }
+        } catch (Exception ignored) {}
+        return 0.8;
+    }
+
+    private double clamp01(double v) {
+        if (v < 0) return 0; if (v > 1) return 1; return v;
+    }
     
     private void generateAIMetadata(ManualTemplate template, Video video, List<Scene> scenes, 
                                    List<String> sceneLabels, String language, String userDescription) {
         try {
-            // Try to use AI for metadata generation
-            if (aiOrchestrator != null) {
-                var response = aiOrchestrator.<com.example.demo.ai.providers.llm.LLMProvider.TemplateMetadata>executeWithFallback(
-                    com.example.demo.ai.core.AIModelType.LLM,
-                    "generateTemplateMetadata",
-                    provider -> {
-                        var llmProvider = (com.example.demo.ai.providers.llm.LLMProvider) provider;
-                        
-                        // Create a template metadata request with user description
-                        var request = new com.example.demo.ai.providers.llm.LLMProvider.TemplateMetadataRequest();
-                        request.setVideoTitle(video.getTitle());
-                        request.setUserDescription(userDescription); // Include user's custom description
-                        request.setSceneCount(scenes.size());
-                        request.setTotalDuration(template.getTotalVideoLength());
-                        request.setSceneLabels(sceneLabels);
-                        request.setLanguage(language);
-                        
-                        // NEW: Add individual scene timing information
-                        List<com.example.demo.ai.providers.llm.LLMProvider.SceneTimingInfo> sceneTimings = new ArrayList<>();
-                        for (Scene scene : scenes) {
-                            var timingInfo = new com.example.demo.ai.providers.llm.LLMProvider.SceneTimingInfo();
-                            timingInfo.setSceneNumber(scene.getSceneNumber());
-                            timingInfo.setStartSeconds(scene.getStartTime() != null ? (int) scene.getStartTime().getSeconds() : 0);
-                            timingInfo.setEndSeconds(scene.getEndTime() != null ? (int) scene.getEndTime().getSeconds() : (int) scene.getSceneDurationInSeconds());
-                            timingInfo.setDurationSeconds((int) scene.getSceneDurationInSeconds());
-                            
-                            // Add detected objects for this specific scene
-                            List<String> sceneObjects = new ArrayList<>();
-                            if (scene.getOverlayObjects() != null) {
-                                scene.getOverlayObjects().forEach(obj -> {
-                                    if (obj.getLabel() != null) sceneObjects.add(obj.getLabel());
-                                });
-                            }
-                            if (scene.getOverlayPolygons() != null) {
-                                scene.getOverlayPolygons().forEach(poly -> {
-                                    if (poly.getLabel() != null) sceneObjects.add(poly.getLabel());
-                                });
-                            }
-                            timingInfo.setDetectedObjects(sceneObjects);
-                            
-                            sceneTimings.add(timingInfo);
-                        }
-                        request.setSceneTimings(sceneTimings);
-                        
-                        return llmProvider.generateTemplateMetadata(request);
+            // Build compact payload for one-shot Chinese guidance
+            Map<String, Object> payload = new java.util.HashMap<>();
+            Map<String, Object> tpl = new java.util.HashMap<>();
+            tpl.put("videoTitle", video.getTitle());
+            tpl.put("language", language);
+            tpl.put("totalDurationSeconds", template.getTotalVideoLength());
+            tpl.put("videoFormat", template.getVideoFormat());
+            payload.put("template", tpl);
+
+            java.util.List<Map<String, Object>> sceneArr = new java.util.ArrayList<>();
+            for (Scene s : scenes) {
+                Map<String, Object> so = new java.util.HashMap<>();
+                so.put("sceneNumber", s.getSceneNumber());
+                so.put("durationSeconds", s.getSceneDurationInSeconds());
+                so.put("keyframeUrl", s.getKeyframeUrl());
+                // Collect top-K detected object labels (Chinese) for context
+                java.util.List<String> labels = new java.util.ArrayList<>();
+                if (s.getOverlayPolygons() != null) {
+                    for (var p : s.getOverlayPolygons()) {
+                        if (p.getLabelLocalized() != null && !p.getLabelLocalized().isEmpty()) labels.add(p.getLabelLocalized());
+                        else if (p.getLabelZh() != null && !p.getLabelZh().isEmpty()) labels.add(p.getLabelZh());
                     }
-                );
-                
-                if (response.isSuccess() && response.getData() != null) {
-                    var metadata = response.getData();
-                    // Apply AI-generated metadata to template
-                    applyAIGeneratedTemplateMetadata(template, metadata, scenes, language);
-                    log.info("Applied AI-generated template metadata using {}", response.getModelUsed());
-                    return;
+                }
+                if (s.getOverlayObjects() != null) {
+                    for (var o : s.getOverlayObjects()) {
+                        if (o.getLabelLocalized() != null && !o.getLabelLocalized().isEmpty()) labels.add(o.getLabelLocalized());
+                        else if (o.getLabelZh() != null && !o.getLabelZh().isEmpty()) labels.add(o.getLabelZh());
+                    }
+                }
+                if (labels.size() > 5) labels = labels.subList(0, 5);
+                so.put("detectedObjects", labels);
+                sceneArr.add(so);
+            }
+            payload.put("scenes", sceneArr);
+
+            // Ask Qwen (single call) via ObjectLabelService extension
+            Map<String, Object> result = objectLabelService.generateTemplateGuidance(payload);
+            if (result == null || result.isEmpty()) {
+                log.info("AI guidance unavailable; leaving metadata/guidance empty (no presets)");
+                return;
+            }
+
+            // Apply template metadata
+            @SuppressWarnings("unchecked")
+            Map<String, Object> t = (Map<String, Object>) result.get("template");
+            if (t != null) {
+                Object vp = t.get("videoPurpose"); if (vp instanceof String s) template.setVideoPurpose(trim40(s));
+                Object tone = t.get("tone"); if (tone instanceof String s) template.setTone(trim40(s));
+                Object light = t.get("lightingRequirements"); if (light instanceof String s) template.setLightingRequirements(trim60(s));
+                Object bgm = t.get("backgroundMusic"); if (bgm instanceof String s) template.setBackgroundMusic(trim40(s));
+            }
+
+            // Device orientation: derive from video/keyframe, not AI
+            String orientationZh = deriveDeviceOrientationFromFirstScene(scenes, language);
+
+            // Apply per-scene guidance
+            @SuppressWarnings("unchecked")
+            java.util.List<Map<String, Object>> rs = (java.util.List<Map<String, Object>>) result.get("scenes");
+            if (rs != null) {
+                java.util.Map<Integer, Map<String, Object>> byNum = new java.util.HashMap<>();
+                for (Map<String, Object> one : rs) {
+                    Object n = one.get("sceneNumber");
+                    if (n instanceof Number num) byNum.put(num.intValue(), one);
+                }
+                for (Scene s : scenes) {
+                    Map<String, Object> one = byNum.get(s.getSceneNumber());
+                    if (one == null) continue;
+                    Object script = one.get("scriptLine"); if (script instanceof String v) s.setScriptLine(trim60(v));
+                    Object person = one.get("presenceOfPerson"); if (person instanceof Boolean b) s.setPresenceOfPerson(b);
+                    // Override deviceOrientation with derived value
+                    if (orientationZh != null) s.setDeviceOrientation(orientationZh);
+                    Object move = one.get("movementInstructions"); if (move instanceof String v) s.setMovementInstructions(trim60(v));
+                    Object bg = one.get("backgroundInstructions"); if (bg instanceof String v) s.setBackgroundInstructions(trim60(v));
+                    Object cam = one.get("specificCameraInstructions"); if (cam instanceof String v) s.setSpecificCameraInstructions(trim60(v));
+                    Object audio = one.get("audioNotes"); if (audio instanceof String v) s.setAudioNotes(trim60(v));
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to generate AI metadata: {}", e.getMessage());
+            log.info("AI guidance generation failed: {}. Leaving fields empty.", e.getMessage());
         }
-        
-        // Fallback to defaults
-        applyDefaultMetadata(template, language);
     }
-    
-    private void applyAIGeneratedTemplateMetadata(ManualTemplate template, 
-                                                 com.example.demo.ai.providers.llm.LLMProvider.TemplateMetadata metadata,
-                                                 List<Scene> scenes, String language) {
-        // Apply basic template metadata
-        if (metadata.getVideoPurpose() != null) {
-            template.setVideoPurpose(metadata.getVideoPurpose());
-        }
-        if (metadata.getTone() != null) {
-            template.setTone(metadata.getTone());
-        }
-        if (metadata.getVideoFormat() != null) {
-            template.setVideoFormat(metadata.getVideoFormat());
-        }
-        if (metadata.getLightingRequirements() != null) {
-            template.setLightingRequirements(metadata.getLightingRequirements());
-        }
-        if (metadata.getBackgroundMusic() != null) {
-            template.setBackgroundMusic(metadata.getBackgroundMusic());
-        }
-        
-        // Apply scene-specific metadata if available
-        if (metadata.getSceneMetadataList() != null && !metadata.getSceneMetadataList().isEmpty()) {
-            for (int i = 0; i < scenes.size() && i < metadata.getSceneMetadataList().size(); i++) {
-                Scene scene = scenes.get(i);
-                com.example.demo.ai.providers.llm.LLMProvider.SceneMetadata sceneMetadata = metadata.getSceneMetadataList().get(i);
-                
-                // Update scene with AI-generated metadata
-                if (sceneMetadata.getSceneTitle() != null) {
-                    scene.setSceneTitle(sceneMetadata.getSceneTitle());
-                }
-                if (sceneMetadata.getScriptLine() != null) {
-                    scene.setScriptLine(sceneMetadata.getScriptLine());
-                }
-                scene.setPresenceOfPerson(sceneMetadata.isPresenceOfPerson());
-                if (sceneMetadata.getDeviceOrientation() != null) {
-                    scene.setDeviceOrientation(sceneMetadata.getDeviceOrientation());
-                }
-                if (sceneMetadata.getMovementInstructions() != null) {
-                    scene.setMovementInstructions(sceneMetadata.getMovementInstructions());
-                }
-                if (sceneMetadata.getBackgroundInstructions() != null) {
-                    scene.setBackgroundInstructions(sceneMetadata.getBackgroundInstructions());
-                }
-                if (sceneMetadata.getCameraInstructions() != null) {
-                    scene.setSpecificCameraInstructions(sceneMetadata.getCameraInstructions());
-                }
-                if (sceneMetadata.getAudioNotes() != null) {
-                    scene.setAudioNotes(sceneMetadata.getAudioNotes());
-                }
-                // Note: activeGridBlock might need mapping to grid overlay system
+
+    private String trim40(String s) { return s == null ? null : (s.length() > 40 ? s.substring(0,40) : s); }
+    private String trim60(String s) { return s == null ? null : (s.length() > 60 ? s.substring(0,60) : s); }
+
+    private String deriveDeviceOrientationFromFirstScene(List<Scene> scenes, String language) {
+        try {
+            for (Scene s : scenes) {
+                if (s.getKeyframeUrl() == null || s.getKeyframeUrl().isBlank()) continue;
+                java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(new java.net.URL(s.getKeyframeUrl()));
+                if (img == null) continue;
+                int w = img.getWidth(), h = img.getHeight();
+                boolean portrait = h >= w;
+                boolean zh = "zh".equalsIgnoreCase(language) || "zh-CN".equalsIgnoreCase(language);
+                if (portrait) return zh ? "手机（竖屏 9:16）" : "Phone (Portrait 9:16)";
+                return zh ? "手机（横屏 16:9）" : "Phone (Landscape 16:9)";
             }
-        }
+        } catch (Exception ignored) {}
+        return null;
     }
     
     private void applyDefaultMetadata(ManualTemplate template, String language) {

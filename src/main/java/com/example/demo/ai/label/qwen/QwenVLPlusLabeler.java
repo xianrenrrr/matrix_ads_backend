@@ -3,6 +3,7 @@ package com.example.demo.ai.label.qwen;
 import com.example.demo.ai.label.ObjectLabelService;
 import com.example.demo.ai.util.LabelCache;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -41,7 +42,176 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         this.objectMapper = new ObjectMapper();
         this.labelCache = new LabelCache(256);
     }
-    
+
+    @Override
+    public Map<String, Object> generateTemplateGuidance(Map<String, Object> payload) {
+        try {
+            if (payload == null || payload.isEmpty()) return null;
+
+            // Build strict Chinese prompt for JSON-only output
+            String payloadJson = objectMapper.writeValueAsString(payload);
+            StringBuilder sb = new StringBuilder();
+            sb.append("你是视频画面理解助手。请基于整段视频信息，生成中文模板“基本信息”和每个场景指导，严格使用JSON输出，不要任何解释文字。\n")
+              .append("输入（JSON）：\n")
+              .append(payloadJson).append("\n")
+              .append("输出格式（仅 JSON）：\n")
+              .append("{\n")
+              .append("  \"template\": {\n")
+              .append("    \"videoPurpose\": \"...\",\n")
+              .append("    \"tone\": \"...\",\n")
+              .append("    \"lightingRequirements\": \"...\",\n")
+              .append("    \"backgroundMusic\": \"...\"\n")
+              .append("  },\n")
+              .append("  \"scenes\": [\n")
+              .append("    {\n")
+              .append("      \"sceneNumber\": 1,\n")
+              .append("      \"scriptLine\": \"...\",\n")
+              .append("      \"presenceOfPerson\": false,\n")
+              .append("      \"deviceOrientation\": \"手机（竖屏 9:16）\",\n")
+              .append("      \"movementInstructions\": \"...\",\n")
+              .append("      \"backgroundInstructions\": \"...\",\n")
+              .append("      \"specificCameraInstructions\": \"...\",\n")
+              .append("      \"audioNotes\": \"...\"\n")
+              .append("    }\n")
+              .append("  ]\n")
+              .append("}\n");
+
+            Map<String, Object> request = new HashMap<>();
+            request.put("model", qwenModel);
+            List<Map<String, Object>> messages = new ArrayList<>();
+            Map<String, Object> message = new HashMap<>();
+            message.put("role", "user");
+
+            List<Map<String, Object>> content = new ArrayList<>();
+            Map<String, Object> textContent = new HashMap<>();
+            textContent.put("type", "text");
+            textContent.put("text", sb.toString());
+            content.add(textContent);
+            message.put("content", content);
+            messages.add(message);
+            request.put("messages", messages);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + qwenApiKey);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+
+            ResponseEntity<String> response = restTemplate.exchange(
+                qwenApiBase + "/chat/completions",
+                HttpMethod.POST,
+                entity,
+                String.class
+            );
+            if (!response.getStatusCode().is2xxSuccessful()) return null;
+
+            String contentStr = extractContent(response.getBody());
+            if (contentStr == null || contentStr.isBlank()) return null;
+
+            // Parse JSON object
+            return objectMapper.readValue(contentStr, new TypeReference<Map<String,Object>>(){});
+        } catch (Exception e) {
+            return null;
+        }
+    }
+    @Override
+    public Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale) {
+        Map<String, LabelResult> out = new HashMap<>();
+        if (regions == null || regions.isEmpty() || keyframeUrl == null || keyframeUrl.isBlank()) {
+            return out;
+        }
+        try {
+            // Build strict prompt (Chinese, <=4 chars, JSON only)
+            String regionsJson = objectMapper.writeValueAsString(regions);
+            StringBuilder sb = new StringBuilder();
+            sb.append("请对图像中的下列区域做中文命名（不超过4个字），逐项返回 JSON 数组。\n")
+              .append("要求：\n")
+              .append("- 使用简体中文标签，≤4字；不确定填“未知”。\n")
+              .append("- 对每个区域返回 0~1 的置信度字段 conf。\n")
+              .append("- 仅对提供的坐标框进行命名，不要额外检测其他区域。\n")
+              .append("输入：\n")
+              .append("- 图像：").append(keyframeUrl).append("\n")
+              .append("- 区域（归一化坐标，0~1）：\n")
+              .append(regionsJson).append("\n")
+              .append("输出格式（仅 JSON 数组）：\n")
+              .append("[\n  {\"id\":\"p1\",\"labelZh\":\"汽车\",\"conf\":0.82},\n  {\"id\":\"p2\",\"labelZh\":\"人物\",\"conf\":0.76}\n]");
+
+            Map<String, Object> request = new HashMap<>();
+            request.put("model", qwenModel);
+            List<Map<String, Object>> messages = new ArrayList<>();
+            Map<String, Object> message = new HashMap<>();
+            message.put("role", "user");
+
+            List<Map<String, Object>> content = new ArrayList<>();
+            Map<String, Object> textContent = new HashMap<>();
+            textContent.put("type", "text");
+            textContent.put("text", sb.toString());
+            content.add(textContent);
+
+            Map<String, Object> imageContent = new HashMap<>();
+            imageContent.put("type", "image_url");
+            Map<String, Object> imageUrl = new HashMap<>();
+            imageUrl.put("url", keyframeUrl);
+            imageContent.put("image_url", imageUrl);
+            content.add(imageContent);
+
+            message.put("content", content);
+            messages.add(message);
+            request.put("messages", messages);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + qwenApiKey);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+
+            ResponseEntity<String> response = restTemplate.exchange(
+                qwenApiBase + "/chat/completions",
+                HttpMethod.POST,
+                entity,
+                String.class
+            );
+
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                return out;
+            }
+            String contentStr = extractContent(response.getBody());
+            if (contentStr == null || contentStr.isBlank()) return out;
+
+            // Parse JSON array
+            JsonNode root = objectMapper.readTree(contentStr);
+            if (!root.isArray()) return out;
+            for (JsonNode node : root) {
+                String id = node.path("id").asText(null);
+                String label = sanitize(node.path("labelZh").asText(""));
+                double conf = clamp(node.path("conf").asDouble(0.0));
+                if (id != null && !label.isEmpty()) {
+                    out.put(id, new LabelResult(id, label, conf));
+                }
+            }
+            return out;
+        } catch (Exception e) {
+            return out;
+        }
+    }
+
+    private String extractContent(String responseBody) throws Exception {
+        JsonNode root = objectMapper.readTree(responseBody);
+        JsonNode choices = root.path("choices");
+        if (choices.isArray() && choices.size() > 0) {
+            return choices.get(0).path("message").path("content").asText("").trim();
+        }
+        return null;
+    }
+
+    private String sanitize(String s) {
+        if (s == null) return DEFAULT_LABEL;
+        s = s.replaceAll("[\\s\\p{Punct}]", "");
+        if (s.length() > 4) s = s.substring(0, 4);
+        if (!isValidChineseLabel(s)) return DEFAULT_LABEL;
+        return s;
+    }
+
+    private double clamp(double v) { if (v < 0) return 0; if (v > 1) return 1; return v; }
+
     @Override
     public String labelZh(byte[] imageBytes) {
         if (imageBytes == null || imageBytes.length == 0) {

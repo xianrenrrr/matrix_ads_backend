@@ -1,7 +1,6 @@
 package com.example.demo.ai.services;
 
 import com.example.demo.ai.core.AIModelType;
-import com.example.demo.ai.providers.llm.LLMProvider;
 import com.example.demo.ai.providers.vision.VisionProvider;
 import com.example.demo.ai.seg.SegmentationService;
 import com.example.demo.ai.seg.dto.*;
@@ -28,8 +27,7 @@ public class ComparisonAIService {
     
     private static final Logger log = LoggerFactory.getLogger(ComparisonAIService.class);
     
-    @Autowired
-    private AIOrchestrator aiOrchestrator;
+    // Removed AI orchestrator dependency
     
     @Autowired
     private SegmentationService segmentationService;
@@ -499,23 +497,8 @@ public class ComparisonAIService {
      * Translate English label to Chinese using Qwen LLM provider
      */
     private String translateToChineseLabel(String englishLabel) {
-        try {
-            // Use Qwen provider to translate single label to Chinese
-            var response = aiOrchestrator.executeWithFallback(
-                AIModelType.LLM, "generateChineseLabels",
-                provider -> ((LLMProvider) provider).generateChineseLabels(Arrays.asList(englishLabel))
-            );
-            
-            if (response.isSuccess() && !response.getData().isEmpty()) {
-                return response.getData().get(0);
-            }
-            
-        } catch (Exception e) {
-            log.debug("Failed to translate label '{}' to Chinese: {}", englishLabel, e.getMessage());
-        }
-        
-        // Fallback: return original label
-        return englishLabel;
+        // Minimal fallback: return original label (dev)
+        return englishLabel == null ? "" : englishLabel;
     }
     
     /**
