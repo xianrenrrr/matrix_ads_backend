@@ -21,7 +21,7 @@ public class TemplateCascadeDeletionService {
     @Autowired private TemplateDao templateDao;
     @Autowired private SceneSubmissionDao sceneSubmissionDao;
     @Autowired private VideoDao videoDao;
-    @Autowired private FirebaseStorageService storageService;
+    @Autowired(required = false) private FirebaseStorageService storageService;
     @Autowired private Firestore db;
     @Autowired private TemplateGroupService templateGroupService;
 
@@ -43,7 +43,7 @@ public class TemplateCascadeDeletionService {
         if (tpl == null) throw new NoSuchElementException("Template not found: " + templateId);
 
         // 1) Storage first
-        if (hardDeleteStorage) {
+        if (hardDeleteStorage && storageService != null) {
             // 1a) Example video + thumbnail via VideoDao
             try {
                 String videoId = tpl.getVideoId();
@@ -86,6 +86,8 @@ public class TemplateCascadeDeletionService {
             } catch (Exception e) {
                 System.err.println("[CASCADE] Submission assets delete warn: " + e);
             }
+        } else if (hardDeleteStorage && storageService == null) {
+            System.err.println("[CASCADE] Storage hard-delete enabled but FirebaseStorageService unavailable; skipping storage deletion.");
         }
 
         // 2) Firestore docs
@@ -118,4 +120,3 @@ public class TemplateCascadeDeletionService {
         if (!ok) throw new NoSuchElementException("Template not found on delete: " + templateId);
     }
 }
-

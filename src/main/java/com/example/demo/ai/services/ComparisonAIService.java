@@ -1,6 +1,4 @@
 package com.example.demo.ai.services;
-
-import com.example.demo.ai.core.AIModelType;
 import com.example.demo.ai.providers.vision.VisionProvider;
 import com.example.demo.ai.seg.SegmentationService;
 import com.example.demo.ai.seg.dto.*;
