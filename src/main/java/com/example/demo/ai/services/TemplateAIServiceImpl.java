@@ -610,7 +610,11 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 for (Scene s : scenes) {
                     Map<String, Object> one = byNum.get(s.getSceneNumber());
                     if (one == null) continue;
-                    Object script = one.get("scriptLine"); if (script instanceof String v) s.setScriptLine(sanitizeAndClampScript(v));
+                    // Parse script line more robustly (string/list/map and fallback keys)
+                    String scriptLine = parseScriptLineFromGuidance(one);
+                    if (scriptLine != null && !scriptLine.isBlank()) {
+                        s.setScriptLine(scriptLine);
+                    }
                     Object person = one.get("presenceOfPerson"); if (person instanceof Boolean b) s.setPresenceOfPerson(b);
                     Object move = one.get("movementInstructions"); if (move instanceof String v) s.setMovementInstructions(trim60(v));
                     Object bg = one.get("backgroundInstructions"); if (bg instanceof String v) s.setBackgroundInstructions(trim60(v));
@@ -648,6 +652,18 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         s = s.replaceAll("(?s)```\\s*(.*?)\\s*```", "$1");
         // Collapse whitespace/newlines
         s = s.replaceAll("\n|\r", " ").replaceAll("\\s+", " ").trim();
+        // Normalize common ASCII punctuation to Chinese style for zh content
+        s = s.replace(',', '，')
+             .replace(':', '：')
+             .replace(';', '；');
+        // Convert terminal punctuation to Chinese variants if applicable
+        if (s.endsWith(".")) s = s.substring(0, s.length()-1) + "。";
+        if (s.endsWith("!")) s = s.substring(0, s.length()-1) + "！";
+        if (s.endsWith("?")) s = s.substring(0, s.length()-1) + "？";
+        // Ensure ends with a sentence terminator (avoid dangling comma)
+        if (!s.isEmpty() && !s.matches(".*[。！？！？]$")) {
+            s = s + "。";
+        }
         // Optionally clamp to 40 chars
         if (enforceScriptMaxLen && s.length() > 40) {
             String clamped = s.substring(0, 40);
@@ -677,6 +693,63 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 return zh ? "手机（横屏 16:9）" : "Phone (Landscape 16:9)";
             }
         } catch (Exception ignored) {}
+        return null;
+    }
+
+    // --- Helpers for robust script parsing ---
+    private String parseScriptLineFromGuidance(Map<String, Object> one) {
+        // Primary key
+        Object script = one.get("scriptLine");
+        String parsed = coerceToScriptString(script);
+        if (parsed != null && !parsed.isBlank()) return sanitizeAndClampScript(parsed);
+        // Fallback keys commonly returned by LLMs
+        String[] keys = {"script", "subtitle", "dialogue", "caption", "line"};
+        for (String k : keys) {
+            Object v = one.get(k);
+            parsed = coerceToScriptString(v);
+            if (parsed != null && !parsed.isBlank()) return sanitizeAndClampScript(parsed);
+        }
+        return null;
+    }
+
+    private String coerceToScriptString(Object v) {
+        if (v == null) return null;
+        if (v instanceof String s) return s;
+        if (v instanceof Number n) return String.valueOf(n);
+        if (v instanceof java.util.List<?> list) {
+            // Join list items into a single short sentence
+            StringBuilder sb = new StringBuilder();
+            for (Object item : list) {
+                if (item == null) continue;
+                String s = null;
+                if (item instanceof String si) s = si;
+                else if (item instanceof Number ni) s = String.valueOf(ni);
+                else if (item instanceof java.util.Map<?,?> mi) s = extractFirstStringFromMap(mi);
+                if (s != null && !s.isBlank()) {
+                    if (sb.length() > 0) sb.append("，");
+                    sb.append(s.trim());
+                }
+            }
+            return sb.length() == 0 ? null : sb.toString();
+        }
+        if (v instanceof java.util.Map<?,?> m) {
+            String s = extractFirstStringFromMap(m);
+            return s;
+        }
+        return null;
+    }
+
+    private String extractFirstStringFromMap(java.util.Map<?,?> m) {
+        // Common candidate fields
+        String[] fields = {"text", "content", "value", "line", "script", "caption"};
+        for (String f : fields) {
+            Object x = m.get(f);
+            if (x instanceof String xs && !xs.isBlank()) return xs;
+        }
+        // Fallback: first stringy value
+        for (Object x : m.values()) {
+            if (x instanceof String xs && !xs.isBlank()) return xs;
+        }
         return null;
     }
 }
