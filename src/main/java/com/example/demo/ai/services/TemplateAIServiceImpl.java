@@ -67,6 +67,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Value("${AI_YOLO_MAX_OBJECTS:4}")
     private int hfMaxObjects;
 
+    @Value("${guidance.scripts.enforceMaxLen:true}")
+    private boolean enforceScriptMaxLen;
+
     @Override
     public ManualTemplate generateTemplate(Video video) {
         ManualTemplate template = generateTemplate(video, "zh-CN"); // Chinese-first approach
@@ -607,7 +610,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 for (Scene s : scenes) {
                     Map<String, Object> one = byNum.get(s.getSceneNumber());
                     if (one == null) continue;
-                    Object script = one.get("scriptLine"); if (script instanceof String v) s.setScriptLine(trim60(v));
+                    Object script = one.get("scriptLine"); if (script instanceof String v) s.setScriptLine(sanitizeAndClampScript(v));
                     Object person = one.get("presenceOfPerson"); if (person instanceof Boolean b) s.setPresenceOfPerson(b);
                     Object move = one.get("movementInstructions"); if (move instanceof String v) s.setMovementInstructions(trim60(v));
                     Object bg = one.get("backgroundInstructions"); if (bg instanceof String v) s.setBackgroundInstructions(trim60(v));
@@ -637,6 +640,30 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     private String trim40(String s) { return s == null ? null : (s.length() > 40 ? s.substring(0,40) : s); }
     private String trim60(String s) { return s == null ? null : (s.length() > 60 ? s.substring(0,60) : s); }
 
+    private String sanitizeAndClampScript(String s) {
+        if (s == null) return null;
+        String original = s;
+        // Strip code fences and markdown artifacts
+        s = s.replaceAll("(?s)```json\\s*(.*?)\\s*```", "$1");
+        s = s.replaceAll("(?s)```\\s*(.*?)\\s*```", "$1");
+        // Collapse whitespace/newlines
+        s = s.replaceAll("\n|\r", " ").replaceAll("\\s+", " ").trim();
+        // Optionally clamp to 40 chars
+        if (enforceScriptMaxLen && s.length() > 40) {
+            String clamped = s.substring(0, 40);
+            log.info("[GUIDANCE] scriptLine clamped videoId={} scene={} oldLen={} newLen=40", 
+                (Object) currentVideoIdSafe, (Object) currentSceneNumberSafe, original.length());
+            return clamped;
+        }
+        return s;
+    }
+
+    // These thread-local helpers avoid coupling to DAO-assigned template IDs during generation
+    private static final ThreadLocal<String> TL_VIDEO_ID = new ThreadLocal<>();
+    private static final ThreadLocal<Integer> TL_SCENE_NUM = new ThreadLocal<>();
+    private String currentVideoIdSafe = TL_VIDEO_ID.get();
+    private Integer currentSceneNumberSafe = TL_SCENE_NUM.get();
+
     private String deriveDeviceOrientationFromFirstScene(List<Scene> scenes, String language) {
         try {
             for (Scene s : scenes) {
@@ -652,21 +679,5 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         } catch (Exception ignored) {}
         return null;
     }
-    
-    private void applyDefaultMetadata(ManualTemplate template, String language) {
-        if ("zh".equals(language) || "zh-CN".equals(language)) {
-            template.setVideoPurpose("产品展示与推广");
-            template.setTone("专业");
-            template.setLightingRequirements("良好的自然光或人工照明");
-            template.setBackgroundMusic("轻柔的器乐或环境音乐");
-        } else {
-            template.setVideoPurpose("Product demonstration and promotion");
-            template.setTone("Professional");
-            template.setLightingRequirements("Good natural or artificial lighting");
-            template.setBackgroundMusic("Soft instrumental or ambient music");
-        }
-    }
-    
-    
 }
 // Change Log: Removed block grid services, simplified to use AI object detection only

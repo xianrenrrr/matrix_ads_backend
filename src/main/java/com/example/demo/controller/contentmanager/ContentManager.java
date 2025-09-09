@@ -30,6 +30,9 @@ public class ContentManager {
     
     @Autowired
     private TemplateGroupService templateGroupService;
+
+    @Autowired
+    private com.example.demo.service.TemplateCascadeDeletionService templateCascadeDeletionService;
     
     @Autowired
     private SceneSubmissionDao sceneSubmissionDao;
@@ -234,14 +237,12 @@ public class ContentManager {
                                                                @RequestParam String userId,
                                                                @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        // Use service wrapper to delete template and clean up group relationships
-        boolean deleted = templateGroupService.deleteTemplateWithCleanup(templateId);
-        if (deleted) {
+        // Cascade delete: storage first, then Firestore docs and relationships
+        templateCascadeDeletionService.deleteTemplateAssetsAndDocs(templateId);
+        {
             userDao.removeCreatedTemplate(userId, templateId); // Remove templateId from created_template field in user doc
             String message = i18nService.getMessage("template.deleted", language);
             return ResponseEntity.ok(ApiResponse.ok(message, "Template deleted successfully"));
-        } else {
-            throw new NoSuchElementException("Template not found with ID: " + templateId);
         }
     }
     
@@ -344,4 +345,3 @@ public class ContentManager {
     }
 }
 // Change Log: Manual scenes always set sceneSource="manual" and overlayType="grid" for dual scene system
-

@@ -91,7 +91,7 @@ public class FirebaseStorageService {
         System.out.println("[2025-05-01] Uploaded video to: " + videoUrl);
         System.out.println("[2025-05-01] Uploaded thumbnail to: " + thumbnailUrl);
         return new UploadResult(videoUrl, thumbnailUrl);
-    }   
+    }
 
     public String generateSignedUrl(String firebaseUrl) {
         try {
@@ -115,9 +115,71 @@ public class FirebaseStorageService {
             return signedUrl.toString();
         } catch (Exception e) {
             System.err.println("Error generating signed URL: " + e.getMessage());
-            return firebaseUrl; // Fallback to original URL
+            return firebaseUrl;
+        } // Fallback to original URL
+    }
+
+    /**
+     * Parse an object path from a Firebase Storage URL of the form
+     * https://storage.googleapis.com/{bucket}/{object}[?query]
+     * Returns null if the URL does not match the expected host/bucket.
+     */
+    public String parseObjectNameFromUrl(String firebaseUrl) {
+        try {
+            if (firebaseUrl == null || !firebaseUrl.contains("storage.googleapis.com")) return null;
+            java.net.URI uri = java.net.URI.create(firebaseUrl);
+            String path = uri.getPath(); // /{bucket}/{object}
+            if (path == null || path.isEmpty()) return null;
+            if (path.startsWith("/")) path = path.substring(1);
+            if (!path.startsWith(bucketName + "/")) return null;
+            String objectName = path.substring(bucketName.length() + 1);
+            return objectName.isEmpty() ? null : objectName;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+    /**
+     * Delete a single object by its Firebase Storage URL. Returns true if deleted or not found,
+     * false only on unexpected errors.
+     */
+    public boolean deleteObjectByUrl(String firebaseUrl) {
+        try {
+            String objectName = parseObjectNameFromUrl(firebaseUrl);
+            if (objectName == null) return true; // Nothing to do
+            var blob = storage.get(bucketName, objectName);
+            if (blob == null) return true; // Already gone
+            return blob.delete();
+        } catch (Exception e) {
+            System.err.println("[DELETE] Failed to delete object by URL: " + redact(firebaseUrl) + " error=" + e);
+            return false;
         }
     }
 
+    /**
+     * Delete all objects with the given prefix. Returns number of deleted objects.
+     */
+    public int deleteByPrefix(String prefix) {
+        int deleted = 0;
+        try {
+            if (prefix == null) return 0;
+            var blobs = storage.list(bucketName, Storage.BlobListOption.prefix(prefix)).iterateAll();
+            for (var blob : blobs) {
+                try {
+                    if (blob.delete()) deleted++;
+                } catch (Exception e) {
+                    System.err.println("[DELETE] Failed to delete object: " + blob.getName() + " error=" + e);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[DELETE] List by prefix failed for " + prefix + " error=" + e);
+        }
+        return deleted;
+    }
+
+    private String redact(String url) {
+        if (url == null) return null;
+        return url.replaceAll("(Signature=)[^&]+", "$1<redacted>");
+    }
 }
+
 
