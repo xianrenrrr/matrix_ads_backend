@@ -70,6 +70,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Value("${guidance.scripts.enforceMaxLen:true}")
     private boolean enforceScriptMaxLen;
 
+    @Value("${ai.overlay.includeLegend:false}")
+    private boolean includeLegend;
+
     @Override
     public ManualTemplate generateTemplate(Video video) {
         ManualTemplate template = generateTemplate(video, "zh-CN"); // Chinese-first approach
@@ -275,7 +278,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 }
                 
                 // Build legend to drive mini‑app overlay UI if not grid
-                if (!"grid".equals(scene.getOverlayType()) && overlayLegendService != null) {
+                if (includeLegend && !"grid".equals(scene.getOverlayType()) && overlayLegendService != null) {
                     var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
                     scene.setLegend(legend);
                 }
@@ -305,10 +308,17 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     
     private com.example.demo.model.Scene.ObjectOverlay convertToSceneBox(OverlayBox box) {
         com.example.demo.model.Scene.ObjectOverlay model = new com.example.demo.model.Scene.ObjectOverlay();
-        model.setLabel(box.label());
-        model.setLabelZh(box.labelZh());
-        // Populate labelLocalized for UI that prefers localized labels
-        model.setLabelLocalized(box.labelZh());
+        String zh = box.labelZh();
+        String lbl = box.label();
+        if (zh != null && !zh.isBlank()) {
+            model.setLabelZh(zh);
+            model.setLabelLocalized(zh);
+        }
+        if (lbl == null || lbl.isBlank()) lbl = zh; // fall back to zh to avoid empty label
+        model.setLabel(lbl);
+        if (model.getLabelLocalized() == null || model.getLabelLocalized().isBlank()) {
+            model.setLabelLocalized(lbl);
+        }
         model.setConfidence((float) box.confidence());
         model.setX((float) box.x());
         model.setY((float) box.y());
@@ -524,11 +534,12 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 if (zh == null) zh = "未知";
                 b.setLabelZh(zh);
                 b.setLabelLocalized(zh);
+                if (b.getLabel() == null || b.getLabel().isBlank()) b.setLabel(zh);
             }
 
             scene.setOverlayObjects(boxes);
             scene.setOverlayType("objects");
-            if (overlayLegendService != null) {
+            if (includeLegend && overlayLegendService != null) {
                 var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
                 scene.setLegend(legend);
             }

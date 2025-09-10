@@ -52,6 +52,10 @@ public class TemplateCascadeDeletionService {
                     if (video != null) {
                         storageService.deleteObjectByUrl(video.getUrl());
                         storageService.deleteObjectByUrl(video.getThumbnailUrl());
+                        try {
+                            boolean removed = videoDao.deleteVideoById(videoId);
+                            if (!removed) System.err.println("[CASCADE] Example video doc not found or not removed: " + videoId);
+                        } catch (Exception ignore) {}
                     }
                 }
             } catch (Exception e) {

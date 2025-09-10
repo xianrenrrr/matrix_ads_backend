@@ -43,8 +43,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoSuchElementException.class)
     public ResponseEntity<ApiResponse<Void>> handleNotFound(NoSuchElementException ex, HttpServletRequest request) {
         String language = getLanguageFromRequest(request);
-        String message = i18nService.getMessage("user.not.found", language);
-        ApiResponse<Void> response = ApiResponse.fail(message, ex.getMessage());
+        String raw = ex.getMessage() != null ? ex.getMessage() : "";
+        String key = raw.startsWith("Group not found") ? "group.not_found" : "user.not.found";
+        String message = i18nService.getMessage(key, language);
+        ApiResponse<Void> response = ApiResponse.fail(message, raw);
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
 
@@ -59,8 +61,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
         String language = getLanguageFromRequest(request);
-        String message = i18nService.getMessage("bad.request", language);
-        ApiResponse<Void> response = ApiResponse.fail(message, ex.getMessage());
+        String raw = ex.getMessage() != null ? ex.getMessage() : "";
+        String key = switch (raw) {
+            case "Username already exists" -> "username.exists";
+            case "Email already exists for this role" -> "email.exists";
+            case "Phone number already exists" -> "phone.exists";
+            case "Group is inactive" -> "group.inactive";
+            case "Group not found" -> "group.not_found";
+            default -> "bad.request";
+        };
+        String message = i18nService.getMessage(key, language);
+        ApiResponse<Void> response = ApiResponse.fail(message, raw);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 

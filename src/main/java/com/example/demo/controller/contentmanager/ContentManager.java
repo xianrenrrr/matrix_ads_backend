@@ -233,7 +233,7 @@ public class ContentManager {
     }
 
     @DeleteMapping("/{templateId}")
-    public ResponseEntity<ApiResponse<String>> deleteTemplate(@PathVariable String templateId, 
+    public ResponseEntity<ApiResponse<Void>> deleteTemplate(@PathVariable String templateId, 
                                                                @RequestParam String userId,
                                                                @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
@@ -242,7 +242,7 @@ public class ContentManager {
         {
             userDao.removeCreatedTemplate(userId, templateId); // Remove templateId from created_template field in user doc
             String message = i18nService.getMessage("template.deleted", language);
-            return ResponseEntity.ok(ApiResponse.ok(message, "Template deleted successfully"));
+            return ResponseEntity.ok(ApiResponse.ok(message));
         }
     }
     

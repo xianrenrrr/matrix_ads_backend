@@ -356,6 +356,7 @@ public class AuthController {
             user.setPassword(null);
             Map<String, Object> responseData = new HashMap<>();
             responseData.put("user", user);
+            responseData.put("role", user.getRole());
             
             // Include group information
             if (group.getGroupName() != null && !group.getGroupName().trim().isEmpty()) {

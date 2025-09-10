@@ -8,4 +8,5 @@ public interface VideoDao {
     Video getVideoById(String videoId) throws ExecutionException, InterruptedException;
     void updateVideo(Video video) throws ExecutionException, InterruptedException;
     Video saveVideoWithTemplate(Video video, String templateId) throws ExecutionException, InterruptedException;
+    boolean deleteVideoById(String videoId) throws ExecutionException, InterruptedException;
 }

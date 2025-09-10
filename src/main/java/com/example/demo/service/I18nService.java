@@ -23,6 +23,9 @@ public class I18nService {
         zhMessages.put("registration.failed", "注册失败");
         zhMessages.put("user.not.found", "用户不存在");
         zhMessages.put("template.created", "模板创建成功");
+        zhMessages.put("template.updated", "模板更新成功");
+        zhMessages.put("template.deleted", "模板删除成功");
+        zhMessages.put("template.groups.updated", "模板分组已更新");
         zhMessages.put("template.not.found", "模板不存在");
         zhMessages.put("video.uploaded", "视频上传成功");
         zhMessages.put("video.upload.failed", "视频上传失败");
@@ -48,6 +51,7 @@ public class I18nService {
         zhMessages.put("token.valid", "令牌有效");
         zhMessages.put("token.validation.failed", "令牌验证失败");
         zhMessages.put("username.exists", "用户名已存在");
+        zhMessages.put("phone.exists", "手机号已存在");
         zhMessages.put("email.exists", "该角色的电子邮件已存在");
         zhMessages.put("invite.not_found", "邀请未找到");
         zhMessages.put("group.inactive", "群组未激活");
@@ -65,6 +69,9 @@ public class I18nService {
         enMessages.put("registration.failed", "Registration failed");
         enMessages.put("user.not.found", "User not found");
         enMessages.put("template.created", "Template created successfully");
+        enMessages.put("template.updated", "Template updated successfully");
+        enMessages.put("template.deleted", "Template deleted successfully");
+        enMessages.put("template.groups.updated", "Template groups updated successfully");
         enMessages.put("template.not.found", "Template not found");
         enMessages.put("video.uploaded", "Video uploaded successfully");
         enMessages.put("video.upload.failed", "Video upload failed");
@@ -90,6 +97,7 @@ public class I18nService {
         enMessages.put("token.valid", "Token is valid");
         enMessages.put("token.validation.failed", "Token validation failed");
         enMessages.put("username.exists", "Username already exists");
+        enMessages.put("phone.exists", "Phone number already exists");
         enMessages.put("email.exists", "Email already exists for this role");
         enMessages.put("invite.not_found", "Invite not found");
         enMessages.put("group.inactive", "Group is not active");

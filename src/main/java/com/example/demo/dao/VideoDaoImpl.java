@@ -91,4 +91,17 @@ public class VideoDaoImpl implements VideoDao {
         
         return video;
     }
+
+    @Override
+    public boolean deleteVideoById(String videoId) throws ExecutionException, InterruptedException {
+        checkFirestore();
+        try {
+            DocumentReference docRef = db.collection("exampleVideos").document(videoId);
+            ApiFuture<WriteResult> write = docRef.delete();
+            write.get();
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }
