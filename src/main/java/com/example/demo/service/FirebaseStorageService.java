@@ -1,6 +1,7 @@
 package com.example.demo.service;
 
 import com.google.cloud.storage.BlobInfo;
+import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.Storage;
 import com.google.firebase.FirebaseApp;
 import java.net.URL;
@@ -136,6 +137,43 @@ public class FirebaseStorageService {
             return null;
         }
     }
+
+    /**
+     * Compose multiple objects in the same bucket into a single object.
+     * All source URLs must point to this bucket. Returns the HTTPS URL of the new object.
+     */
+    public String composeObjects(java.util.List<String> sourceUrls, String destinationObjectName, String contentType) throws IOException {
+        if (sourceUrls == null || sourceUrls.isEmpty()) {
+            throw new IllegalArgumentException("No source URLs provided for composition");
+        }
+        // Older GCS client expects a list of source object names (Iterable<String>)
+        java.util.List<String> sourceNames = new java.util.ArrayList<>();
+        for (String url : sourceUrls) {
+            String objectName = parseObjectNameFromUrl(url);
+            if (objectName == null) {
+                throw new IllegalArgumentException("Source URL is not in expected bucket: " + url);
+            }
+            sourceNames.add(objectName);
+        }
+        BlobInfo target = BlobInfo.newBuilder(bucketName, destinationObjectName)
+                .setContentType(contentType != null ? contentType : "application/octet-stream")
+                .build();
+        storage.compose(Storage.ComposeRequest.newBuilder()
+                .setTarget(target)
+                .addSource(sourceNames)
+                .build());
+        return String.format("https://storage.googleapis.com/%s/%s", bucketName, destinationObjectName);
+    }
+
+    /** Upload a local file to the given destination path and return its HTTPS URL. */
+    public String uploadFile(java.io.File file, String destinationObjectName, String contentType) throws IOException {
+        BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, destinationObjectName)
+                .setContentType(contentType != null ? contentType : "application/octet-stream")
+                .build();
+        byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+        storage.create(blobInfo, bytes);
+        return String.format("https://storage.googleapis.com/%s/%s", bucketName, destinationObjectName);
+    }
     /**
      * Delete a single object by its Firebase Storage URL. Returns true if deleted or not found,
      * false only on unexpected errors.
@@ -179,5 +217,3 @@ public class FirebaseStorageService {
         return url.replaceAll("(Signature=)[^&]+", "$1<redacted>");
     }
 }
-
-
