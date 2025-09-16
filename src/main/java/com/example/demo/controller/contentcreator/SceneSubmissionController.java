@@ -102,10 +102,11 @@ public class SceneSubmissionController {
             sceneSubmission.setAiSuggestions(Arrays.asList("AI分析暂时不可用", "请检查视频质量"));
         }
         
-        // Auto-approval logic: per-group threshold only
+        // Auto-approval logic: per-group threshold
         double finalSimilarityScore = sceneSubmission.getSimilarityScore();
-        if (checkGroupAIThreshold(userId, finalSimilarityScore)) {
-            sceneSubmission.setStatus("approved");
+        String autoStatus = determineAutoStatus(userId, finalSimilarityScore);
+        if (autoStatus != null) {
+            sceneSubmission.setStatus(autoStatus);
         }
         
         String sceneId = sceneSubmissionDao.save(sceneSubmission);
@@ -268,12 +269,41 @@ public class SceneSubmissionController {
             
             // Convert similarity score to percentage (0-100) for comparison
             double similarityPercentage = similarityScore * 100;
+            // Normalize threshold: accept both 0-1 and 0-100 inputs
+            double thresholdPercent = (aiThreshold != null && aiThreshold <= 1.0) ? aiThreshold * 100.0 : (aiThreshold != null ? aiThreshold : 0.0);
             
             // Auto-approve if enabled and score meets threshold
             return aiAutoApprovalEnabled != null && aiAutoApprovalEnabled && 
-                   aiThreshold != null && similarityPercentage >= aiThreshold;
+                   aiThreshold != null && similarityPercentage >= thresholdPercent;
         } catch (Exception e) {
             return false; // Default to manual approval if error
+        }
+    }
+
+    /**
+     * Determine automatic status based on group AI settings.
+     * Returns "approved", "rejected", or null (no auto decision).
+     */
+    private String determineAutoStatus(String userId, double similarityScore) {
+        try {
+            DocumentSnapshot userDoc = db.collection("users").document(userId).get().get();
+            if (!userDoc.exists()) return null;
+            String groupId = userDoc.getString("groupId");
+            if (groupId == null) return null;
+
+            DocumentSnapshot groupDoc = db.collection("groups").document(groupId).get().get();
+            if (!groupDoc.exists()) return null;
+
+            Double aiThreshold = groupDoc.getDouble("aiApprovalThreshold");
+            Boolean aiAutoApprovalEnabled = groupDoc.getBoolean("aiAutoApprovalEnabled");
+            if (aiAutoApprovalEnabled == null || !aiAutoApprovalEnabled || aiThreshold == null) return null;
+
+            double similarityPercentage = similarityScore * 100.0;
+            double thresholdPercent = aiThreshold <= 1.0 ? aiThreshold * 100.0 : aiThreshold;
+
+            return similarityPercentage >= thresholdPercent ? SceneSubmission.STATUS_APPROVED : SceneSubmission.STATUS_REJECTED;
+        } catch (Exception e) {
+            return null;
         }
     }
     
