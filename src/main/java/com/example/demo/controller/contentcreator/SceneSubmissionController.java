@@ -148,6 +148,13 @@ public class SceneSubmissionController {
                         fullSceneData.put("sceneTitle", sceneSubmission.getSceneTitle());
                         fullSceneData.put("videoUrl", sceneSubmission.getVideoUrl());
                         fullSceneData.put("thumbnailUrl", sceneSubmission.getThumbnailUrl());
+                        // Attach signed URL for playback if storage service available
+                        try {
+                            if (firebaseStorageService != null && sceneSubmission.getVideoUrl() != null) {
+                                String signed = firebaseStorageService.generateSignedUrl(sceneSubmission.getVideoUrl());
+                                fullSceneData.put("videoSignedUrl", signed);
+                            }
+                        } catch (Exception ignored) {}
                         fullSceneData.put("status", sceneSubmission.getStatus());
                         fullSceneData.put("similarityScore", sceneSubmission.getSimilarityScore());
                         fullSceneData.put("aiSuggestions", sceneSubmission.getAiSuggestions());
@@ -161,6 +168,15 @@ public class SceneSubmissionController {
             videoData.put("scenes", fullScenes);
         }
         
+        // If compiledVideoUrl exists, attach a signed URL for client download
+        try {
+            Object compiledUrl = videoData.get("compiledVideoUrl");
+            if (compiledUrl instanceof String && firebaseStorageService != null) {
+                String signed = firebaseStorageService.generateSignedUrl((String) compiledUrl);
+                videoData.put("compiledVideoSignedUrl", signed);
+            }
+        } catch (Exception ignored) {}
+
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
         response.putAll(videoData);
