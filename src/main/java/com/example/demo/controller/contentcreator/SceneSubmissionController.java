@@ -184,6 +184,37 @@ public class SceneSubmissionController {
         return ResponseEntity.ok(ApiResponse.ok("Submitted video retrieved successfully", response));
     }
 
+    /**
+     * Get single scene submission by ID with playback URLs
+     */
+    @GetMapping("/{sceneId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getSceneById(@PathVariable String sceneId) throws Exception {
+        SceneSubmission scene = sceneSubmissionDao.findById(sceneId);
+        if (scene == null) {
+            throw new NoSuchElementException("Scene not found");
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("sceneId", scene.getId());
+        data.put("sceneNumber", scene.getSceneNumber());
+        data.put("sceneTitle", scene.getSceneTitle());
+        data.put("videoUrl", scene.getVideoUrl());
+        data.put("thumbnailUrl", scene.getThumbnailUrl());
+        data.put("status", scene.getStatus());
+        data.put("similarityScore", scene.getSimilarityScore());
+        data.put("aiSuggestions", scene.getAiSuggestions());
+        data.put("submittedAt", scene.getSubmittedAt());
+
+        try {
+            if (firebaseStorageService != null && scene.getVideoUrl() != null) {
+                String signed = firebaseStorageService.generateSignedUrl(scene.getVideoUrl());
+                data.put("videoSignedUrl", signed);
+            }
+        } catch (Exception ignored) {}
+
+        return ResponseEntity.ok(ApiResponse.ok("Scene retrieved", data));
+    }
+
     @SuppressWarnings("unchecked")
     private void updateSubmittedVideoWithScene(String compositeVideoId, String templateId, String userId, SceneSubmission sceneSubmission) throws Exception {
         DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
