@@ -31,6 +31,9 @@ public class ContentManager {
     @Autowired
     private TemplateGroupService templateGroupService;
 
+    @Autowired(required = false)
+    private com.example.demo.service.FirebaseStorageService firebaseStorageService;
+
     @Autowired
     private com.example.demo.service.TemplateCascadeDeletionService templateCascadeDeletionService;
     
@@ -339,7 +342,15 @@ public class ContentManager {
             }
             videoData.put("scenes", fullScenes);
         }
-        
+        // If compiledVideoUrl exists, attach a signed URL for client download
+        try {
+            Object compiledUrl = videoData.get("compiledVideoUrl");
+            if (compiledUrl instanceof String && firebaseStorageService != null) {
+                String signed = firebaseStorageService.generateSignedUrl((String) compiledUrl);
+                videoData.put("compiledVideoSignedUrl", signed);
+            }
+        } catch (Exception ignored) {}
+
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, videoData));
     }
