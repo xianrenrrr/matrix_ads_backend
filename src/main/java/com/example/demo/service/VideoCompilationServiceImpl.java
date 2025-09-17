@@ -23,6 +23,9 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
     @Autowired
     private SceneSubmissionDao sceneSubmissionDao;
 
+    @Autowired
+    private com.example.demo.ai.shared.GcsFileResolver gcsFileResolver;
+
     @Override
     public String compileVideo(String templateId, String userId, String compiledBy) {
         try {
@@ -72,17 +75,18 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
     }
 
     private String ffmpegConcatAndUpload(List<String> sourceUrls, String destObject) throws Exception {
-        // Download each source URL to temp file
+        // Resolve each source URL via GCS client (authenticated) to avoid 403s
         List<java.io.File> tempFiles = new ArrayList<>();
+        List<com.example.demo.ai.shared.GcsFileResolver.ResolvedFile> resolvedHandles = new ArrayList<>();
         java.io.File listFile = null;
         try {
             for (String url : sourceUrls) {
-                java.io.File f = java.io.File.createTempFile("scene-", ".mp4");
-                try (java.io.InputStream in = new java.net.URL(url).openStream();
-                     java.io.FileOutputStream out = new java.io.FileOutputStream(f)) {
-                    byte[] buf = new byte[8192];
-                    int n;
-                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                // Use GcsFileResolver for gs:// or https://storage.googleapis.com URLs
+                com.example.demo.ai.shared.GcsFileResolver.ResolvedFile resolved = gcsFileResolver.resolve(url);
+                resolvedHandles.add(resolved);
+                java.io.File f = new java.io.File(resolved.getPathAsString());
+                if (!f.exists() || f.length() == 0) {
+                    throw new IllegalStateException("Resolved file missing or empty for URL: " + url);
                 }
                 tempFiles.add(f);
             }
@@ -126,7 +130,10 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             outFile.delete();
             return url;
         } finally {
-            for (java.io.File f : tempFiles) try { f.delete(); } catch (Exception ignored) {}
+            // Close resolved handles (will delete temp files they created)
+            for (com.example.demo.ai.shared.GcsFileResolver.ResolvedFile rf : resolvedHandles) {
+                try { if (rf != null) rf.close(); } catch (Exception ignored) {}
+            }
             if (listFile != null) try { listFile.delete(); } catch (Exception ignored) {}
         }
     }

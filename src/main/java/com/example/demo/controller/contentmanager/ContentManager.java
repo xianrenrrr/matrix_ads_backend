@@ -326,6 +326,13 @@ public class ContentManager {
                         fullSceneData.put("sceneNumber", sceneSubmission.getSceneNumber());
                         fullSceneData.put("sceneTitle", sceneSubmission.getSceneTitle());
                         fullSceneData.put("videoUrl", sceneSubmission.getVideoUrl());
+                        // Attach a short-lived signed URL for preview/streaming in manager UI
+                        try {
+                            if (firebaseStorageService != null && sceneSubmission.getVideoUrl() != null) {
+                                String signed = firebaseStorageService.generateSignedUrl(sceneSubmission.getVideoUrl());
+                                fullSceneData.put("videoSignedUrl", signed);
+                            }
+                        } catch (Exception ignored) {}
                         fullSceneData.put("thumbnailUrl", sceneSubmission.getThumbnailUrl());
                         fullSceneData.put("status", sceneSubmission.getStatus());
                         fullSceneData.put("similarityScore", sceneSubmission.getSimilarityScore());

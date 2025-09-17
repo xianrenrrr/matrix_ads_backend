@@ -13,7 +13,7 @@ import java.util.*;
 @Service
 public class QwenInstructSuggestionService implements SuggestionService {
     
-    private final RestTemplate restTemplate;
+    private RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     
     @Value("${qwen.api.base:}")
@@ -29,12 +29,34 @@ public class QwenInstructSuggestionService implements SuggestionService {
     private int qwenTimeout;
     
     public QwenInstructSuggestionService() {
-        this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
+        this.restTemplate = new RestTemplate();
+    }
+
+    @javax.annotation.PostConstruct
+    private void init() {
+        // Configure timeouts once properties are injected
+        try {
+            var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(qwenTimeout);
+            factory.setReadTimeout(qwenTimeout);
+            this.restTemplate = new RestTemplate(factory);
+        } catch (Exception ignore) {}
+        // Brief startup log to confirm config presence (keys redacted)
+        String base = (qwenApiBase == null || qwenApiBase.isBlank()) ? "<missing>" : qwenApiBase;
+        String keyState = (qwenApiKey == null || qwenApiKey.isBlank()) ? "missing" : "present";
+        System.out.println("[QwenSuggest] base=" + base + ", apiKey=" + keyState + ", timeoutMs=" + qwenTimeout);
     }
     
     @Override
     public SuggestionsResult suggestCn(Map<String, Object> comparisonFacts) {
+        if (qwenApiBase == null || qwenApiBase.isBlank() || qwenApiKey == null || qwenApiKey.isBlank()) {
+            System.err.println("[QwenSuggest] Skipping call: base/key not configured. Using fallback suggestions.");
+            return new SuggestionsResult(
+                Arrays.asList("调整拍摄角度", "保持稳定", "注意光线"),
+                Arrays.asList("重新录制", "查看示例")
+            );
+        }
         String suggestions = callQwenForSuggestions(comparisonFacts);
         
         // Parse the response
@@ -95,9 +117,12 @@ public class QwenInstructSuggestionService implements SuggestionService {
             
             if (response.getStatusCode() == HttpStatus.OK) {
                 return extractContent(response.getBody());
+            } else {
+                System.err.println("[QwenSuggest] Non-200 response: status=" + response.getStatusCodeValue() + 
+                                   ", body=" + truncate(response.getBody()));
             }
         } catch (Exception e) {
-            System.err.println("Qwen suggestions API call failed: " + e.getMessage());
+            System.err.println("[QwenSuggest] API call failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
         
         return "{}";
@@ -141,9 +166,12 @@ public class QwenInstructSuggestionService implements SuggestionService {
             
             if (response.getStatusCode() == HttpStatus.OK) {
                 return extractContent(response.getBody());
+            } else {
+                System.err.println("[QwenSuggest] Strict call non-200: status=" + response.getStatusCodeValue() + 
+                                   ", body=" + truncate(response.getBody()));
             }
         } catch (Exception e) {
-            System.err.println("Qwen stricter suggestions API call failed: " + e.getMessage());
+            System.err.println("[QwenSuggest] Strict call failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
         
         return "{}";
@@ -162,7 +190,7 @@ public class QwenInstructSuggestionService implements SuggestionService {
                     .trim();
             }
         } catch (Exception e) {
-            System.err.println("Failed to extract content: " + e.getMessage());
+            System.err.println("[QwenSuggest] Failed to extract content: " + e.getMessage());
         }
         
         return "{}";
@@ -205,7 +233,7 @@ public class QwenInstructSuggestionService implements SuggestionService {
             return new SuggestionsResult(suggestions, actions);
             
         } catch (Exception e) {
-            System.err.println("Failed to parse suggestions: " + e.getMessage());
+            System.err.println("[QwenSuggest] Failed to parse suggestions: " + e.getMessage());
             return new SuggestionsResult(Collections.emptyList(), Collections.emptyList());
         }
     }
@@ -219,5 +247,10 @@ public class QwenInstructSuggestionService implements SuggestionService {
                result.nextActionsZh() != null &&
                result.nextActionsZh().size() >= 1 &&
                result.nextActionsZh().size() <= 2;
+    }
+
+    private String truncate(String s) {
+        if (s == null) return null;
+        return s.length() > 300 ? s.substring(0, 300) + "…" : s;
     }
 }
