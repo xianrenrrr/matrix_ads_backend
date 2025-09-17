@@ -103,8 +103,7 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             int code = p.waitFor();
             if (code != 0) {
                 // Retry with re-encode to handle mismatched codecs/parameters
-                System.err.println("[Compile] ffmpeg stream-copy concat failed (code=" + code + "), retrying with re-encode...
-                ");
+                System.err.println("[Compile] ffmpeg stream-copy concat failed (code=" + code + "), retrying with re-encode...");
                 outFile.delete();
                 outFile = java.io.File.createTempFile("compiled-", ".mp4");
                 ProcessBuilder pbReencode = new ProcessBuilder(
