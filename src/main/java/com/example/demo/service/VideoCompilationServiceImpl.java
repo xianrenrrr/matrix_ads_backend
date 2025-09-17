@@ -62,17 +62,9 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
 
             String destObject = String.format("videos/%s/%s/compiled.mp4", userId, compositeVideoId);
 
-            // Prefer GCS compose if all URLs are within our bucket
-            if (firebaseStorageService != null) {
-                try {
-                    return firebaseStorageService.composeObjects(sourceUrls, destObject, "video/mp4");
-                } catch (Exception composeError) {
-                    // Fallback to ffmpeg concat if compose fails (e.g., cross-bucket or incompatible)
-                    System.err.println("[Compile] GCS compose failed, falling back to ffmpeg: " + composeError.getMessage());
-                    return ffmpegConcatAndUpload(sourceUrls, destObject);
-                }
-            }
-            // Last resort: ffmpeg only
+            // Important: Do NOT use GCS compose for MP4 videos.
+            // MP4 containers have a single moov/metadata atom; byte-wise composition creates an invalid file
+            // that most players will only play the first segment of. Always use ffmpeg to concat properly.
             return ffmpegConcatAndUpload(sourceUrls, destObject);
         } catch (Exception e) {
             throw new RuntimeException("Failed to compile video: " + e.getMessage(), e);
@@ -110,7 +102,23 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             Process p = pb.start();
             int code = p.waitFor();
             if (code != 0) {
-                throw new RuntimeException("ffmpeg concat failed with exit code " + code);
+                // Retry with re-encode to handle mismatched codecs/parameters
+                System.err.println("[Compile] ffmpeg stream-copy concat failed (code=" + code + "), retrying with re-encode...
+                ");
+                outFile.delete();
+                outFile = java.io.File.createTempFile("compiled-", ".mp4");
+                ProcessBuilder pbReencode = new ProcessBuilder(
+                        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", listFile.getAbsolutePath(),
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                        "-c:a", "aac", "-b:a", "192k",
+                        "-movflags", "+faststart",
+                        outFile.getAbsolutePath()
+                );
+                Process p2 = pbReencode.start();
+                int code2 = p2.waitFor();
+                if (code2 != 0) {
+                    throw new RuntimeException("ffmpeg concat (re-encode) failed with exit code " + code2);
+                }
             }
             if (firebaseStorageService == null) {
                 throw new IllegalStateException("FirebaseStorageService not available for upload");
