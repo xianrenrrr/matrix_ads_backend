@@ -91,9 +91,17 @@ public class SceneSubmissionController {
             
             sceneSubmission.setSimilarityScore(comparisonResult.similarityScore);
             sceneSubmission.setAiSuggestions(comparisonResult.suggestions);
-            
-            log.info("AI Comparison for scene {}: score={}, suggestions={}", 
-                    sceneNumber, comparisonResult.similarityScore, comparisonResult.suggestions);
+
+            // Log a remapped display score where ~36% becomes 0% and 100% stays 100%
+            double raw = comparisonResult.similarityScore;
+            double floor = 0.36; // empirical floor of current scoring
+            double mapped = (raw - floor) / (1.0 - floor);
+            if (mapped < 0) mapped = 0;
+            if (mapped > 1) mapped = 1;
+            int displayPercent = (int) Math.round(mapped * 100.0);
+
+            log.info("AI Comparison for scene {}: score={}%, raw={}, suggestions={}",
+                    sceneNumber, displayPercent, String.format("%.4f", raw), comparisonResult.suggestions);
                     
         } catch (Exception e) {
             log.warn("AI comparison failed, using fallback scores: {}", e.getMessage());

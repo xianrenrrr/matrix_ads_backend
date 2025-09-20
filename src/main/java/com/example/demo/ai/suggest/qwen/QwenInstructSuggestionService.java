@@ -22,7 +22,7 @@ public class QwenInstructSuggestionService implements SuggestionService {
     @Value("${qwen.api.key:}")
     private String qwenApiKey;
     
-    @Value("${qwen.suggest.model:qwen-2.5-instruct}")
+    @Value("${qwen.suggest.model:qwen-plus}")
     private String qwenModel;
     
     @Value("${qwen.timeout.ms:15000}")

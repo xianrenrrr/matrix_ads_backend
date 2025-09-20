@@ -528,9 +528,7 @@ public class ComparisonAIService {
         return jaccardSimilarity;
     }
     
-    /**
-     * Generate Chinese suggestions using new suggestion service (Qwen-2.5-instruct)
-     */
+
     private List<String> generateChineseSuggestions(Scene templateScene, SimilarityScores scores, 
                                                    List<PerSecondMetric> metrics) {
         try {
