@@ -118,8 +118,13 @@ public class GcsFileResolver {
             }
             throw new IllegalArgumentException("Invalid GCS URL format: " + gcsUrl);
         } else if (gcsUrl.startsWith("https://storage.googleapis.com/")) {
-            // Format: https://storage.googleapis.com/bucket-name/object-path
+            // Format: https://storage.googleapis.com/bucket-name/object-path[?query]
             String path = gcsUrl.replace("https://storage.googleapis.com/", "");
+            // Strip query parameters if present
+            int qIdx = path.indexOf('?');
+            if (qIdx >= 0) {
+                path = path.substring(0, qIdx);
+            }
             if (path.startsWith(bucketName + "/")) {
                 return path.substring(bucketName.length() + 1);
             }

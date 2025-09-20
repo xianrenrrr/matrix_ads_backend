@@ -71,18 +71,18 @@ public class YoloV8SegService implements SegmentationService {
     }
 
     private List<OverlayShape> detectWithHuggingFace(String keyframeUrl) throws IOException {
-        // 1) Load image bytes and dimensions
-        byte[] bytes;
+        // 1) Load image and dimensions (BufferedImage), then re-encode as JPEG for HF
+        BufferedImage image;
         int imgW; int imgH;
         File localFile = null;
 
         // Try to resolve via GcsFileResolver first (handles gs:// and GCS HTTPS)
-        if (gcsFileResolver != null && (keyframeUrl.startsWith("gs://") || keyframeUrl.startsWith("https://storage.googleapis.com/"))) {
+        if (gcsFileResolver != null && keyframeUrl.startsWith("gs://")) {
             try (GcsFileResolver.ResolvedFile rf = gcsFileResolver.resolve(keyframeUrl)) {
                 localFile = new File(rf.getPathAsString());
-                bytes = Files.readAllBytes(localFile.toPath());
                 BufferedImage bi = ImageIO.read(localFile);
                 if (bi == null) throw new IOException("Failed to read image: " + localFile);
+                image = bi;
                 imgW = bi.getWidth(); imgH = bi.getHeight();
             }
         } else if (keyframeUrl.startsWith("file:")) {
@@ -90,9 +90,9 @@ public class YoloV8SegService implements SegmentationService {
             String path = keyframeUrl.replaceFirst("^file:(//)?", "");
             localFile = new File(path);
             if (!localFile.exists()) throw new IOException("Local frame file not found: " + path);
-            bytes = Files.readAllBytes(localFile.toPath());
             BufferedImage bi = ImageIO.read(localFile);
             if (bi == null) throw new IOException("Failed to read image: " + localFile);
+            image = bi;
             imgW = bi.getWidth(); imgH = bi.getHeight();
         } else if (keyframeUrl.startsWith("http://") || keyframeUrl.startsWith("https://")) {
             // General HTTP fetch
@@ -100,24 +100,29 @@ public class YoloV8SegService implements SegmentationService {
             if (!imgResp.getStatusCode().is2xxSuccessful() || imgResp.getBody() == null) {
                 throw new IOException("Failed to fetch image: HTTP " + imgResp.getStatusCodeValue());
             }
-            bytes = imgResp.getBody();
             // Read dimensions from bytes
-            BufferedImage bi = ImageIO.read(new java.io.ByteArrayInputStream(bytes));
+            BufferedImage bi = ImageIO.read(new java.io.ByteArrayInputStream(imgResp.getBody()));
             if (bi == null) throw new IOException("Failed to decode image bytes");
+            image = bi;
             imgW = bi.getWidth(); imgH = bi.getHeight();
         } else {
             // Treat as local path string
             localFile = new File(keyframeUrl);
             if (!localFile.exists()) throw new IOException("Frame path not found: " + keyframeUrl);
-            bytes = Files.readAllBytes(localFile.toPath());
             BufferedImage bi = ImageIO.read(localFile);
             if (bi == null) throw new IOException("Failed to read image: " + localFile);
+            image = bi;
             imgW = bi.getWidth(); imgH = bi.getHeight();
         }
 
+        // Re-encode as JPEG to ensure supported content type
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        ImageIO.write(image, "jpg", baos);
+        byte[] bytes = baos.toByteArray();
+
         // 2) Call HF inference API (object detection)
         HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        headers.setContentType(MediaType.IMAGE_JPEG);
         headers.setAccept(java.util.List.of(MediaType.APPLICATION_JSON));
         headers.set("Authorization", "Bearer " + hfApiKey);
         HttpEntity<byte[]> entity = new HttpEntity<>(bytes, headers);
