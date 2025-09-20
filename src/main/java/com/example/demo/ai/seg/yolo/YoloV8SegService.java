@@ -57,38 +57,16 @@ public class YoloV8SegService implements SegmentationService {
 
     @Override
     public List<OverlayShape> detect(String keyframeUrl) {
-        // Prefer HuggingFace API if configured
+        // Prefer HuggingFace API; no localhost fallback
         if (hfEndpoint != null && !hfEndpoint.isBlank() && hfApiKey != null && !hfApiKey.isBlank()) {
             try {
                 return detectWithHuggingFace(keyframeUrl);
             } catch (Exception e) {
                 System.err.println("YOLO(HF) detection failed: " + e.getMessage());
+                return Collections.emptyList();
             }
         }
-
-        // Fallback to legacy local endpoint if configured
-        try {
-            Map<String, String> request = new HashMap<>();
-            request.put("image_url", keyframeUrl);
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, String>> entity = new HttpEntity<>(request, headers);
-
-            ResponseEntity<String> response = restTemplate.exchange(
-                yoloApiUrl,
-                HttpMethod.POST,
-                entity,
-                String.class
-            );
-
-            if (response.getStatusCode() == HttpStatus.OK) {
-                return parseYoloResponse(response.getBody());
-            }
-        } catch (Exception e) {
-            System.err.println("YOLO detection failed: " + e.getMessage());
-        }
-
+        System.err.println("YOLO(HF) not configured. Set AI_YOLO_API_KEY and optionally AI_YOLO_ENDPOINT.");
         return Collections.emptyList();
     }
 
@@ -107,7 +85,16 @@ public class YoloV8SegService implements SegmentationService {
                 if (bi == null) throw new IOException("Failed to read image: " + localFile);
                 imgW = bi.getWidth(); imgH = bi.getHeight();
             }
-        } else {
+        } else if (keyframeUrl.startsWith("file:")) {
+            // Local file URL
+            String path = keyframeUrl.replaceFirst("^file:(//)?", "");
+            localFile = new File(path);
+            if (!localFile.exists()) throw new IOException("Local frame file not found: " + path);
+            bytes = Files.readAllBytes(localFile.toPath());
+            BufferedImage bi = ImageIO.read(localFile);
+            if (bi == null) throw new IOException("Failed to read image: " + localFile);
+            imgW = bi.getWidth(); imgH = bi.getHeight();
+        } else if (keyframeUrl.startsWith("http://") || keyframeUrl.startsWith("https://")) {
             // General HTTP fetch
             ResponseEntity<byte[]> imgResp = restTemplate.exchange(keyframeUrl, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()), byte[].class);
             if (!imgResp.getStatusCode().is2xxSuccessful() || imgResp.getBody() == null) {
@@ -117,6 +104,14 @@ public class YoloV8SegService implements SegmentationService {
             // Read dimensions from bytes
             BufferedImage bi = ImageIO.read(new java.io.ByteArrayInputStream(bytes));
             if (bi == null) throw new IOException("Failed to decode image bytes");
+            imgW = bi.getWidth(); imgH = bi.getHeight();
+        } else {
+            // Treat as local path string
+            localFile = new File(keyframeUrl);
+            if (!localFile.exists()) throw new IOException("Frame path not found: " + keyframeUrl);
+            bytes = Files.readAllBytes(localFile.toPath());
+            BufferedImage bi = ImageIO.read(localFile);
+            if (bi == null) throw new IOException("Failed to read image: " + localFile);
             imgW = bi.getWidth(); imgH = bi.getHeight();
         }
 
