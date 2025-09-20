@@ -12,6 +12,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+
+import com.example.demo.ai.shared.GcsFileResolver;
 
 @Service
 public class YoloV8SegService implements SegmentationService {
@@ -19,8 +26,16 @@ public class YoloV8SegService implements SegmentationService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     
+    // Legacy local YOLO endpoint (kept for backward compatibility)
     @Value("${YOLO_API_URL:http://localhost:5000/detect}")
     private String yoloApiUrl;
+
+    // HuggingFace Inference API endpoint and key (preferred path)
+    @Value("${ai.providers.yolo.endpoint:https://api-inference.huggingface.co/models/facebook/detr-resnet-50}")
+    private String hfEndpoint;
+
+    @Value("${ai.providers.yolo.api-key:}")
+    private String hfApiKey;
     
     @Value("${ai.overlay.minConf:0.60}")
     private double minConfidence;
@@ -36,32 +51,140 @@ public class YoloV8SegService implements SegmentationService {
         this.objectMapper = new ObjectMapper();
     }
     
+    @Autowired(required = false)
+    private GcsFileResolver gcsFileResolver;
+
     @Override
     public List<OverlayShape> detect(String keyframeUrl) {
+        // Prefer HuggingFace API if configured
+        if (hfEndpoint != null && !hfEndpoint.isBlank() && hfApiKey != null && !hfApiKey.isBlank()) {
+            try {
+                return detectWithHuggingFace(keyframeUrl);
+            } catch (Exception e) {
+                System.err.println("YOLO(HF) detection failed: " + e.getMessage());
+            }
+        }
+
+        // Fallback to legacy local endpoint if configured
         try {
             Map<String, String> request = new HashMap<>();
             request.put("image_url", keyframeUrl);
-            
+
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<Map<String, String>> entity = new HttpEntity<>(request, headers);
-            
+
             ResponseEntity<String> response = restTemplate.exchange(
                 yoloApiUrl,
                 HttpMethod.POST,
                 entity,
                 String.class
             );
-            
+
             if (response.getStatusCode() == HttpStatus.OK) {
                 return parseYoloResponse(response.getBody());
             }
         } catch (Exception e) {
             System.err.println("YOLO detection failed: " + e.getMessage());
         }
-        
+
         return Collections.emptyList();
     }
+
+    private List<OverlayShape> detectWithHuggingFace(String keyframeUrl) throws IOException {
+        // 1) Load image bytes and dimensions
+        byte[] bytes;
+        int imgW; int imgH;
+        File localFile = null;
+
+        // Try to resolve via GcsFileResolver first (handles gs:// and GCS HTTPS)
+        if (gcsFileResolver != null && (keyframeUrl.startsWith("gs://") || keyframeUrl.startsWith("https://storage.googleapis.com/"))) {
+            try (GcsFileResolver.ResolvedFile rf = gcsFileResolver.resolve(keyframeUrl)) {
+                localFile = new File(rf.getPathAsString());
+                bytes = Files.readAllBytes(localFile.toPath());
+                BufferedImage bi = ImageIO.read(localFile);
+                if (bi == null) throw new IOException("Failed to read image: " + localFile);
+                imgW = bi.getWidth(); imgH = bi.getHeight();
+            }
+        } else {
+            // General HTTP fetch
+            ResponseEntity<byte[]> imgResp = restTemplate.exchange(keyframeUrl, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()), byte[].class);
+            if (!imgResp.getStatusCode().is2xxSuccessful() || imgResp.getBody() == null) {
+                throw new IOException("Failed to fetch image: HTTP " + imgResp.getStatusCodeValue());
+            }
+            bytes = imgResp.getBody();
+            // Read dimensions from bytes
+            BufferedImage bi = ImageIO.read(new java.io.ByteArrayInputStream(bytes));
+            if (bi == null) throw new IOException("Failed to decode image bytes");
+            imgW = bi.getWidth(); imgH = bi.getHeight();
+        }
+
+        // 2) Call HF inference API (object detection)
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        headers.setAccept(java.util.List.of(MediaType.APPLICATION_JSON));
+        headers.set("Authorization", "Bearer " + hfApiKey);
+        HttpEntity<byte[]> entity = new HttpEntity<>(bytes, headers);
+
+        ResponseEntity<String> response = restTemplate.exchange(
+            hfEndpoint,
+            HttpMethod.POST,
+            entity,
+            String.class
+        );
+
+        if (!response.getStatusCode().is2xxSuccessful()) {
+            throw new IOException("HF responded " + response.getStatusCodeValue() + ": " + truncate(response.getBody()));
+        }
+
+        // 3) Parse HF response and normalize boxes
+        return parseHuggingFaceResponse(response.getBody(), imgW, imgH);
+    }
+
+    private List<OverlayShape> parseHuggingFaceResponse(String body, int imgW, int imgH) {
+        List<OverlayShape> shapes = new ArrayList<>();
+        try {
+            JsonNode root = objectMapper.readTree(body);
+            JsonNode arr = root.isArray() ? root : root.path("predictions");
+            if (arr != null && arr.isArray()) {
+                for (JsonNode det : arr) {
+                    double score = det.path("score").asDouble(det.path("confidence").asDouble(0.0));
+                    String label = det.path("label").asText(det.path("class").asText(""));
+                    JsonNode box = det.path("box");
+                    double xmin, ymin, xmax, ymax;
+                    if (box.isObject()) {
+                        xmin = box.path("xmin").asDouble();
+                        ymin = box.path("ymin").asDouble();
+                        xmax = box.path("xmax").asDouble();
+                        ymax = box.path("ymax").asDouble();
+                    } else {
+                        // Fallback to x,y,w,h if provided
+                        xmin = det.path("x").asDouble();
+                        ymin = det.path("y").asDouble();
+                        double w = det.path("width").asDouble();
+                        double h = det.path("height").asDouble();
+                        xmax = xmin + w; ymax = ymin + h;
+                    }
+                    if (imgW <= 0 || imgH <= 0) continue;
+                    double nx = clamp01(xmin / imgW);
+                    double ny = clamp01(ymin / imgH);
+                    double nw = clamp01((xmax - xmin) / imgW);
+                    double nh = clamp01((ymax - ymin) / imgH);
+
+                    double area = nw * nh;
+                    if (score >= minConfidence && area >= minArea) {
+                        shapes.add(new OverlayBox(label, "", score, nx, ny, nw, nh));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to parse YOLO(HF) response: " + e.getMessage());
+        }
+        return postProcessShapes(shapes);
+    }
+
+    private static double clamp01(double v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+    private String truncate(String s) { return (s == null) ? null : (s.length() > 300 ? s.substring(0,300) + "…" : s); }
     
     private List<OverlayShape> parseYoloResponse(String responseBody) {
         List<OverlayShape> shapes = new ArrayList<>();
