@@ -4,6 +4,7 @@ import com.example.demo.ai.seg.SegmentationService;
 import com.example.demo.ai.seg.dto.OverlayBox;
 import com.example.demo.ai.seg.dto.OverlayShape;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.*;
@@ -31,10 +32,10 @@ public class YoloV8SegService implements SegmentationService {
     private String yoloApiUrl;
 
     // HuggingFace Inference API endpoint and key (preferred path)
-    @Value("${ai.providers.yolo.endpoint:https://api-inference.huggingface.co/models/facebook/detr-resnet-50}")
+    @Value("${AI_YOLO_ENDPOINT:${ai.providers.yolo.endpoint:https://api-inference.huggingface.co/models/facebook/detr-resnet-50}}")
     private String hfEndpoint;
 
-    @Value("${ai.providers.yolo.api-key:}")
+    @Value("${AI_YOLO_API_KEY:${ai.providers.yolo.api-key:}}")
     private String hfApiKey;
     
     @Value("${ai.overlay.minConf:0.60}")
