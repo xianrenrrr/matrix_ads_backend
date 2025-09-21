@@ -308,57 +308,87 @@ public class ComparisonAIService {
      */
     private double calculateVisualScore(String refFrameUrl, String subFrameUrl) {
         try {
-            // Skip computation for placeholder URLs
-            if (refFrameUrl.contains("_frame_") && subFrameUrl.contains("_frame_")) {
-                return 0.7; // Mock score for placeholder URLs
-            }
-            
             log.debug("Calculating visual similarity between {} and {}", refFrameUrl, subFrameUrl);
-            
-            // Use Python script for HSV histogram comparison
-            ProcessBuilder pb = new ProcessBuilder(
-                "python3", "-c",
-                "import cv2; import numpy as np; " +
-                "def calc_hsv_similarity(img1_path, img2_path): " +
-                "    try: " +
-                "        img1 = cv2.imread(img1_path); img2 = cv2.imread(img2_path); " +
-                "        if img1 is None or img2 is None: return 0.5; " +
-                "        hsv1 = cv2.cvtColor(img1, cv2.COLOR_BGR2HSV); " +
-                "        hsv2 = cv2.cvtColor(img2, cv2.COLOR_BGR2HSV); " +
-                "        hist1 = cv2.calcHist([hsv1], [0,1,2], None, [50,60,60], [0,180,0,256,0,256]); " +
-                "        hist2 = cv2.calcHist([hsv2], [0,1,2], None, [50,60,60], [0,180,0,256,0,256]); " +
-                "        correlation = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL); " +
-                "        return max(0.0, min(1.0, correlation)); " +
-                "    except: return 0.5; " +
-                "print(calc_hsv_similarity('" + refFrameUrl.replace("file://", "") + "', '" + 
-                subFrameUrl.replace("file://", "") + "'))"
-            );
-            
-            Process process = pb.start();
-            
-            try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))) {
-                String output = reader.readLine();
-                
-                if (output != null && !output.trim().isEmpty()) {
-                    double similarity = Double.parseDouble(output.trim());
-                    log.debug("Visual similarity calculated: {} between {} and {}", similarity, refFrameUrl, subFrameUrl);
-                    return similarity;
-                }
+            java.awt.image.BufferedImage img1 = loadBufferedImage(refFrameUrl);
+            java.awt.image.BufferedImage img2 = loadBufferedImage(subFrameUrl);
+            if (img1 == null || img2 == null) {
+                return calculateFallbackVisualScore(refFrameUrl, subFrameUrl);
             }
-            
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                log.warn("Python HSV calculation failed with exit code {}", exitCode);
+
+            final int HB = 50, SB = 60, VB = 60;
+            int bins = HB * SB * VB;
+            double[] h1 = new double[bins];
+            double[] h2 = new double[bins];
+            fillHsvHistogram(img1, HB, SB, VB, h1);
+            fillHsvHistogram(img2, HB, SB, VB, h2);
+            normalizeHist(h1);
+            normalizeHist(h2);
+
+            // Pearson correlation in [-1,1]
+            double mean1 = mean(h1), mean2 = mean(h2);
+            double num = 0, den1 = 0, den2 = 0;
+            for (int i = 0; i < bins; i++) {
+                double a = h1[i] - mean1;
+                double b = h2[i] - mean2;
+                num += a * b;
+                den1 += a * a;
+                den2 += b * b;
             }
-            
+            double denom = Math.sqrt(Math.max(den1, 1e-12)) * Math.sqrt(Math.max(den2, 1e-12));
+            double corr = denom > 0 ? num / denom : 0.0;
+            double score = (corr + 1.0) / 2.0; // map to [0,1]
+            return Math.max(0.0, Math.min(1.0, score));
         } catch (Exception e) {
-            log.warn("Failed to calculate visual similarity: {}, using fallback", e.getMessage());
+            log.warn("Failed to calculate visual similarity (Java HSV): {}", e.getMessage());
+            return calculateFallbackVisualScore(refFrameUrl, subFrameUrl);
         }
-        
-        // Fallback: simple filename-based heuristic
-        double fallbackScore = calculateFallbackVisualScore(refFrameUrl, subFrameUrl);
-        log.debug("Using fallback visual score: {}", fallbackScore);
-        return fallbackScore;
+    }
+
+    private java.awt.image.BufferedImage loadBufferedImage(String url) {
+        try {
+            if (url.startsWith("file:")) {
+                String path = url.replaceFirst("^file:(//)?", "");
+                return javax.imageio.ImageIO.read(new java.io.File(path));
+            } else if (url.startsWith("http://") || url.startsWith("https://")) {
+                org.springframework.web.client.RestTemplate rt = new org.springframework.web.client.RestTemplate();
+                org.springframework.http.ResponseEntity<byte[]> resp = rt.getForEntity(url, byte[].class);
+                if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) return null;
+                return javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(resp.getBody()));
+            } else {
+                return javax.imageio.ImageIO.read(new java.io.File(url));
+            }
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void fillHsvHistogram(java.awt.image.BufferedImage img, int HB, int SB, int VB, double[] out) {
+        int w = img.getWidth(), h = img.getHeight();
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int rgb = img.getRGB(x, y);
+                int r = (rgb >> 16) & 0xFF, g = (rgb >> 8) & 0xFF, b = rgb & 0xFF;
+                float[] hsv = java.awt.Color.RGBtoHSB(r, g, b, null);
+                int hi = Math.min(HB - 1, (int) (hsv[0] * HB));
+                int si = Math.min(SB - 1, (int) (hsv[1] * SB));
+                int vi = Math.min(VB - 1, (int) (hsv[2] * VB));
+                int idx = (hi * SB + si) * VB + vi;
+                out[idx] += 1.0;
+            }
+        }
+    }
+
+    private void normalizeHist(double[] h) {
+        double sum = 0;
+        for (double v : h) sum += v;
+        if (sum <= 0) return;
+        for (int i = 0; i < h.length; i++) h[i] /= sum;
+    }
+
+    private double mean(double[] h) {
+        double s = 0;
+        for (double v : h) s += v;
+        return h.length > 0 ? s / h.length : 0.0;
     }
     
     /**
