@@ -35,11 +35,12 @@ public class VideoController {
         return "en";
     }
     
-    private ManualTemplate generateAITemplate(Video video, String language, String userDescription) {
+    private ManualTemplate generateAITemplate(Video video, String language, String userDescription, Double sceneThreshold) {
         // Use AI template generator to create template with user description
         System.out.println("Generating AI template for video ID: " + video.getId() + " in language: " + language + 
-                          " with user description: " + (userDescription != null ? "provided" : "none"));
-        return aiTemplateGenerator.generateTemplate(video, language, userDescription);
+                          " with user description: " + (userDescription != null ? "provided" : "none") +
+                          " and scene threshold: " + (sceneThreshold != null ? sceneThreshold : "default"));
+        return aiTemplateGenerator.generateTemplate(video, language, userDescription, sceneThreshold);
     }
     
     @Autowired
@@ -158,6 +159,7 @@ public class VideoController {
                                              @RequestParam(value = "description", required = false) String description,
                                              @RequestParam(value = "templateId", required = false) String templateId,
                                              @RequestParam(value = "groupIds", required = false) String groupIdsStr,
+                                             @RequestParam(value = "sceneThreshold", required = false) Double sceneThreshold,
                                              @RequestHeader(value = "Accept-Language", required = false, defaultValue = "en") String acceptLanguage) throws Exception {
         System.out.println("=== VIDEO UPLOAD REQUEST ===");
         System.out.println("Accept-Language header: " + acceptLanguage);
@@ -166,6 +168,7 @@ public class VideoController {
         System.out.println("Description: " + description);
         System.out.println("Template ID: " + templateId);
         System.out.println("Group IDs: " + groupIdsStr);
+        System.out.println("Scene Threshold: " + (sceneThreshold != null ? sceneThreshold : "default"));
         System.out.println("=============================");
         
         // Upload to Firebase Storage and extract thumbnail
@@ -191,7 +194,7 @@ public class VideoController {
             String language = detectLanguage(acceptLanguage);
             System.out.println("Detected language: " + language);
             
-            ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language, description);
+            ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language, description, sceneThreshold);
             aiGeneratedTemplate.setUserId(userId);
             aiGeneratedTemplate.setVideoId(savedVideo.getId());
             // Preserve AI-generated title; only prepend user title if provided

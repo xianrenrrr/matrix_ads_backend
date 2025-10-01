@@ -82,15 +82,23 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     
     @Override
     public ManualTemplate generateTemplate(Video video, String language) {
-        return generateTemplate(video, language, null);
+        return generateTemplate(video, language, null, null);
     }
     
     @Override
     public ManualTemplate generateTemplate(Video video, String language, String userDescription) {
+        return generateTemplate(video, language, userDescription, null);
+    }
+    
+    @Override
+    public ManualTemplate generateTemplate(Video video, String language, String userDescription, Double sceneThresholdOverride) {
         log.info("Starting AI template generation for video ID: {} in language: {} with user description: {}", 
                  video.getId(), language, userDescription != null ? "provided" : "none");
         if (userDescription != null && !userDescription.trim().isEmpty()) {
             log.info("User description content: {}", userDescription);
+        }
+        if (sceneThresholdOverride != null) {
+            log.info("Scene detection threshold override provided: {}", sceneThresholdOverride);
         }
 
         try {
@@ -100,7 +108,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             String videoUrl = video.getUrl();
             
             // Use FFmpeg for scene detection instead of Google Video Intelligence
-            List<SceneSegment> sceneSegments = sceneDetectionService.detectScenes(videoUrl);
+            List<SceneSegment> sceneSegments = sceneDetectionService.detectScenes(videoUrl, sceneThresholdOverride);
             
             if (sceneSegments.isEmpty()) {
                 log.info("No scenes detected, creating fallback template");

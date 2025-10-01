@@ -39,24 +39,31 @@ public class FFmpegSceneDetectionService {
      * @return List of scene segments with start/end timestamps
      */
     public List<SceneSegment> detectScenes(String videoUrl) {
-        System.out.printf("FFmpeg scene detection starting for: %s with threshold: %.2f (configured: ai.scenes.threshold=%.2f)%n", 
-                         videoUrl, sceneThreshold, sceneThreshold);
+        return detectScenes(videoUrl, null);
+    }
+
+    public List<SceneSegment> detectScenes(String videoUrl, Double thresholdOverride) {
+        double effectiveThreshold = thresholdOverride != null ? clampThreshold(thresholdOverride) : sceneThreshold;
+        System.out.printf(
+            "FFmpeg scene detection starting for: %s with threshold: %.2f (configured default: %.2f)%n",
+            videoUrl, effectiveThreshold, sceneThreshold
+        );
         List<SceneSegment> scenes = new ArrayList<>();
-        
+
         try {
             // Resolve GCS URL to local file to avoid 403 errors
             try (GcsFileResolver.ResolvedFile resolvedFile = gcsFileResolver.resolve(videoUrl)) {
                 String localPath = resolvedFile.getPathAsString();
-                
+
                 // Get real video duration using ffprobe
                 Double videoDuration = getVideoDuration(localPath);
-                
+
                 // Detect scene change timestamps using FFmpeg
-                List<Double> sceneTimestamps = detectSceneTimestamps(localPath);
-                
+                List<Double> sceneTimestamps = detectSceneTimestamps(localPath, effectiveThreshold);
+
                 // Create scene segments from timestamps
                 scenes = createSceneSegments(sceneTimestamps, videoDuration);
-                
+
                 System.out.printf("FFmpeg scene detection completed: %d scenes detected%n", scenes.size());
             }
             
@@ -111,19 +118,19 @@ public class FFmpegSceneDetectionService {
     /**
      * Detect scene change timestamps using FFmpeg
      */
-    private List<Double> detectSceneTimestamps(String localPath) throws Exception {
+    private List<Double> detectSceneTimestamps(String localPath, double threshold) throws Exception {
         List<Double> sceneTimestamps = new ArrayList<>();
         sceneTimestamps.add(0.0); // Always start with 0
-        
+
         // Build FFmpeg command (no shell quotes needed in ProcessBuilder)
         String[] command = {
             ffmpegPath,
             "-i", localPath,
-            "-vf", String.format("select='gt(scene,%.2f)',showinfo", sceneThreshold),
+            "-vf", String.format("select='gt(scene,%.2f)',showinfo", threshold),
             "-f", "null",
             "-"
         };
-        
+
         System.out.printf("Running FFmpeg command: %s%n", String.join(" ", command));
         
         ProcessBuilder pb = new ProcessBuilder(command);
@@ -205,5 +212,13 @@ public class FFmpegSceneDetectionService {
         fallback.setEndTime(Duration.ofSeconds(30)); // Default 30 seconds
         scenes.add(fallback);
         return scenes;
+    }
+
+    private double clampThreshold(double value) {
+        double clamped = Math.max(0.05, Math.min(value, 0.95));
+        if (clamped != value) {
+            System.out.printf("Scene threshold override %.3f clamped to %.3f%n", value, clamped);
+        }
+        return clamped;
     }
 }
