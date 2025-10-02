@@ -137,7 +137,6 @@ public class GroupDaoImpl implements GroupDao {
     @Override
     public String getUserGroupId(String userId) {
         try {
-            System.out.println("DEBUG: Looking for group ID for user " + userId);
             
             // First, check the user document for groupId field (new approach)
             DocumentReference userRef = db.collection("users").document(userId);
@@ -146,12 +145,10 @@ public class GroupDaoImpl implements GroupDao {
             if (userDoc.exists()) {
                 String groupId = userDoc.getString("groupId");
                 if (groupId != null && !groupId.trim().isEmpty()) {
-                    System.out.println("DEBUG: Found groupId in user document: " + groupId);
                     return groupId;
                 }
             }
             
-            System.out.println("DEBUG: No groupId in user document, searching groups collection");
             
             // Fallback: Try to find by recipientId (which should be the userId) 
             // since content creators don't have email addresses
@@ -163,11 +160,9 @@ public class GroupDaoImpl implements GroupDao {
             ApiFuture<QuerySnapshot> querySnapshot = query.get();
             QuerySnapshot snapshot = querySnapshot.get();
             
-            System.out.println("DEBUG: Found " + snapshot.size() + " group documents for user " + userId + " (searching by recipientId)");
             
             if (!snapshot.isEmpty()) {
                 String groupId = snapshot.getDocuments().get(0).getString("groupId");
-                System.out.println("DEBUG: User " + userId + " belongs to group: " + groupId);
                 return groupId;
             }
             
@@ -180,18 +175,14 @@ public class GroupDaoImpl implements GroupDao {
             querySnapshot = query.get();
             snapshot = querySnapshot.get();
             
-            System.out.println("DEBUG: Found " + snapshot.size() + " group documents for user " + userId + " (searching by recipientEmail)");
             
             if (!snapshot.isEmpty()) {
                 String groupId = snapshot.getDocuments().get(0).getString("groupId");
-                System.out.println("DEBUG: User " + userId + " belongs to group: " + groupId);
                 return groupId;
             }
             
-            System.out.println("DEBUG: No group found for user " + userId);
             return null;
         } catch (InterruptedException | ExecutionException e) {
-            System.err.println("DEBUG: Error getting user group ID: " + e.getMessage());
             throw new RuntimeException("Failed to get user group ID", e);
         }
     }

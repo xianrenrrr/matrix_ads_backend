@@ -32,10 +32,8 @@ public class UserController {
         
         // Find user's group using GroupDao
         String userGroupId = groupDao.getUserGroupId(userId);
-        System.out.println("DEBUG: getUserGroupId returned: " + userGroupId);
         
         if (userGroupId == null) {
-            System.out.println("DEBUG: User " + userId + " has no group - returning empty list");
             return ResponseEntity.ok(ApiResponse.ok(
                 i18nService.getMessage("operation.success", language),
                 Collections.emptyList()));
@@ -43,7 +41,6 @@ public class UserController {
         
         // Get templates assigned to this group using TemplateDao
         List<ManualTemplate> assignedTemplates = templateDao.getTemplatesAssignedToGroup(userGroupId);
-        System.out.println("DEBUG: getTemplatesAssignedToGroup returned " + assignedTemplates.size() + " templates");
         
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, assignedTemplates));

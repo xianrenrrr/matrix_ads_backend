@@ -275,7 +275,6 @@ public class AuthController {
             throw new NoSuchElementException("Group not found with token: " + inviteToken);
         }
         
-        System.out.println("DEBUG: Found group - GroupId: " + group.getId() + ", GroupName: " + group.getGroupName());
         
         // Check if group is active
         if (!"active".equals(group.getStatus())) {
@@ -328,7 +327,6 @@ public class AuthController {
             if ("content_creator".equals(user.getRole())) {
                 // Content creators get assigned through groups
                 String groupId = group.getId();
-                System.out.println("DEBUG: Setting groupId for content creator " + user.getId() + " to: " + groupId);
                 user.setGroupId(groupId);
             } else if ("content_manager".equals(user.getRole())) {
                 user.setCreated_Templates(new HashMap<>());
