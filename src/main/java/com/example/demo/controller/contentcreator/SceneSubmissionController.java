@@ -81,46 +81,70 @@ public class SceneSubmissionController {
         sceneSubmission.setFileSize(file.getSize());
         sceneSubmission.setFormat(getFileExtension(file.getOriginalFilename()));
         
-        // REAL AI Scene Comparison (YOLO + Qwen via AI orchestrator)
-        try {
-            // Get the original video URL from the template's videoId
-            String templateVideoUrl = getTemplateVideoUrl(template.getVideoId());
-            
-            ComparisonAIService.SceneComparisonResult comparisonResult = comparisonAIService.compareScenes(
-                templateScene, uploadResult.videoUrl, templateVideoUrl);
-            
-            sceneSubmission.setSimilarityScore(comparisonResult.similarityScore);
-            sceneSubmission.setAiSuggestions(comparisonResult.suggestions);
-
-            // Log a remapped display score where ~36% becomes 0% and 100% stays 100%
-            double raw = comparisonResult.similarityScore;
-            double floor = 0.36; // empirical floor of current scoring
-            double mapped = (raw - floor) / (1.0 - floor);
-            if (mapped < 0) mapped = 0;
-            if (mapped > 1) mapped = 1;
-            int displayPercent = (int) Math.round(mapped * 100.0);
-
-            log.info("AI Comparison for scene {}: score={}%, raw={}, suggestions={}",
-                    sceneNumber, displayPercent, String.format("%.4f", raw), comparisonResult.suggestions);
-                    
-        } catch (Exception e) {
-            log.warn("AI comparison failed, using fallback scores: {}", e.getMessage());
-            // Fallback to basic scores if AI fails
-            sceneSubmission.setSimilarityScore(0.75);
-            sceneSubmission.setAiSuggestions(Arrays.asList("AI分析暂时不可用", "请检查视频质量"));
-        }
+        // Set initial pending scores - AI will update these asynchronously
+        sceneSubmission.setSimilarityScore(0.0);
+        sceneSubmission.setAiSuggestions(Arrays.asList("AI分析进行中...", "请稍后查看结果"));
+        sceneSubmission.setStatus("pending");
         
-        // Auto-approval logic: per-group threshold
-        double finalSimilarityScore = sceneSubmission.getSimilarityScore();
-        String autoStatus = determineAutoStatus(userId, finalSimilarityScore);
-        if (autoStatus != null) {
-            sceneSubmission.setStatus(autoStatus);
-        }
-        
+        // Save to DB immediately for fast response
         String sceneId = sceneSubmissionDao.save(sceneSubmission);
         sceneSubmission.setId(sceneId);
         
         updateSubmittedVideoWithScene(compositeVideoId, templateId, userId, sceneSubmission);
+        
+        // Process AI comparison asynchronously in background
+        final String finalSceneId = sceneId;
+        final String templateVideoUrl = getTemplateVideoUrl(template.getVideoId());
+        final String userVideoUrl = uploadResult.videoUrl;
+        
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                log.info("Starting async AI comparison for scene {}", sceneNumber);
+                
+                ComparisonAIService.SceneComparisonResult comparisonResult = comparisonAIService.compareScenes(
+                    templateScene, userVideoUrl, templateVideoUrl);
+                
+                // Update the scene submission with AI results
+                SceneSubmission updatedSubmission = sceneSubmissionDao.findById(finalSceneId);
+                if (updatedSubmission != null) {
+                    updatedSubmission.setSimilarityScore(comparisonResult.similarityScore);
+                    updatedSubmission.setAiSuggestions(comparisonResult.suggestions);
+                    
+                    // Auto-approval logic: per-group threshold
+                    String autoStatus = determineAutoStatus(userId, comparisonResult.similarityScore);
+                    if (autoStatus != null) {
+                        updatedSubmission.setStatus(autoStatus);
+                    }
+                    
+                    sceneSubmissionDao.update(updatedSubmission);
+                    
+                    // Log a remapped display score
+                    double raw = comparisonResult.similarityScore;
+                    double floor = 0.20;
+                    double mapped = (raw - floor) / (1.0 - floor);
+                    if (mapped < 0) mapped = 0;
+                    if (mapped > 1) mapped = 1;
+                    int displayPercent = (int) Math.round(mapped * 100.0);
+                    
+                    log.info("AI Comparison completed for scene {}: score={}%, raw={}, suggestions={}",
+                            sceneNumber, displayPercent, String.format("%.4f", raw), comparisonResult.suggestions);
+                }
+                
+            } catch (Exception e) {
+                log.error("Async AI comparison failed for scene {}: {}", sceneNumber, e.getMessage());
+                // Update with fallback scores
+                try {
+                    SceneSubmission fallbackSubmission = sceneSubmissionDao.findById(finalSceneId);
+                    if (fallbackSubmission != null) {
+                        fallbackSubmission.setSimilarityScore(0.75);
+                        fallbackSubmission.setAiSuggestions(Arrays.asList("AI分析暂时不可用", "请检查视频质量"));
+                        sceneSubmissionDao.update(fallbackSubmission);
+                    }
+                } catch (Exception updateError) {
+                    log.error("Failed to update with fallback scores: {}", updateError.getMessage());
+                }
+            }
+        });
         
         // Flatten response data for mini app compatibility
         Map<String, Object> responseData = new HashMap<>();
