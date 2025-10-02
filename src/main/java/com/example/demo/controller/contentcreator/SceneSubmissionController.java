@@ -122,8 +122,14 @@ public class SceneSubmissionController {
         
         updateSubmittedVideoWithScene(compositeVideoId, templateId, userId, sceneSubmission);
         
+        // Flatten response data for mini app compatibility
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("sceneSubmission", sceneSubmission);
+        // Add flattened fields that mini app expects directly
+        responseData.put("similarityScore", sceneSubmission.getSimilarityScore());
+        responseData.put("aiSuggestions", sceneSubmission.getAiSuggestions());
+        responseData.put("status", sceneSubmission.getStatus());
+        responseData.put("sceneId", sceneId);
         
         return ResponseEntity.ok(ApiResponse.ok("Scene uploaded successfully", responseData));
     }
