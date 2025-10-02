@@ -137,11 +137,24 @@ public class ContentManager {
         
         manualTemplate.setUserId(userId);
         
-        // Mark all scenes as manual with grid overlay
-        if (manualTemplate.getScenes() != null) {
+        // Mark all scenes as manual with grid overlay and validate minimum duration
+        if (manualTemplate.getScenes() != null && !manualTemplate.getScenes().isEmpty()) {
             for (com.example.demo.model.Scene scene : manualTemplate.getScenes()) {
                 scene.setSceneSource("manual");
                 scene.setOverlayType("grid");
+                
+                // Validate minimum 2-second scene duration for mini app compatibility
+                Long startMs = scene.getStartTimeMs();
+                Long endMs = scene.getEndTimeMs();
+                if (startMs != null && endMs != null) {
+                    long durationMs = endMs - startMs;
+                    if (durationMs < 2000) {
+                        throw new IllegalArgumentException(
+                            "Scene " + scene.getSceneNumber() + " (" + scene.getSceneTitle() + 
+                            ") is too short (" + durationMs + "ms). Minimum duration is 2 seconds (2000ms)."
+                        );
+                    }
+                }
             }
         }
         
@@ -213,7 +226,7 @@ public class ContentManager {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         updatedTemplate.setId(templateId); // Ensure ID matches path parameter
         
-        // Mark all scenes as manual with grid overlay for updates
+        // Mark all scenes as manual with grid overlay for updates and validate minimum duration
         if (updatedTemplate.getScenes() != null) {
             for (com.example.demo.model.Scene scene : updatedTemplate.getScenes()) {
                 if (scene.getSceneSource() == null) {
@@ -221,6 +234,19 @@ public class ContentManager {
                 }
                 if (scene.getOverlayType() == null) {
                     scene.setOverlayType("grid");
+                }
+                
+                // Validate minimum 2-second scene duration for mini app compatibility
+                Long startMs = scene.getStartTimeMs();
+                Long endMs = scene.getEndTimeMs();
+                if (startMs != null && endMs != null) {
+                    long durationMs = endMs - startMs;
+                    if (durationMs < 2000) {
+                        throw new IllegalArgumentException(
+                            "Scene " + scene.getSceneNumber() + " (" + scene.getSceneTitle() + 
+                            ") is too short (" + durationMs + "ms). Minimum duration is 2 seconds (2000ms)."
+                        );
+                    }
                 }
             }
         }
