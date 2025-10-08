@@ -196,16 +196,60 @@ public class TemplateDaoImpl implements TemplateDao {
             return new ArrayList<>();
         }
         
-        // Fetch only essential fields from each template
+        // Fetch templates in parallel for better performance
         List<Map<String, Object>> summaries = new ArrayList<>();
         CollectionReference templatesRef = db.collection("templates");
         
+        // Create parallel futures for all template reads
+        List<ApiFuture<DocumentSnapshot>> templateFutures = new ArrayList<>();
         for (String templateId : templateIds) {
-            DocumentSnapshot templateDoc = templatesRef.document(templateId).get().get();
+            templateFutures.add(templatesRef.document(templateId).get());
+        }
+        
+        // Wait for all template reads to complete
+        List<DocumentSnapshot> templateDocs = com.google.api.core.ApiFutures.allAsList(templateFutures).get();
+        
+        // Collect video IDs for parallel thumbnail fetch
+        List<String> videoIds = new ArrayList<>();
+        for (DocumentSnapshot templateDoc : templateDocs) {
+            if (templateDoc.exists()) {
+                String videoId = templateDoc.getString("videoId");
+                if (videoId != null && !videoId.isEmpty()) {
+                    videoIds.add(videoId);
+                } else {
+                    videoIds.add(null); // Placeholder to maintain index alignment
+                }
+            }
+        }
+        
+        // Fetch all videos in parallel
+        List<ApiFuture<DocumentSnapshot>> videoFutures = new ArrayList<>();
+        CollectionReference videosRef = db.collection("exampleVideos");
+        for (String videoId : videoIds) {
+            if (videoId != null) {
+                videoFutures.add(videosRef.document(videoId).get());
+            } else {
+                videoFutures.add(null); // Placeholder
+            }
+        }
+        
+        // Wait for all video reads (handle nulls)
+        List<DocumentSnapshot> videoDocs = new ArrayList<>();
+        for (ApiFuture<DocumentSnapshot> future : videoFutures) {
+            if (future != null) {
+                videoDocs.add(future.get());
+            } else {
+                videoDocs.add(null);
+            }
+        }
+        
+        // Process all results
+        for (int i = 0; i < templateDocs.size(); i++) {
+            DocumentSnapshot templateDoc = templateDocs.get(i);
             
             if (templateDoc.exists()) {
                 Map<String, Object> summary = new java.util.HashMap<>();
-                summary.put("id", templateId);
+                summary.put("id", templateDoc.getId());
                 summary.put("templateTitle", templateDoc.getString("templateTitle"));
                 
                 // Get scene count
@@ -232,21 +276,12 @@ public class TemplateDaoImpl implements TemplateDao {
                 }
                 summary.put("duration", totalDurationSeconds);
                 
-                // Get thumbnail from example video and convert to proxy URL
-                String videoId = templateDoc.getString("videoId");
+                // Get thumbnail from parallel video fetch
                 String thumbnail = null;
-                if (videoId != null && !videoId.isEmpty()) {
-                    try {
-                        DocumentSnapshot videoDoc = db.collection("exampleVideos").document(videoId).get().get();
-                        if (videoDoc.exists()) {
-                            String thumbnailUrl = videoDoc.getString("thumbnailUrl");
-                            if (thumbnailUrl != null && !thumbnailUrl.isEmpty()) {
-                                // Convert GCS URL to proxy URL to avoid 403 errors
-                                thumbnail = convertToProxyUrl(thumbnailUrl);
-                            }
-                        }
-                    } catch (Exception e) {
-                        // Ignore thumbnail fetch errors, just use null
+                if (i < videoDocs.size() && videoDocs.get(i) != null && videoDocs.get(i).exists()) {
+                    String thumbnailUrl = videoDocs.get(i).getString("thumbnailUrl");
+                    if (thumbnailUrl != null && !thumbnailUrl.isEmpty()) {
+                        thumbnail = convertToProxyUrl(thumbnailUrl);
                     }
                 }
                 summary.put("thumbnail", thumbnail);
