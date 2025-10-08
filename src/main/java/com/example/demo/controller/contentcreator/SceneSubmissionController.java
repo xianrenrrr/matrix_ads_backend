@@ -82,7 +82,8 @@ public class SceneSubmissionController {
         sceneSubmission.setFormat(getFileExtension(file.getOriginalFilename()));
         
         // Set initial pending scores - AI will update these asynchronously
-        sceneSubmission.setSimilarityScore(0.0);
+        // Use -1 as special value to indicate "calculating" (frontend will show "正在计算")
+        sceneSubmission.setSimilarityScore(-1.0);
         sceneSubmission.setAiSuggestions(Arrays.asList("AI分析进行中...", "请稍后查看结果"));
         sceneSubmission.setStatus("pending");
         
