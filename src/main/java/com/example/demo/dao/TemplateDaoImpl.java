@@ -232,14 +232,18 @@ public class TemplateDaoImpl implements TemplateDao {
                 }
                 summary.put("duration", totalDurationSeconds);
                 
-                // Get thumbnail from example video
+                // Get thumbnail from example video and convert to proxy URL
                 String videoId = templateDoc.getString("videoId");
                 String thumbnail = null;
                 if (videoId != null && !videoId.isEmpty()) {
                     try {
                         DocumentSnapshot videoDoc = db.collection("exampleVideos").document(videoId).get().get();
                         if (videoDoc.exists()) {
-                            thumbnail = videoDoc.getString("thumbnailUrl");
+                            String thumbnailUrl = videoDoc.getString("thumbnailUrl");
+                            if (thumbnailUrl != null && !thumbnailUrl.isEmpty()) {
+                                // Convert GCS URL to proxy URL to avoid 403 errors
+                                thumbnail = convertToProxyUrl(thumbnailUrl);
+                            }
                         }
                     } catch (Exception e) {
                         // Ignore thumbnail fetch errors, just use null
@@ -266,6 +270,40 @@ public class TemplateDaoImpl implements TemplateDao {
             e.printStackTrace();
             return false; // Deletion failed
         }
+    }
+    
+    /**
+     * Convert GCS URL to proxy URL to avoid 403 errors
+     * Returns relative URL that works for both web and mini app
+     * Example: https://storage.googleapis.com/bucket/path/file.jpg -> /images/proxy?path=path/file.jpg
+     * Client should prepend their API base URL
+     */
+    private String convertToProxyUrl(String gcsUrl) {
+        if (gcsUrl == null || gcsUrl.isEmpty()) {
+            return null;
+        }
+        
+        try {
+            // Extract the path after the bucket name
+            // Format: https://storage.googleapis.com/bucket-name/path/to/file.jpg
+            String prefix = "https://storage.googleapis.com/";
+            if (gcsUrl.startsWith(prefix)) {
+                String afterPrefix = gcsUrl.substring(prefix.length());
+                // Remove bucket name (first segment)
+                int firstSlash = afterPrefix.indexOf('/');
+                if (firstSlash > 0) {
+                    String path = afterPrefix.substring(firstSlash + 1);
+                    // URL encode the path for safe transmission
+                    String encodedPath = java.net.URLEncoder.encode(path, "UTF-8");
+                    // Return relative URL - client will prepend their API base URL
+                    return "/images/proxy?path=" + encodedPath;
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to convert GCS URL to proxy URL: " + e.getMessage());
+        }
+        
+        return null;
     }
 
 }
