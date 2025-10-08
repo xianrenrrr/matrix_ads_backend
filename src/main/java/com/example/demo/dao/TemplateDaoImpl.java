@@ -176,6 +176,83 @@ public class TemplateDaoImpl implements TemplateDao {
         
         return templates;
     }
+    
+    @Override
+    public List<Map<String, Object>> getTemplateSummariesForGroup(String groupId) throws ExecutionException, InterruptedException {
+        checkFirestore();
+        
+        // Get assignedTemplates from group document
+        DocumentReference groupRef = db.collection("groups").document(groupId);
+        DocumentSnapshot groupDoc = groupRef.get().get();
+        
+        if (!groupDoc.exists()) {
+            return new ArrayList<>();
+        }
+        
+        @SuppressWarnings("unchecked")
+        List<String> templateIds = (List<String>) groupDoc.get("assignedTemplates");
+        
+        if (templateIds == null || templateIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // Fetch only essential fields from each template
+        List<Map<String, Object>> summaries = new ArrayList<>();
+        CollectionReference templatesRef = db.collection("templates");
+        
+        for (String templateId : templateIds) {
+            DocumentSnapshot templateDoc = templatesRef.document(templateId).get().get();
+            
+            if (templateDoc.exists()) {
+                Map<String, Object> summary = new java.util.HashMap<>();
+                summary.put("id", templateId);
+                summary.put("templateTitle", templateDoc.getString("templateTitle"));
+                
+                // Get scene count
+                Object scenesObj = templateDoc.get("scenes");
+                int sceneCount = 0;
+                if (scenesObj instanceof List) {
+                    sceneCount = ((List<?>) scenesObj).size();
+                }
+                summary.put("sceneCount", sceneCount);
+                
+                // Calculate duration from scenes
+                int totalDurationSeconds = 0;
+                if (scenesObj instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> scenes = (List<Map<String, Object>>) scenesObj;
+                    for (Map<String, Object> scene : scenes) {
+                        Object startMs = scene.get("startTimeMs");
+                        Object endMs = scene.get("endTimeMs");
+                        if (startMs instanceof Number && endMs instanceof Number) {
+                            long duration = ((Number) endMs).longValue() - ((Number) startMs).longValue();
+                            totalDurationSeconds += (int) (duration / 1000);
+                        }
+                    }
+                }
+                summary.put("duration", totalDurationSeconds);
+                
+                // Get thumbnail from example video
+                String videoId = templateDoc.getString("videoId");
+                String thumbnail = null;
+                if (videoId != null && !videoId.isEmpty()) {
+                    try {
+                        DocumentSnapshot videoDoc = db.collection("exampleVideos").document(videoId).get().get();
+                        if (videoDoc.exists()) {
+                            thumbnail = videoDoc.getString("thumbnailUrl");
+                        }
+                    } catch (Exception e) {
+                        // Ignore thumbnail fetch errors, just use null
+                    }
+                }
+                summary.put("thumbnail", thumbnail);
+                
+                summaries.add(summary);
+            }
+        }
+        
+        return summaries;
+    }
 
     @Override
     public boolean deleteTemplate(String id) {

@@ -22,6 +22,9 @@ public interface TemplateDao {
     
     // Get templates assigned to a specific group
     List<ManualTemplate> getTemplatesAssignedToGroup(String groupId) throws ExecutionException, InterruptedException;
+    
+    // Get lightweight template summaries (only essential fields) for a group
+    List<java.util.Map<String, Object>> getTemplateSummariesForGroup(String groupId) throws ExecutionException, InterruptedException;
 
     boolean updateTemplate(String templateId, ManualTemplate manualTemplate) throws ExecutionException, InterruptedException;
 

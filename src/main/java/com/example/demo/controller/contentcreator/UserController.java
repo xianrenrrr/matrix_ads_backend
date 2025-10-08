@@ -22,11 +22,15 @@ public class UserController {
     
     @Autowired
     private I18nService i18nService;
+    
+    @Autowired
+    private com.google.cloud.firestore.Firestore db;
 
 
     // Get assigned templates (Content Creator) - assigned through group  
+    // Returns minimal data for fast loading: id, title, sceneCount, duration, thumbnail, publishStatus
     @GetMapping("/users/{userId}/assigned-templates")
-    public ResponseEntity<ApiResponse<List<ManualTemplate>>> getAssignedTemplates(@PathVariable String userId,
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getAssignedTemplates(@PathVariable String userId,
                                                                                   @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
@@ -39,11 +43,38 @@ public class UserController {
                 Collections.emptyList()));
         }
         
-        // Get templates assigned to this group using TemplateDao
-        List<ManualTemplate> assignedTemplates = templateDao.getTemplatesAssignedToGroup(userGroupId);
+        // Get lightweight template summaries (only essential fields from DB)
+        List<Map<String, Object>> templateSummaries = templateDao.getTemplateSummariesForGroup(userGroupId);
+        
+        // Add publish status for each template
+        for (Map<String, Object> summary : templateSummaries) {
+            String templateId = (String) summary.get("id");
+            String publishStatus = getPublishStatus(userId, templateId);
+            summary.put("publishStatus", publishStatus);
+        }
         
         String message = i18nService.getMessage("operation.success", language);
-        return ResponseEntity.ok(ApiResponse.ok(message, assignedTemplates));
+        return ResponseEntity.ok(ApiResponse.ok(message, templateSummaries));
+    }
+    
+    /**
+     * Get publish status for user's submission of this template
+     */
+    private String getPublishStatus(String userId, String templateId) {
+        try {
+            String compositeVideoId = userId + "_" + templateId;
+            com.google.cloud.firestore.DocumentSnapshot videoDoc = 
+                db.collection("submittedVideos").document(compositeVideoId).get().get();
+            
+            if (videoDoc.exists()) {
+                String status = videoDoc.getString("publishStatus");
+                return status != null ? status : "pending";
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get publish status for user {} template {}: {}", 
+                    userId, templateId, e.getMessage());
+        }
+        return "not_started";
     }
 
 
