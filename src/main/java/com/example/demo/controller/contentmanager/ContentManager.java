@@ -387,5 +387,149 @@ public class ContentManager {
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, videoData));
     }
+    
+    // --- NEW: Manual Template Creation with AI Scene Analysis ---
+    
+    @Autowired
+    private com.example.demo.ai.services.SceneAnalysisService sceneAnalysisService;
+    
+    @Autowired
+    private com.example.demo.dao.VideoDao videoDao;
+    
+    /**
+     * Create manual template with AI analysis for each scene video.
+     * Each uploaded video is analyzed as ONE complete scene (no scene detection/cutting).
+     * 
+     * POST /content-manager/templates/manual-with-ai
+     */
+    @PostMapping(value = "/manual-with-ai", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> createManualTemplateWithAI(
+        @RequestParam("userId") String userId,
+        @RequestParam("templateTitle") String templateTitle,
+        @RequestParam(value = "templateDescription", required = false) String templateDescription,
+        @RequestParam("scenesMetadata") String scenesMetadataJson,
+        @RequestParam(value = "selectedGroupIds", required = false) String selectedGroupIdsJson,
+        @RequestParam Map<String, org.springframework.web.multipart.MultipartFile> videoFiles,
+        @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage
+    ) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        log.info("Creating manual template with AI analysis for user: {}", userId);
+        
+        // Parse scenes metadata
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        List<SceneMetadata> scenesMetadata = mapper.readValue(
+            scenesMetadataJson, 
+            new com.fasterxml.jackson.core.type.TypeReference<List<SceneMetadata>>() {}
+        );
+        
+        // Parse group IDs
+        List<String> selectedGroupIds = null;
+        if (selectedGroupIdsJson != null && !selectedGroupIdsJson.trim().isEmpty()) {
+            selectedGroupIds = mapper.readValue(
+                selectedGroupIdsJson, 
+                new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {}
+            );
+        }
+        
+        log.info("Processing {} scenes for template: {}", scenesMetadata.size(), templateTitle);
+        
+        // Process each scene video
+        List<com.example.demo.model.Scene> aiAnalyzedScenes = new ArrayList<>();
+        
+        for (SceneMetadata metadata : scenesMetadata) {
+            String videoKey = "sceneVideo_" + metadata.getSceneNumber();
+            org.springframework.web.multipart.MultipartFile videoFile = videoFiles.get(videoKey);
+            
+            if (videoFile == null) {
+                throw new IllegalArgumentException(
+                    "Missing video file for scene " + metadata.getSceneNumber()
+                );
+            }
+            
+            log.info("Processing scene {}: {}", metadata.getSceneNumber(), metadata.getSceneTitle());
+            
+            // 1. Upload video (REUSE existing code)
+            String videoId = java.util.UUID.randomUUID().toString();
+            com.example.demo.service.FirebaseStorageService.UploadResult uploadResult = 
+                firebaseStorageService.uploadVideoWithThumbnail(videoFile, userId, videoId);
+            
+            // 2. Create Video object (REUSE existing code)
+            com.example.demo.model.Video video = new com.example.demo.model.Video();
+            video.setId(videoId);
+            video.setUserId(userId);
+            video.setUrl(uploadResult.videoUrl);
+            video.setThumbnailUrl(uploadResult.thumbnailUrl);
+            videoDao.saveVideo(video);
+            
+            // 3. Analyze as single scene (NEW - no scene detection!)
+            com.example.demo.model.Scene aiScene = sceneAnalysisService.analyzeSingleScene(
+                video,
+                language,
+                metadata.getSceneDescription()
+            );
+            
+            // 4. Set user-provided metadata
+            aiScene.setSceneNumber(metadata.getSceneNumber());
+            aiScene.setSceneTitle(metadata.getSceneTitle());
+            aiScene.setSceneDescription(metadata.getSceneDescription());
+            
+            aiAnalyzedScenes.add(aiScene);
+            log.info("Scene {} analyzed successfully with overlay type: {}", 
+                     metadata.getSceneNumber(), aiScene.getOverlayType());
+        }
+        
+        // 5. Create template (REUSE existing code)
+        ManualTemplate template = new ManualTemplate();
+        template.setUserId(userId);
+        template.setTemplateTitle(templateTitle);
+        template.setTemplateDescription(templateDescription);
+        template.setScenes(aiAnalyzedScenes);
+        template.setLocaleUsed(language);
+        
+        // 6. Save with groups (REUSE existing code)
+        String templateId = templateGroupService.createTemplateWithGroups(template, selectedGroupIds);
+        userDao.addCreatedTemplate(userId, templateId);
+        
+        log.info("Manual template created successfully: {} with {} scenes", templateId, aiAnalyzedScenes.size());
+        
+        // 7. Response
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("templateId", templateId);
+        responseData.put("template", template);
+        responseData.put("scenesAnalyzed", aiAnalyzedScenes.size());
+        
+        String message = i18nService.getMessage("template.created", language);
+        if (selectedGroupIds != null && !selectedGroupIds.isEmpty()) {
+            message += " and assigned to " + selectedGroupIds.size() + " groups";
+        }
+        
+        return ResponseEntity.ok(ApiResponse.ok(message, responseData));
+    }
+    
+    /**
+     * Helper class for scene metadata in manual template creation
+     */
+    public static class SceneMetadata {
+        private int sceneNumber;
+        private String sceneTitle;
+        private String sceneDescription;
+        
+        public SceneMetadata() {}
+        
+        public int getSceneNumber() { return sceneNumber; }
+        public void setSceneNumber(int sceneNumber) { this.sceneNumber = sceneNumber; }
+        
+        public String getSceneTitle() { return sceneTitle; }
+        public void setSceneTitle(String sceneTitle) { this.sceneTitle = sceneTitle; }
+        
+        public String getSceneDescription() { return sceneDescription; }
+        public void setSceneDescription(String sceneDescription) { 
+            this.sceneDescription = sceneDescription; 
+        }
+    }
+    
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ContentManager.class);
 }
 // Change Log: Manual scenes always set sceneSource="manual" and overlayType="grid" for dual scene system
+// Added manual-with-ai endpoint for creating templates with per-scene AI analysis (no scene detection)
