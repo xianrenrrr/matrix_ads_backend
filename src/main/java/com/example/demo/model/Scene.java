@@ -9,6 +9,7 @@ import java.util.Map;
 public class Scene {
     private int sceneNumber;
     private String sceneTitle;
+    private String sceneDescription;  // NEW: Scene description for manual templates
     private long sceneDurationInSeconds;
     private String scriptLine;
     private boolean presenceOfPerson;
@@ -117,6 +118,14 @@ public class Scene {
 
     public void setSceneTitle(String sceneTitle) {
         this.sceneTitle = sceneTitle;
+    }
+    
+    public String getSceneDescription() {
+        return sceneDescription;
+    }
+    
+    public void setSceneDescription(String sceneDescription) {
+        this.sceneDescription = sceneDescription;
     }
 
     public long getSceneDurationInSeconds() {

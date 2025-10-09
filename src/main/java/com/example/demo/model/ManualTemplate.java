@@ -6,6 +6,7 @@ import java.util.ArrayList;
 public class ManualTemplate {
     private String userId;
     private String templateTitle;
+    private String templateDescription;  // NEW: Template description for manual templates
     private int totalVideoLength;
     private String videoPurpose;
     private String tone;
@@ -54,6 +55,10 @@ public class ManualTemplate {
     public String getTemplateTitle() {
         return templateTitle;
     }
+    
+    public String getTemplateDescription() {
+        return templateDescription;
+    }
 
     public int getTotalVideoLength() {
         return totalVideoLength;
@@ -86,6 +91,10 @@ public class ManualTemplate {
     // Setters
     public void setTemplateTitle(String templateTitle) {
         this.templateTitle = templateTitle;
+    }
+    
+    public void setTemplateDescription(String templateDescription) {
+        this.templateDescription = templateDescription;
     }
 
     public void setTotalVideoLength(int totalVideoLength) {
