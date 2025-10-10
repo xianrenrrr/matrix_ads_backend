@@ -474,6 +474,9 @@ public class ContentManager {
             aiScene.setSceneTitle(metadata.getSceneTitle());
             aiScene.setSceneDescription(metadata.getSceneDescription());
             
+            // 5. IMPORTANT: Set videoId so mini app can fetch the scene video
+            aiScene.setVideoId(videoId);
+            
             aiAnalyzedScenes.add(aiScene);
             log.info("Scene {} analyzed successfully with overlay type: {}", 
                      metadata.getSceneNumber(), aiScene.getOverlayType());

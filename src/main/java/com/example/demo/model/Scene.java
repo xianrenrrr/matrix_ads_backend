@@ -22,13 +22,13 @@ public class Scene {
     private String specificCameraInstructions;
     private String movementInstructions;
     private String audioNotes;
-    private String exampleFrame;
     private String otherNotes;
     
     // New AI-generated fields
     private Long startTimeMs;
     private Long endTimeMs;
     private String keyframeUrl;
+    private String videoId;  // NEW: For manual templates - ID of the scene's video
     private Map<String, String> blockImageUrls;
     private Map<String, String> blockDescriptions;
     
@@ -240,13 +240,7 @@ public class Scene {
         this.audioNotes = audioNotes;
     }
 
-    public String getExampleFrame() {
-        return exampleFrame;
-    }
 
-    public void setExampleFrame(String exampleFrame) {
-        this.exampleFrame = exampleFrame;
-    }
 
     public String getOtherNotes() {
         return otherNotes;
@@ -299,6 +293,14 @@ public class Scene {
 
     public void setKeyframeUrl(String keyframeUrl) {
         this.keyframeUrl = keyframeUrl;
+    }
+    
+    public String getVideoId() {
+        return videoId;
+    }
+    
+    public void setVideoId(String videoId) {
+        this.videoId = videoId;
     }
 
     public Map<String, String> getBlockImageUrls() {

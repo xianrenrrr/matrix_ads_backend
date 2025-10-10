@@ -79,7 +79,6 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
             String keyframeUrl = extractKeyframeFromVideo(video.getUrl(), video.getId());
             if (keyframeUrl != null) {
                 scene.setKeyframeUrl(keyframeUrl);
-                scene.setExampleFrame(keyframeUrl);
                 
                 // 3. Process scene with AI shape detection (REUSED from TemplateAIServiceImpl)
                 processSceneWithShapes(scene, keyframeUrl, language);

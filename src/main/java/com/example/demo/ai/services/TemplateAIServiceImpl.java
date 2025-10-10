@@ -169,7 +169,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         String keyframeUrl = extractKeyframe(scene, segment, videoUrl);
         if (keyframeUrl != null) {
             scene.setKeyframeUrl(keyframeUrl);
-            scene.setExampleFrame(keyframeUrl);
             
             // NEW: Use segmentation service for shape detection
             processSceneWithShapes(scene, keyframeUrl, language);
