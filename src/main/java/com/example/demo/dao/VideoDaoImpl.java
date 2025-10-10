@@ -25,8 +25,12 @@ public class VideoDaoImpl implements VideoDao {
 
     @Override
     public Video saveVideo(Video video) throws ExecutionException, InterruptedException {
-        String videoId = UUID.randomUUID().toString();
-        video.setId(videoId);
+        // Only generate ID if not already set
+        String videoId = video.getId();
+        if (videoId == null || videoId.isEmpty()) {
+            videoId = UUID.randomUUID().toString();
+            video.setId(videoId);
+        }
         
         // Store in 'exampleVideos' collection instead of 'videos'
         DocumentReference docRef = db.collection("exampleVideos").document(videoId);
