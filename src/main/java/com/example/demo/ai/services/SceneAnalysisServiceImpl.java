@@ -42,6 +42,15 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
     @Autowired
     private KeyframeExtractionService keyframeExtractionService;
     
+    @Autowired
+    private VideoDurationService videoDurationService;
+    
+    @Autowired
+    private SceneInstructionService sceneInstructionService;
+    
+    @Autowired
+    private ShapeProcessingUtil shapeProcessingUtil;
+    
     @Value("${ai.overlay.includeLegend:false}")
     private boolean includeLegend;
     
@@ -68,12 +77,17 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
         Scene scene = new Scene();
         
         try {
-            // 1. Get video duration (no scene cutting - use entire video)
-            // TODO: Implement proper video duration extraction using FFmpeg
-            // For now, set a default duration
+            // 1. Get video duration using FFmpeg
+            Double durationSeconds = videoDurationService.getVideoDuration(video.getUrl());
+            if (durationSeconds == null) {
+                log.warn("Could not extract video duration, using default 5 seconds");
+                durationSeconds = 5.0;
+            }
+            
+            long durationMs = (long) (durationSeconds * 1000);
             scene.setStartTimeMs(0L);
-            scene.setEndTimeMs(5000L); // Default 5 seconds
-            scene.setSceneDurationInSeconds(5);
+            scene.setEndTimeMs(durationMs);
+            scene.setSceneDurationInSeconds((long) Math.ceil(durationSeconds));
             
             // 2. Extract keyframe from middle of video
             String keyframeUrl = extractKeyframeFromVideo(video.getUrl(), video.getId());
@@ -91,14 +105,8 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
                 scene.setScreenGridOverlayLabels(List.of("主要内容"));
             }
             
-            // 5. Generate AI instructions using scene description as context
-            // TODO: Integrate with VideoSummaryService for AI-generated instructions
-            // For now, set basic instructions
-            if (sceneDescription != null && !sceneDescription.isEmpty()) {
-                scene.setBackgroundInstructions("根据场景描述: " + sceneDescription);
-                scene.setSpecificCameraInstructions("保持稳定拍摄");
-                scene.setMovementInstructions("根据场景需求调整");
-            }
+            // 5. Generate AI instructions using scene description and detected objects
+            sceneInstructionService.generateInstructions(scene, sceneDescription, language);
             
             // 6. Set metadata
             scene.setSceneSource("manual");
@@ -134,8 +142,7 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
     }
     
     /**
-     * Process scene with shape detection (REUSED from TemplateAIServiceImpl)
-     * NOTE: This is duplicated code - consider refactoring to shared utility class
+     * Process scene with shape detection using shared utility
      */
     private void processSceneWithShapes(Scene scene, String keyframeUrl, String language) {
         try {
@@ -143,137 +150,15 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
             List<OverlayShape> shapes = segmentationService.detect(keyframeUrl);
             
             if (!shapes.isEmpty()) {
-                // Process shapes and add Chinese labels
-                boolean hasPolygons = false;
-                boolean hasBoxes = false;
-                
-                // Build region list for one-shot labeling
-                Map<OverlayShape, String> idMap = new HashMap<>();
-                List<ObjectLabelService.RegionBox> regions = new ArrayList<>();
-                int idCounter = 1;
-                
-                for (OverlayShape s : shapes) {
-                    String id = "p" + (idCounter++);
-                    idMap.put(s, id);
-                    double x, y, w, h;
-                    
-                    if (s instanceof OverlayBox b) {
-                        x = clamp01(b.x()); 
-                        y = clamp01(b.y()); 
-                        w = clamp01(b.w()); 
-                        h = clamp01(b.h());
-                    } else if (s instanceof OverlayPolygon p) {
-                        double minX = 1.0, minY = 1.0, maxX = 0.0, maxY = 0.0;
-                        for (Point pt : p.points()) {
-                            minX = Math.min(minX, pt.x()); 
-                            minY = Math.min(minY, pt.y());
-                            maxX = Math.max(maxX, pt.x()); 
-                            maxY = Math.max(maxY, pt.y());
-                        }
-                        x = clamp01(minX); 
-                        y = clamp01(minY); 
-                        w = clamp01(maxX - minX); 
-                        h = clamp01(maxY - minY);
-                    } else { 
-                        continue; 
-                    }
-                    
-                    regions.add(new ObjectLabelService.RegionBox(id, x, y, w, h));
-                }
-
-                // Get Chinese labels for regions
-                Map<String, ObjectLabelService.LabelResult> regionLabels = new HashMap<>();
-                try {
-                    regionLabels = objectLabelService.labelRegions(
-                        keyframeUrl, 
-                        regions, 
-                        language != null ? language : "zh-CN"
-                    );
-                } catch (Exception e) {
-                    log.warn("Failed to label regions: {}", e.getMessage());
-                }
-
-                // Apply labels to shapes
-                for (OverlayShape shape : shapes) {
-                    String labelZh = null;
-                    String sid = idMap.get(shape);
-                    
-                    if (sid != null && regionLabels.containsKey(sid)) {
-                        var lr = regionLabels.get(sid);
-                        if (lr != null && lr.labelZh != null && !lr.labelZh.isBlank() && lr.conf >= 0.8) {
-                            labelZh = lr.labelZh;
-                        }
-                    }
-                    
-                    if (labelZh == null) labelZh = "未知";
-                    
-                    // Create shapes with Chinese labels
-                    if (shape instanceof OverlayPolygon polygon) {
-                        hasPolygons = true;
-                        if (scene.getOverlayPolygons() == null) {
-                            scene.setOverlayPolygons(new ArrayList<>());
-                        }
-                        
-                        // Convert to scene polygon
-                        com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon scenePolygon = 
-                            new com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon();
-                        scenePolygon.setLabel(polygon.label());
-                        scenePolygon.setLabelZh(labelZh);
-                        scenePolygon.setLabelLocalized(labelZh);
-                        scenePolygon.setConfidence((float) polygon.confidence());
-                        
-                        // Convert points
-                        List<com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point> scenePoints = new ArrayList<>();
-                        for (Point p : polygon.points()) {
-                            scenePoints.add(new com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point(
-                                (float) p.x(), (float) p.y()
-                            ));
-                        }
-                        scenePolygon.setPoints(scenePoints);
-                        scene.getOverlayPolygons().add(scenePolygon);
-                        
-                    } else if (shape instanceof OverlayBox box) {
-                        hasBoxes = true;
-                        if (scene.getOverlayObjects() == null) {
-                            scene.setOverlayObjects(new ArrayList<>());
-                        }
-                        
-                        Scene.ObjectOverlay overlay = new Scene.ObjectOverlay();
-                        overlay.setLabel(box.label());
-                        overlay.setLabelZh(labelZh);
-                        overlay.setLabelLocalized(labelZh);
-                        overlay.setConfidence((float) box.confidence());
-                        overlay.setX((float) box.x());
-                        overlay.setY((float) box.y());
-                        overlay.setWidth((float) box.w());
-                        overlay.setHeight((float) box.h());
-                        
-                        scene.getOverlayObjects().add(overlay);
-                    }
-                }
-                
-                // Set overlay type priority: polygons > objects > grid
-                if (hasPolygons) {
-                    scene.setOverlayType("polygons");
-                } else if (hasBoxes) {
-                    scene.setOverlayType("objects");
-                } else {
-                    scene.setOverlayType("grid");
-                }
+                // Use shared utility to process shapes and add labels
+                boolean shapesProcessed = shapeProcessingUtil.processShapesWithLabels(
+                    scene, shapes, keyframeUrl, objectLabelService, language
+                );
                 
                 // Build legend if needed
-                if (includeLegend && !"grid".equals(scene.getOverlayType()) && overlayLegendService != null) {
+                if (shapesProcessed && includeLegend && !"grid".equals(scene.getOverlayType()) && overlayLegendService != null) {
                     var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
                     scene.setLegend(legend);
-                }
-
-                // Set dominant object's Chinese label
-                if (!shapes.isEmpty()) {
-                    OverlayShape dominant = shapes.get(0);
-                    String dom = null;
-                    if (dominant instanceof OverlayBox db) dom = db.labelZh();
-                    else if (dominant instanceof OverlayPolygon dp) dom = dp.labelZh();
-                    scene.setShortLabelZh(dom);
                 }
                 
             } else {
@@ -439,11 +324,5 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
             log.warn("[HF-YOLO] Error: {}", e.toString());
             return false;
         }
-    }
-    
-    private double clamp01(double v) {
-        if (v < 0) return 0;
-        if (v > 1) return 1;
-        return v;
     }
 }
