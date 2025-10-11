@@ -42,6 +42,9 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
     @Autowired
     private KeyframeExtractionService keyframeExtractionService;
     
+    @Autowired
+    private VideoMetadataService videoMetadataService;
+    
     @Value("${ai.overlay.includeLegend:false}")
     private boolean includeLegend;
     
@@ -69,11 +72,25 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
         scene.setSceneSource("manual");
         
         try {
-            // 1. Set basic timing (entire video is one scene)
+            // 1. Extract real video duration using FFmpeg
+            VideoMetadataService.VideoMetadata metadata = videoMetadataService.getVideoMetadata(video.getUrl());
+            long durationMs;
+            long durationSeconds;
+            
+            if (metadata != null) {
+                durationMs = (long) (metadata.durationSeconds * 1000);
+                durationSeconds = (long) Math.ceil(metadata.durationSeconds);
+                log.info("Extracted video duration: {:.2f}s for video {}", metadata.durationSeconds, video.getId());
+            } else {
+                // Fallback only if extraction fails
+                log.warn("Could not extract video duration for {}, using default 5s", video.getId());
+                durationMs = 5000L;
+                durationSeconds = 5L;
+            }
+            
             scene.setStartTimeMs(0L);
-            // TODO: Extract real duration using FFmpeg
-            scene.setEndTimeMs(5000L); // Default 5 seconds for now
-            scene.setSceneDurationInSeconds(5);
+            scene.setEndTimeMs(durationMs);
+            scene.setSceneDurationInSeconds(durationSeconds);
             
             // 2. Extract keyframe from middle of video (SAME as AI template)
             String keyframeUrl = extractKeyframeFromVideo(video.getUrl(), video.getId());

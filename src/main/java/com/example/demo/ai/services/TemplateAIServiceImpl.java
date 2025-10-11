@@ -46,6 +46,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Autowired
     private VideoSummaryService videoSummaryService;
     
+    @Autowired
+    private VideoMetadataService videoMetadataService;
+    
     @Value("${ai.template.useObjectOverlay:true}")
     private boolean useObjectOverlay;
     
@@ -144,8 +147,13 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 : ("AI 模版 " + today));
             template.setScenes(scenes);
             
-            // Set some default values (note: these are hardcoded and not AI-generated)
-            template.setVideoFormat("1080p 16:9");
+            // Extract video format from actual video metadata (not preset!)
+            VideoMetadataService.VideoMetadata videoMetadata = videoMetadataService.getVideoMetadata(videoUrl);
+            if (videoMetadata != null) {
+                template.setVideoFormat(videoMetadata.format);
+            } else {
+                template.setVideoFormat("1080p 16:9"); // Fallback only if extraction fails
+            }
             template.setTotalVideoLength(calculateTotalDuration(sceneSegments));
             
             // AI-driven template metadata & per-scene guidance (no presets if AI fails)
@@ -700,6 +708,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
 
     private String deriveDeviceOrientationFromFirstScene(List<Scene> scenes, String language) {
         try {
+            // Try to get from keyframe first (faster, already extracted)
             for (Scene s : scenes) {
                 if (s.getKeyframeUrl() == null || s.getKeyframeUrl().isBlank()) continue;
                 java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(new java.net.URL(s.getKeyframeUrl()));
@@ -707,8 +716,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 int w = img.getWidth(), h = img.getHeight();
                 boolean portrait = h >= w;
                 boolean zh = "zh".equalsIgnoreCase(language) || "zh-CN".equalsIgnoreCase(language);
-                if (portrait) return zh ? "手机（竖屏 9:16）" : "Phone (Portrait 9:16)";
-                return zh ? "手机（横屏 16:9）" : "Phone (Landscape 16:9)";
+                // Simplified: just "竖着拍" or "横着拍"
+                if (portrait) return zh ? "竖着拍" : "Portrait";
+                return zh ? "横着拍" : "Landscape";
             }
         } catch (Exception ignored) {}
         return null;

@@ -399,6 +399,9 @@ public class ContentManager {
     @Autowired
     private com.example.demo.ai.label.ObjectLabelService objectLabelService;
     
+    @Autowired
+    private com.example.demo.ai.services.VideoMetadataService videoMetadataService;
+    
     /**
      * Create manual template with AI analysis for each scene video.
      * Each uploaded video is analyzed as ONE complete scene (no scene detection/cutting).
@@ -498,7 +501,27 @@ public class ContentManager {
             .mapToInt(scene -> (int) scene.getSceneDurationInSeconds())
             .sum();
         template.setTotalVideoLength(totalDuration);
-        template.setVideoFormat("1080p 16:9"); // Default format
+        
+        // Extract video format from first scene video (not preset!)
+        String videoFormat = "1080p 16:9"; // Fallback
+        if (!aiAnalyzedScenes.isEmpty()) {
+            com.example.demo.model.Scene firstScene = aiAnalyzedScenes.get(0);
+            if (firstScene.getVideoId() != null) {
+                try {
+                    com.example.demo.model.Video firstVideo = videoDao.getVideoById(firstScene.getVideoId());
+                    if (firstVideo != null && firstVideo.getUrl() != null) {
+                        com.example.demo.ai.services.VideoMetadataService.VideoMetadata metadata = 
+                            videoMetadataService.getVideoMetadata(firstVideo.getUrl());
+                        if (metadata != null) {
+                            videoFormat = metadata.format;
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to extract video format: {}", e.getMessage());
+                }
+            }
+        }
+        template.setVideoFormat(videoFormat);
         
         // 6. Generate AI metadata using reasoning model (SAME as AI template)
         log.info("Generating AI metadata for manual template with {} scenes", aiAnalyzedScenes.size());
@@ -696,32 +719,31 @@ public class ContentManager {
     }
     
     /**
-     * Derive device orientation from keyframe image dimensions (SAME as AI template)
-     * Not a preset - actually detects portrait vs landscape from image
+     * Derive device orientation from video metadata (not preset!)
+     * Detects portrait vs landscape from actual video dimensions
      */
     private String deriveDeviceOrientationFromFirstScene(
             List<com.example.demo.model.Scene> scenes, 
             String language) {
         try {
             for (com.example.demo.model.Scene s : scenes) {
-                if (s.getKeyframeUrl() == null || s.getKeyframeUrl().isBlank()) continue;
+                if (s.getVideoId() == null) continue;
                 
-                java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(
-                    new java.net.URL(s.getKeyframeUrl())
-                );
-                if (img == null) continue;
+                // Get video from database
+                com.example.demo.model.Video video = videoDao.getVideoById(s.getVideoId());
+                if (video == null || video.getUrl() == null) continue;
                 
-                int w = img.getWidth();
-                int h = img.getHeight();
-                boolean portrait = h >= w;
-                boolean zh = "zh".equalsIgnoreCase(language) || "zh-CN".equalsIgnoreCase(language);
+                // Extract video metadata
+                com.example.demo.ai.services.VideoMetadataService.VideoMetadata metadata = 
+                    videoMetadataService.getVideoMetadata(video.getUrl());
                 
-                if (portrait) {
-                    return zh ? "手机（竖屏 9:16）" : "Phone (Portrait 9:16)";
+                if (metadata != null) {
+                    return videoMetadataService.getOrientationInstruction(metadata, language);
                 }
-                return zh ? "手机（横屏 16:9）" : "Phone (Landscape 16:9)";
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.warn("Failed to derive device orientation: {}", e.getMessage());
+        }
         return null;
     }
     
