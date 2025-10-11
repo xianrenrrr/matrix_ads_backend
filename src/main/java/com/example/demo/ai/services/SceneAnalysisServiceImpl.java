@@ -73,6 +73,9 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
         
         try {
             // 1. Extract real video duration using FFmpeg
+            log.info("=== EXTRACTING VIDEO DURATION for video: {} ===", video.getId());
+            log.info("Video URL: {}", video.getUrl());
+            
             VideoMetadataService.VideoMetadata metadata = videoMetadataService.getVideoMetadata(video.getUrl());
             long durationMs;
             long durationSeconds;
@@ -80,10 +83,13 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
             if (metadata != null) {
                 durationMs = (long) (metadata.durationSeconds * 1000);
                 durationSeconds = (long) Math.ceil(metadata.durationSeconds);
-                log.info("Extracted video duration: {:.2f}s for video {}", metadata.durationSeconds, video.getId());
+                log.info("✅ SUCCESS: Extracted video duration: {}s ({}ms) for video {}", 
+                         durationSeconds, durationMs, video.getId());
+                log.info("Video dimensions: {}x{}, format: {}, orientation: {}", 
+                         metadata.width, metadata.height, metadata.format, metadata.orientation);
             } else {
                 // Fallback only if extraction fails
-                log.warn("Could not extract video duration for {}, using default 5s", video.getId());
+                log.warn("❌ FAILED: Could not extract video duration for {}, using fallback 5s", video.getId());
                 durationMs = 5000L;
                 durationSeconds = 5L;
             }
@@ -91,6 +97,9 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
             scene.setStartTimeMs(0L);
             scene.setEndTimeMs(durationMs);
             scene.setSceneDurationInSeconds(durationSeconds);
+            
+            log.info("Scene timing set: startMs={}, endMs={}, durationSeconds={}", 
+                     0L, durationMs, durationSeconds);
             
             // 2. Extract keyframe from middle of video (SAME as AI template)
             String keyframeUrl = extractKeyframeFromVideo(video.getUrl(), video.getId());

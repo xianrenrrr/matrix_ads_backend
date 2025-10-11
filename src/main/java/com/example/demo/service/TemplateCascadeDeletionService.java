@@ -44,7 +44,7 @@ public class TemplateCascadeDeletionService {
 
         // 1) Storage first
         if (hardDeleteStorage && storageService != null) {
-            // 1a) Example video + thumbnail via VideoDao
+            // 1a) Template-level example video (AI templates only)
             try {
                 String videoId = tpl.getVideoId();
                 if (videoId != null && !videoId.isBlank()) {
@@ -54,12 +54,35 @@ public class TemplateCascadeDeletionService {
                         storageService.deleteObjectByUrl(video.getThumbnailUrl());
                         try {
                             boolean removed = videoDao.deleteVideoById(videoId);
-                            if (!removed) System.err.println("[CASCADE] Example video doc not found or not removed: " + videoId);
+                            if (!removed) System.err.println("[CASCADE] Template example video doc not found or not removed: " + videoId);
                         } catch (Exception ignore) {}
                     }
                 }
             } catch (Exception e) {
-                System.err.println("[CASCADE] Example video delete warn: " + e);
+                System.err.println("[CASCADE] Template example video delete warn: " + e);
+            }
+            
+            // 1a-2) Scene-level example videos (Manual templates)
+            // Manual templates have one example video per scene
+            try {
+                if (tpl.getScenes() != null) {
+                    for (Scene s : tpl.getScenes()) {
+                        String sceneVideoId = s.getVideoId();
+                        if (sceneVideoId != null && !sceneVideoId.isBlank()) {
+                            var sceneVideo = videoDao.getVideoById(sceneVideoId);
+                            if (sceneVideo != null) {
+                                storageService.deleteObjectByUrl(sceneVideo.getUrl());
+                                storageService.deleteObjectByUrl(sceneVideo.getThumbnailUrl());
+                                try {
+                                    boolean removed = videoDao.deleteVideoById(sceneVideoId);
+                                    if (!removed) System.err.println("[CASCADE] Scene example video doc not found or not removed: " + sceneVideoId);
+                                } catch (Exception ignore) {}
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("[CASCADE] Scene example videos delete warn: " + e);
             }
 
             // 1b) Keyframes from template scenes

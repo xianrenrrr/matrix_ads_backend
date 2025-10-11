@@ -90,12 +90,21 @@ public class VideoMetadataService {
      * @return VideoMetadata with resolution, aspect ratio, and duration
      */
     public VideoMetadata getVideoMetadata(String videoUrl) {
+        log.info(">>> VideoMetadataService.getVideoMetadata() called");
+        log.info(">>> Input videoUrl: {}", videoUrl);
+        
         try {
             // Resolve GCS URL to local file
+            log.info(">>> Resolving GCS URL to local file...");
             try (GcsFileResolver.ResolvedFile resolvedFile = gcsFileResolver.resolve(videoUrl)) {
                 String localPath = resolvedFile.getPathAsString();
+                log.info(">>> Resolved to local path: {}", localPath);
                 
                 // Get width, height, and duration using ffprobe
+                String command = String.format("%s -v error -select_streams v:0 -show_entries stream=width,height:format=duration -of csv=p=0 %s", 
+                                              ffprobePath, localPath);
+                log.info(">>> Executing ffprobe command: {}", command);
+                
                 ProcessBuilder pb = new ProcessBuilder(
                     ffprobePath,
                     "-v", "error",
@@ -109,31 +118,47 @@ public class VideoMetadataService {
                 
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                     String line = reader.readLine();
+                    log.info(">>> FFprobe output: {}", line);
                     
                     if (line != null && !line.trim().isEmpty()) {
                         String[] parts = line.split(",");
+                        log.info(">>> Parsed parts: {}", String.join(", ", parts));
+                        
                         if (parts.length >= 3) {
                             int width = Integer.parseInt(parts[0].trim());
                             int height = Integer.parseInt(parts[1].trim());
                             double duration = Double.parseDouble(parts[2].trim());
                             
                             VideoMetadata metadata = new VideoMetadata(width, height, duration);
-                            log.info("Extracted video metadata: {}x{} ({}) - {:.2f}s", 
+                            log.info("✅ SUCCESS: Extracted video metadata: {}x{} ({}) - {:.2f}s", 
                                     width, height, metadata.format, duration);
                             return metadata;
+                        } else {
+                            log.error("❌ FAILED: FFprobe output has insufficient parts: {}", parts.length);
                         }
+                    } else {
+                        log.error("❌ FAILED: FFprobe returned empty output");
                     }
                 }
                 
                 int exitCode = process.waitFor();
                 if (exitCode != 0) {
-                    log.warn("ffprobe exited with code: {} for {}", exitCode, videoUrl);
+                    log.error("❌ FAILED: ffprobe exited with code: {} for {}", exitCode, videoUrl);
+                    
+                    // Read error stream
+                    try (BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+                        String errorLine;
+                        while ((errorLine = errorReader.readLine()) != null) {
+                            log.error(">>> FFprobe error: {}", errorLine);
+                        }
+                    }
                 }
             }
         } catch (Exception e) {
-            log.error("Failed to extract video metadata for {}: {}", videoUrl, e.getMessage());
+            log.error("❌ EXCEPTION: Failed to extract video metadata for {}: {}", videoUrl, e.getMessage(), e);
         }
         
+        log.warn(">>> Returning null (extraction failed)");
         return null;
     }
     

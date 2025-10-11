@@ -503,25 +503,44 @@ public class ContentManager {
         template.setTotalVideoLength(totalDuration);
         
         // Extract video format from first scene video (not preset!)
+        log.info("=== EXTRACTING VIDEO FORMAT for template ===");
         String videoFormat = "1080p 16:9"; // Fallback
         if (!aiAnalyzedScenes.isEmpty()) {
             com.example.demo.model.Scene firstScene = aiAnalyzedScenes.get(0);
+            log.info("Using first scene (#{}) to determine video format", firstScene.getSceneNumber());
+            
             if (firstScene.getVideoId() != null) {
                 try {
+                    log.info("Fetching video: {}", firstScene.getVideoId());
                     com.example.demo.model.Video firstVideo = videoDao.getVideoById(firstScene.getVideoId());
+                    
                     if (firstVideo != null && firstVideo.getUrl() != null) {
+                        log.info("Extracting metadata from video URL: {}", firstVideo.getUrl());
                         com.example.demo.ai.services.VideoMetadataService.VideoMetadata metadata = 
                             videoMetadataService.getVideoMetadata(firstVideo.getUrl());
+                        
                         if (metadata != null) {
                             videoFormat = metadata.format;
+                            log.info("✅ SUCCESS: Extracted video format: {} ({}x{}, {})", 
+                                     videoFormat, metadata.width, metadata.height, metadata.orientation);
+                        } else {
+                            log.warn("❌ FAILED: Could not extract video metadata, using fallback format: {}", videoFormat);
                         }
+                    } else {
+                        log.warn("❌ FAILED: Video not found or has no URL, using fallback format: {}", videoFormat);
                     }
                 } catch (Exception e) {
-                    log.warn("Failed to extract video format: {}", e.getMessage());
+                    log.error("❌ ERROR: Failed to extract video format: {}", e.getMessage(), e);
                 }
+            } else {
+                log.warn("❌ FAILED: First scene has no videoId, using fallback format: {}", videoFormat);
             }
+        } else {
+            log.warn("❌ FAILED: No scenes in template, using fallback format: {}", videoFormat);
         }
+        
         template.setVideoFormat(videoFormat);
+        log.info("Template video format set to: {}", videoFormat);
         
         // 6. Generate AI metadata using reasoning model (SAME as AI template)
         log.info("Generating AI metadata for manual template with {} scenes", aiAnalyzedScenes.size());
