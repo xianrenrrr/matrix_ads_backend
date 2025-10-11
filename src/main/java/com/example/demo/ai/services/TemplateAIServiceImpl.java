@@ -146,14 +146,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 ? (video.getTitle() + " - AI 模版 " + today)
                 : ("AI 模版 " + today));
             template.setScenes(scenes);
-            
-            // Extract video format from actual video metadata (not preset!)
-            VideoMetadataService.VideoMetadata videoMetadata = videoMetadataService.getVideoMetadata(videoUrl);
-            if (videoMetadata != null) {
-                template.setVideoFormat(videoMetadata.format);
-            } else {
-                template.setVideoFormat("1080p 16:9"); // Fallback only if extraction fails
-            }
             template.setTotalVideoLength(calculateTotalDuration(sceneSegments));
             
             // AI-driven template metadata & per-scene guidance (no presets if AI fails)
@@ -648,21 +640,33 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                     Object audio = one.get("audioNotes"); if (audio instanceof String v) s.setAudioNotes(trim60(v));
                 }
             }
-            // Device orientation: derive from keyframe and apply to all scenes (independent of AI)
-            String orientationZh = deriveDeviceOrientationFromFirstScene(scenes, language);
-            if (orientationZh != null) {
+            // Device orientation: derive from keyframe and apply to all scenes
+            String aspectRatio = deriveDeviceOrientationFromFirstScene(scenes, language);
+            if (aspectRatio != null) {
                 for (Scene s : scenes) {
-                    s.setDeviceOrientation(orientationZh);
+                    s.setDeviceOrientation(aspectRatio);  // e.g., "9:16" or "16:9"
                 }
+                
+                // Derive video format from aspect ratio
+                String videoFormat = "1080p " + aspectRatio;
+                template.setVideoFormat(videoFormat);
+                log.info("Set video format from aspect ratio: {}", videoFormat);
+            } else {
+                template.setVideoFormat("1080p 16:9");  // Fallback
+                log.warn("Could not derive aspect ratio, using fallback format");
             }
         } catch (Exception e) {
             log.info("AI guidance generation failed: {}. Leaving fields empty.", e.getMessage());
             // Still derive and set device orientation even if AI guidance failed
-            String orientationZh = deriveDeviceOrientationFromFirstScene(scenes, language);
-            if (orientationZh != null) {
+            String aspectRatio = deriveDeviceOrientationFromFirstScene(scenes, language);
+            if (aspectRatio != null) {
                 for (Scene s : scenes) {
-                    s.setDeviceOrientation(orientationZh);
+                    s.setDeviceOrientation(aspectRatio);  // e.g., "9:16" or "16:9"
                 }
+                
+                // Derive video format from aspect ratio
+                String videoFormat = "1080p " + aspectRatio;
+                template.setVideoFormat(videoFormat);
             }
         }
     }
@@ -708,17 +712,15 @@ public class TemplateAIServiceImpl implements TemplateAIService {
 
     private String deriveDeviceOrientationFromFirstScene(List<Scene> scenes, String language) {
         try {
-            // Try to get from keyframe first (faster, already extracted)
+            // Get aspect ratio from keyframe dimensions
             for (Scene s : scenes) {
                 if (s.getKeyframeUrl() == null || s.getKeyframeUrl().isBlank()) continue;
                 java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(new java.net.URL(s.getKeyframeUrl()));
                 if (img == null) continue;
                 int w = img.getWidth(), h = img.getHeight();
                 boolean portrait = h >= w;
-                boolean zh = "zh".equalsIgnoreCase(language) || "zh-CN".equalsIgnoreCase(language);
-                // Simplified: just "竖着拍" or "横着拍"
-                if (portrait) return zh ? "竖着拍" : "Portrait";
-                return zh ? "横着拍" : "Landscape";
+                // Return aspect ratio: "9:16" or "16:9"
+                return portrait ? "9:16" : "16:9";
             }
         } catch (Exception ignored) {}
         return null;

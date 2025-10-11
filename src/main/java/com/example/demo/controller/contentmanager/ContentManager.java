@@ -502,41 +502,23 @@ public class ContentManager {
             .sum();
         template.setTotalVideoLength(totalDuration);
         
-        // Extract video format from first scene video (not preset!)
-        log.info("=== EXTRACTING VIDEO FORMAT for template ===");
+        // Derive video format from first scene's device orientation
+        log.info("=== DERIVING VIDEO FORMAT from first scene ===");
         String videoFormat = "1080p 16:9"; // Fallback
+        
         if (!aiAnalyzedScenes.isEmpty()) {
             com.example.demo.model.Scene firstScene = aiAnalyzedScenes.get(0);
-            log.info("Using first scene (#{}) to determine video format", firstScene.getSceneNumber());
+            String aspectRatio = firstScene.getDeviceOrientation();  // e.g., "9:16" or "16:9"
             
-            if (firstScene.getVideoId() != null) {
-                try {
-                    log.info("Fetching video: {}", firstScene.getVideoId());
-                    com.example.demo.model.Video firstVideo = videoDao.getVideoById(firstScene.getVideoId());
-                    
-                    if (firstVideo != null && firstVideo.getUrl() != null) {
-                        log.info("Extracting metadata from video URL: {}", firstVideo.getUrl());
-                        com.example.demo.ai.services.VideoMetadataService.VideoMetadata metadata = 
-                            videoMetadataService.getVideoMetadata(firstVideo.getUrl());
-                        
-                        if (metadata != null) {
-                            videoFormat = metadata.format;
-                            log.info("✅ SUCCESS: Extracted video format: {} ({}x{}, {})", 
-                                     videoFormat, metadata.width, metadata.height, metadata.orientation);
-                        } else {
-                            log.warn("❌ FAILED: Could not extract video metadata, using fallback format: {}", videoFormat);
-                        }
-                    } else {
-                        log.warn("❌ FAILED: Video not found or has no URL, using fallback format: {}", videoFormat);
-                    }
-                } catch (Exception e) {
-                    log.error("❌ ERROR: Failed to extract video format: {}", e.getMessage(), e);
-                }
+            if (aspectRatio != null && !aspectRatio.isEmpty()) {
+                // Assume 1080p resolution (most common for phone videos)
+                videoFormat = "1080p " + aspectRatio;
+                log.info("✅ SUCCESS: Derived video format from first scene: {}", videoFormat);
             } else {
-                log.warn("❌ FAILED: First scene has no videoId, using fallback format: {}", videoFormat);
+                log.warn("❌ FAILED: First scene has no deviceOrientation, using fallback: {}", videoFormat);
             }
         } else {
-            log.warn("❌ FAILED: No scenes in template, using fallback format: {}", videoFormat);
+            log.warn("❌ FAILED: No scenes in template, using fallback: {}", videoFormat);
         }
         
         template.setVideoFormat(videoFormat);
@@ -713,12 +695,13 @@ public class ContentManager {
                 }
             }
             
-            // Device orientation: derive from keyframe (SAME as AI template)
-            String orientationZh = deriveDeviceOrientationFromFirstScene(scenes, language);
-            if (orientationZh != null) {
+            // Device orientation: derive from video metadata (just aspect ratio)
+            String aspectRatio = deriveAspectRatioFromFirstScene(scenes);
+            if (aspectRatio != null) {
                 for (com.example.demo.model.Scene s : scenes) {
-                    s.setDeviceOrientation(orientationZh);
+                    s.setDeviceOrientation(aspectRatio);  // e.g., "9:16" or "16:9"
                 }
+                log.info("Set device orientation for all scenes: {}", aspectRatio);
             }
             
             log.info("AI metadata generation completed successfully");
@@ -727,10 +710,10 @@ public class ContentManager {
             log.error("Failed to generate AI metadata: {}", e.getMessage(), e);
             // Still derive and set device orientation even if AI guidance failed
             try {
-                String orientationZh = deriveDeviceOrientationFromFirstScene(scenes, language);
-                if (orientationZh != null) {
+                String aspectRatio = deriveAspectRatioFromFirstScene(scenes);
+                if (aspectRatio != null) {
                     for (com.example.demo.model.Scene s : scenes) {
-                        s.setDeviceOrientation(orientationZh);
+                        s.setDeviceOrientation(aspectRatio);  // e.g., "9:16" or "16:9"
                     }
                 }
             } catch (Exception ignored) {}
@@ -738,31 +721,41 @@ public class ContentManager {
     }
     
     /**
-     * Derive device orientation from video metadata (not preset!)
-     * Detects portrait vs landscape from actual video dimensions
+     * Derive aspect ratio from first scene's video (not preset!)
+     * Returns "9:16" for portrait or "16:9" for landscape
      */
-    private String deriveDeviceOrientationFromFirstScene(
-            List<com.example.demo.model.Scene> scenes, 
-            String language) {
+    private String deriveAspectRatioFromFirstScene(List<com.example.demo.model.Scene> scenes) {
         try {
             for (com.example.demo.model.Scene s : scenes) {
                 if (s.getVideoId() == null) continue;
                 
+                log.info("Deriving aspect ratio from scene {} video: {}", s.getSceneNumber(), s.getVideoId());
+                
                 // Get video from database
                 com.example.demo.model.Video video = videoDao.getVideoById(s.getVideoId());
-                if (video == null || video.getUrl() == null) continue;
+                if (video == null || video.getUrl() == null) {
+                    log.warn("Video not found or has no URL for scene {}", s.getSceneNumber());
+                    continue;
+                }
                 
                 // Extract video metadata
                 com.example.demo.ai.services.VideoMetadataService.VideoMetadata metadata = 
                     videoMetadataService.getVideoMetadata(video.getUrl());
                 
                 if (metadata != null) {
-                    return videoMetadataService.getOrientationInstruction(metadata, language);
+                    String aspectRatio = videoMetadataService.getAspectRatio(metadata);
+                    log.info("✅ Derived aspect ratio: {} from video {}x{}", 
+                             aspectRatio, metadata.width, metadata.height);
+                    return aspectRatio;
+                } else {
+                    log.warn("Could not extract metadata from video {}", s.getVideoId());
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to derive device orientation: {}", e.getMessage());
+            log.error("Failed to derive aspect ratio: {}", e.getMessage(), e);
         }
+        
+        log.warn("Could not derive aspect ratio, returning null");
         return null;
     }
     

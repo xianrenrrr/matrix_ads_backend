@@ -163,20 +163,25 @@ public class VideoMetadataService {
     }
     
     /**
-     * Get human-readable orientation instruction based on video metadata
+     * Get aspect ratio string based on video metadata
      * @param metadata Video metadata
-     * @param language Language for instruction (zh-CN or en)
-     * @return Instruction string like "竖着拍" or "横着拍"
+     * @return Aspect ratio string like "9:16" or "16:9"
      */
-    public String getOrientationInstruction(VideoMetadata metadata, String language) {
+    public String getAspectRatio(VideoMetadata metadata) {
         if (metadata == null) return null;
         
-        boolean zh = "zh".equalsIgnoreCase(language) || "zh-CN".equalsIgnoreCase(language);
+        // Extract aspect ratio from format string
+        // Format is like "1080p 9:16" or "4K 16:9"
+        String[] parts = metadata.format.split(" ");
+        if (parts.length >= 2) {
+            return parts[1];  // Returns "9:16" or "16:9"
+        }
         
+        // Fallback: calculate from orientation
         if ("portrait".equals(metadata.orientation)) {
-            return zh ? "竖着拍" : "Portrait";
+            return "9:16";
         } else {
-            return zh ? "横着拍" : "Landscape";
+            return "16:9";
         }
     }
 }
