@@ -43,19 +43,12 @@ public class ImageProxyController {
             return ResponseEntity.badRequest().build();
         }
 
-        // Decode the incoming path (it often contains percent-encoded '/' and a percent-encoded query)
+        // Decode the incoming path
         String decoded = decode(path);
-        log.info("[images/proxy] request path(len={}): {}", decoded.length(), safeTrim(decoded));
 
-        // First attempt: use provided path as full URL or build GCS URL (preserving query if present)
+        // First attempt: use provided path as full URL or build GCS URL
         String targetUrl = normalizeToUrl(decoded);
-        log.info("[images/proxy] first targetUrl: {}", redact(targetUrl));
-
         ResponseEntity<byte[]> resp = fetch(targetUrl);
-        log.info("[images/proxy] first fetch status: {} contentType: {} bytes: {}", 
-                resp.getStatusCodeValue(), 
-                resp.getHeaders().getContentType(),
-                (resp.getBody() == null ? 0 : resp.getBody().length));
         if (resp.getStatusCode().is2xxSuccessful()) {
             return passThrough(resp);
         }
@@ -64,12 +57,8 @@ public class ImageProxyController {
         String objectPath = extractObjectPath(decoded);
         String unsignedUrl = "https://storage.googleapis.com/" + bucketName + "/" + objectPath;
 
-        // Fallback 1: try unsigned public URL (works if bucket allows public read)
-        log.info("[images/proxy] unsigned attempt: {}", unsignedUrl);
+        // Fallback 1: try unsigned public URL
         ResponseEntity<byte[]> unsignedResp = fetch(unsignedUrl);
-        log.info("[images/proxy] unsigned status: {} contentType: {} bytes: {}",
-                unsignedResp.getStatusCodeValue(), unsignedResp.getHeaders().getContentType(),
-                (unsignedResp.getBody() == null ? 0 : unsignedResp.getBody().length));
         if (unsignedResp.getStatusCode().is2xxSuccessful()) {
             return passThrough(unsignedResp);
         }
@@ -80,19 +69,14 @@ public class ImageProxyController {
                 || unsignedResp.getStatusCode() == HttpStatus.FORBIDDEN || unsignedResp.getStatusCode() == HttpStatus.UNAUTHORIZED)
                 && firebaseStorageService != null) {
             try {
-                log.info("[images/proxy] refresh attempt for object: {} unsigned: {}", objectPath, unsignedUrl);
                 String freshSigned = firebaseStorageService.generateSignedUrl(unsignedUrl);
-                log.info("[images/proxy] fresh signed generated: {}", redact(freshSigned));
                 ResponseEntity<byte[]> retry = fetch(freshSigned);
-                log.info("[images/proxy] retry fetch status: {} contentType: {} bytes: {}",
-                        retry.getStatusCodeValue(), retry.getHeaders().getContentType(),
-                        (retry.getBody() == null ? 0 : retry.getBody().length));
                 if (retry.getStatusCode().is2xxSuccessful()) {
                     return passThrough(retry);
                 }
                 return ResponseEntity.status(retry.getStatusCode()).build();
             } catch (Exception e) {
-                log.error("[images/proxy] refresh failed: {}", e.toString(), e);
+                log.error("[images/proxy] Failed to refresh signed URL: {}", e.getMessage());
                 return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
             }
         }
@@ -105,16 +89,13 @@ public class ImageProxyController {
             var entity = new org.springframework.http.HttpEntity<Void>(new HttpHeaders());
             return restTemplate.exchange(new URI(url), HttpMethod.GET, entity, byte[].class);
         } catch (URISyntaxException e) {
-            log.warn("[images/proxy] bad URI: {}", url);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         } catch (org.springframework.web.client.HttpClientErrorException e) {
-            log.error("[images/proxy] client error for {}: {}", redact(url), e.getStatusCode());
             return new ResponseEntity<>(e.getResponseBodyAsByteArray(), e.getResponseHeaders(), e.getStatusCode());
         } catch (org.springframework.web.client.HttpServerErrorException e) {
-            log.error("[images/proxy] server error for {}: {}", redact(url), e.getStatusCode());
             return new ResponseEntity<>(e.getResponseBodyAsByteArray(), e.getResponseHeaders(), e.getStatusCode());
         } catch (Exception e) {
-            log.error("[images/proxy] fetch error for {}: {}", redact(url), e.toString());
+            log.error("[images/proxy] Fetch error: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
         }
     }
