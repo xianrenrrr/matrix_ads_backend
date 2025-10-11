@@ -137,6 +137,14 @@ public class ContentManager {
         
         manualTemplate.setUserId(userId);
         
+        // Set thumbnail from first scene's keyframe
+        if (manualTemplate.getScenes() != null && !manualTemplate.getScenes().isEmpty()) {
+            Scene firstScene = manualTemplate.getScenes().get(0);
+            if (firstScene.getKeyframeUrl() != null && !firstScene.getKeyframeUrl().isEmpty()) {
+                manualTemplate.setThumbnailUrl(firstScene.getKeyframeUrl());
+            }
+        }
+        
         // Mark all scenes as manual with grid overlay and validate minimum duration
         if (manualTemplate.getScenes() != null && !manualTemplate.getScenes().isEmpty()) {
             for (com.example.demo.model.Scene scene : manualTemplate.getScenes()) {
@@ -527,6 +535,14 @@ public class ContentManager {
         
         template.setVideoFormat(videoFormat);
         log.info("Template video format set to: {}", videoFormat);
+        
+        // Set thumbnail from first scene's keyframe
+        if (!aiAnalyzedScenes.isEmpty()) {
+            com.example.demo.model.Scene firstScene = aiAnalyzedScenes.get(0);
+            if (firstScene.getKeyframeUrl() != null && !firstScene.getKeyframeUrl().isEmpty()) {
+                template.setThumbnailUrl(firstScene.getKeyframeUrl());
+            }
+        }
         
         // 8. Save with groups (REUSE existing code)
         String templateId = templateGroupService.createTemplateWithGroups(template, selectedGroupIds);

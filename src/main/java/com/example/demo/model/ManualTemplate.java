@@ -18,6 +18,7 @@ public class ManualTemplate {
     private String backgroundMusic;
     private String id;
     private String videoId;
+    private String thumbnailUrl;  // Thumbnail URL for template preview
     private String localeUsed;  // Locale used for template generation (e.g., "zh-CN")
     
     // Additional database fields to prevent Firestore warnings
@@ -156,6 +157,14 @@ public class ManualTemplate {
     
     public void setLocaleUsed(String localeUsed) {
         this.localeUsed = localeUsed;
+    }
+    
+    public String getThumbnailUrl() {
+        return thumbnailUrl;
+    }
+    
+    public void setThumbnailUrl(String thumbnailUrl) {
+        this.thumbnailUrl = thumbnailUrl;
     }
 
 }

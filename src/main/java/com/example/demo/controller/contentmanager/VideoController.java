@@ -197,6 +197,7 @@ public class VideoController {
             ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language, description, sceneThreshold);
             aiGeneratedTemplate.setUserId(userId);
             aiGeneratedTemplate.setVideoId(savedVideo.getId());
+            aiGeneratedTemplate.setThumbnailUrl(savedVideo.getThumbnailUrl());  // Set thumbnail from video
             // Preserve AI-generated title; only prepend user title if provided
             if (title != null && !title.isBlank()) {
                 String today = java.time.LocalDate.now().toString();

@@ -276,13 +276,11 @@ public class TemplateDaoImpl implements TemplateDao {
                 }
                 summary.put("duration", totalDurationSeconds);
                 
-                // Get thumbnail from parallel video fetch
+                // Get thumbnail from template's thumbnailUrl field
                 String thumbnail = null;
-                if (i < videoDocs.size() && videoDocs.get(i) != null && videoDocs.get(i).exists()) {
-                    String thumbnailUrl = videoDocs.get(i).getString("thumbnailUrl");
-                    if (thumbnailUrl != null && !thumbnailUrl.isEmpty()) {
-                        thumbnail = convertToProxyUrl(thumbnailUrl);
-                    }
+                String thumbnailUrl = templateDoc.getString("thumbnailUrl");
+                if (thumbnailUrl != null && !thumbnailUrl.isEmpty()) {
+                    thumbnail = convertToProxyUrl(thumbnailUrl);
                 }
                 summary.put("thumbnail", thumbnail);
                 
