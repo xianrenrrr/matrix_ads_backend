@@ -45,6 +45,9 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
     @Autowired
     private VideoMetadataService videoMetadataService;
     
+    @Autowired
+    private com.example.demo.ai.providers.vision.FFmpegSceneDetectionService ffmpegSceneDetectionService;
+    
     @Value("${ai.overlay.includeLegend:false}")
     private boolean includeLegend;
     
@@ -72,21 +75,22 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
         scene.setSceneSource("manual");
         
         try {
-            // 1. Extract real video duration using FFmpeg
+            // 1. Extract real video duration using FFmpeg (no scene detection needed)
             log.info("=== EXTRACTING VIDEO DURATION for video: {} ===", video.getId());
             log.info("Video URL: {}", video.getUrl());
             
-            VideoMetadataService.VideoMetadata metadata = videoMetadataService.getVideoMetadata(video.getUrl());
+            // Use FFmpegSceneDetectionService to get duration only (no scene cutting)
+            Double durationDouble = ffmpegSceneDetectionService.getVideoDurationOnly(video.getUrl());
+            
             long durationMs;
             long durationSeconds;
             
-            if (metadata != null) {
-                durationMs = (long) (metadata.durationSeconds * 1000);
-                durationSeconds = (long) Math.ceil(metadata.durationSeconds);
-                log.info("✅ SUCCESS: Extracted video duration: {}s ({}ms) for video {}", 
+            if (durationDouble != null && durationDouble > 0) {
+                durationMs = (long) (durationDouble * 1000);
+                durationSeconds = (long) Math.ceil(durationDouble);
+                
+                log.info("✅ SUCCESS: Extracted video duration: {}s ({}ms) for video {} using FFmpeg", 
                          durationSeconds, durationMs, video.getId());
-                log.info("Video dimensions: {}x{}, format: {}, orientation: {}", 
-                         metadata.width, metadata.height, metadata.format, metadata.orientation);
             } else {
                 // Fallback only if extraction fails
                 log.warn("❌ FAILED: Could not extract video duration for {}, using fallback 5s", video.getId());

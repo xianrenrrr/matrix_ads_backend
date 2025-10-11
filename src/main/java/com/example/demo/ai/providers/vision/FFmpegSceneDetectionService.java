@@ -34,6 +34,30 @@ public class FFmpegSceneDetectionService {
     private String ffprobePath;
     
     /**
+     * Get video duration without scene detection (for manual templates)
+     * @param videoUrl URL or path to the video file
+     * @return Duration in seconds, or null if extraction fails
+     */
+    public Double getVideoDurationOnly(String videoUrl) {
+        System.out.printf("Getting video duration for: %s%n", videoUrl);
+        try {
+            // Resolve GCS URL to local file
+            try (GcsFileResolver.ResolvedFile resolvedFile = gcsFileResolver.resolve(videoUrl)) {
+                String localPath = resolvedFile.getPathAsString();
+                Double duration = getVideoDuration(localPath);
+                if (duration != null) {
+                    System.out.printf("Video duration: %.3f seconds%n", duration);
+                }
+                return duration;
+            }
+        } catch (Exception e) {
+            System.err.printf("Error getting video duration: %s%n", e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+    
+    /**
      * Detects scene cuts using FFmpeg scene change filter
      * @param videoUrl URL or path to the video file  
      * @return List of scene segments with start/end timestamps
