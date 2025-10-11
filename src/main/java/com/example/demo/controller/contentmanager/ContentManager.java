@@ -396,6 +396,9 @@ public class ContentManager {
     @Autowired
     private com.example.demo.dao.VideoDao videoDao;
     
+    @Autowired
+    private com.example.demo.ai.label.ObjectLabelService objectLabelService;
+    
     /**
      * Create manual template with AI analysis for each scene video.
      * Each uploaded video is analyzed as ONE complete scene (no scene detection/cutting).
@@ -482,7 +485,7 @@ public class ContentManager {
                      metadata.getSceneNumber(), aiScene.getOverlayType());
         }
         
-        // 5. Create template (REUSE existing code)
+        // 5. Create template with calculated metadata
         ManualTemplate template = new ManualTemplate();
         template.setUserId(userId);
         template.setTemplateTitle(templateTitle);
@@ -490,7 +493,18 @@ public class ContentManager {
         template.setScenes(aiAnalyzedScenes);
         template.setLocaleUsed(language);
         
-        // 6. Save with groups (REUSE existing code)
+        // Calculate total video length (sum of all scene durations)
+        int totalDuration = aiAnalyzedScenes.stream()
+            .mapToInt(scene -> (int) scene.getSceneDurationInSeconds())
+            .sum();
+        template.setTotalVideoLength(totalDuration);
+        template.setVideoFormat("1080p 16:9"); // Default format
+        
+        // 6. Generate AI metadata using reasoning model (SAME as AI template)
+        log.info("Generating AI metadata for manual template with {} scenes", aiAnalyzedScenes.size());
+        generateManualTemplateMetadata(template, aiAnalyzedScenes, language, templateDescription);
+        
+        // 7. Save with groups (REUSE existing code)
         String templateId = templateGroupService.createTemplateWithGroups(template, selectedGroupIds);
         userDao.addCreatedTemplate(userId, templateId);
         
@@ -532,7 +546,197 @@ public class ContentManager {
         }
     }
     
+    /**
+     * Generate AI metadata for manual template (SAME logic as AI template)
+     * Uses reasoning model to analyze all scenes and generate template-level metadata
+     */
+    private void generateManualTemplateMetadata(
+            ManualTemplate template, 
+            List<com.example.demo.model.Scene> scenes, 
+            String language,
+            String userDescription) {
+        try {
+            log.info("Generating AI metadata for manual template with {} scenes", scenes.size());
+            
+            // Build payload for reasoning model (SAME as AI template)
+            Map<String, Object> payload = new HashMap<>();
+            Map<String, Object> tpl = new HashMap<>();
+            tpl.put("videoTitle", template.getTemplateTitle());
+            tpl.put("language", language);
+            tpl.put("totalDurationSeconds", template.getTotalVideoLength());
+            tpl.put("videoFormat", template.getVideoFormat());
+            if (userDescription != null && !userDescription.isBlank()) {
+                tpl.put("userDescription", userDescription);
+            }
+            payload.put("template", tpl);
+
+            // Collect scene data with detected objects
+            List<Map<String, Object>> sceneArr = new ArrayList<>();
+            for (com.example.demo.model.Scene s : scenes) {
+                Map<String, Object> so = new HashMap<>();
+                so.put("sceneNumber", s.getSceneNumber());
+                so.put("durationSeconds", s.getSceneDurationInSeconds());
+                so.put("keyframeUrl", s.getKeyframeUrl());
+                
+                // Collect detected object labels (Chinese) for context
+                List<String> labels = new ArrayList<>();
+                if (s.getOverlayPolygons() != null) {
+                    for (var p : s.getOverlayPolygons()) {
+                        if (p.getLabelLocalized() != null && !p.getLabelLocalized().isEmpty()) {
+                            labels.add(p.getLabelLocalized());
+                        } else if (p.getLabelZh() != null && !p.getLabelZh().isEmpty()) {
+                            labels.add(p.getLabelZh());
+                        }
+                    }
+                }
+                if (s.getOverlayObjects() != null) {
+                    for (var o : s.getOverlayObjects()) {
+                        if (o.getLabelLocalized() != null && !o.getLabelLocalized().isEmpty()) {
+                            labels.add(o.getLabelLocalized());
+                        } else if (o.getLabelZh() != null && !o.getLabelZh().isEmpty()) {
+                            labels.add(o.getLabelZh());
+                        }
+                    }
+                }
+                if (labels.size() > 5) labels = labels.subList(0, 5);
+                so.put("detectedObjects", labels);
+                
+                // Include user-provided scene description
+                if (s.getSceneDescription() != null && !s.getSceneDescription().isEmpty()) {
+                    so.put("sceneDescription", s.getSceneDescription());
+                }
+                
+                sceneArr.add(so);
+            }
+            payload.put("scenes", sceneArr);
+
+            // Call reasoning model via ObjectLabelService
+            Map<String, Object> result = objectLabelService.generateTemplateGuidance(payload);
+            if (result == null || result.isEmpty()) {
+                log.info("AI guidance unavailable; leaving metadata/guidance empty");
+                return;
+            }
+
+            // Apply template-level metadata
+            @SuppressWarnings("unchecked")
+            Map<String, Object> t = (Map<String, Object>) result.get("template");
+            if (t != null) {
+                Object vp = t.get("videoPurpose"); 
+                if (vp instanceof String s) template.setVideoPurpose(trim40(s));
+                
+                Object tone = t.get("tone"); 
+                if (tone instanceof String s) template.setTone(trim40(s));
+                
+                Object light = t.get("lightingRequirements"); 
+                if (light instanceof String s) template.setLightingRequirements(trim60(s));
+                
+                Object bgm = t.get("backgroundMusic"); 
+                if (bgm instanceof String s) template.setBackgroundMusic(trim40(s));
+            }
+
+            // Apply per-scene guidance
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> rs = (List<Map<String, Object>>) result.get("scenes");
+            if (rs != null) {
+                Map<Integer, Map<String, Object>> byNum = new HashMap<>();
+                for (Map<String, Object> one : rs) {
+                    Object n = one.get("sceneNumber");
+                    if (n instanceof Number num) byNum.put(num.intValue(), one);
+                }
+                
+                for (com.example.demo.model.Scene s : scenes) {
+                    Map<String, Object> one = byNum.get(s.getSceneNumber());
+                    if (one == null) continue;
+                    
+                    // Apply AI-generated scene guidance
+                    Object scriptLine = one.get("scriptLine");
+                    if (scriptLine instanceof String v && !v.isBlank()) {
+                        s.setScriptLine(v);
+                    }
+                    
+                    Object person = one.get("presenceOfPerson"); 
+                    if (person instanceof Boolean b) s.setPresenceOfPerson(b);
+                    
+                    Object move = one.get("movementInstructions"); 
+                    if (move instanceof String v) s.setMovementInstructions(trim60(v));
+                    
+                    Object bg = one.get("backgroundInstructions"); 
+                    if (bg instanceof String v) s.setBackgroundInstructions(trim60(v));
+                    
+                    Object cam = one.get("specificCameraInstructions"); 
+                    if (cam instanceof String v) s.setSpecificCameraInstructions(trim60(v));
+                    
+                    Object audio = one.get("audioNotes"); 
+                    if (audio instanceof String v) s.setAudioNotes(trim60(v));
+                }
+            }
+            
+            // Device orientation: derive from keyframe (SAME as AI template)
+            String orientationZh = deriveDeviceOrientationFromFirstScene(scenes, language);
+            if (orientationZh != null) {
+                for (com.example.demo.model.Scene s : scenes) {
+                    s.setDeviceOrientation(orientationZh);
+                }
+            }
+            
+            log.info("AI metadata generation completed successfully");
+            
+        } catch (Exception e) {
+            log.error("Failed to generate AI metadata: {}", e.getMessage(), e);
+            // Still derive and set device orientation even if AI guidance failed
+            try {
+                String orientationZh = deriveDeviceOrientationFromFirstScene(scenes, language);
+                if (orientationZh != null) {
+                    for (com.example.demo.model.Scene s : scenes) {
+                        s.setDeviceOrientation(orientationZh);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+    
+    /**
+     * Derive device orientation from keyframe image dimensions (SAME as AI template)
+     * Not a preset - actually detects portrait vs landscape from image
+     */
+    private String deriveDeviceOrientationFromFirstScene(
+            List<com.example.demo.model.Scene> scenes, 
+            String language) {
+        try {
+            for (com.example.demo.model.Scene s : scenes) {
+                if (s.getKeyframeUrl() == null || s.getKeyframeUrl().isBlank()) continue;
+                
+                java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(
+                    new java.net.URL(s.getKeyframeUrl())
+                );
+                if (img == null) continue;
+                
+                int w = img.getWidth();
+                int h = img.getHeight();
+                boolean portrait = h >= w;
+                boolean zh = "zh".equalsIgnoreCase(language) || "zh-CN".equalsIgnoreCase(language);
+                
+                if (portrait) {
+                    return zh ? "手机（竖屏 9:16）" : "Phone (Portrait 9:16)";
+                }
+                return zh ? "手机（横屏 16:9）" : "Phone (Landscape 16:9)";
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+    
+    private String trim40(String s) {
+        if (s == null) return null;
+        return s.length() > 40 ? s.substring(0, 40) : s;
+    }
+    
+    private String trim60(String s) {
+        if (s == null) return null;
+        return s.length() > 60 ? s.substring(0, 60) : s;
+    }
+    
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ContentManager.class);
 }
 // Change Log: Manual scenes always set sceneSource="manual" and overlayType="grid" for dual scene system
 // Added manual-with-ai endpoint for creating templates with per-scene AI analysis (no scene detection)
+// Added AI metadata generation using reasoning model (same as AI template)

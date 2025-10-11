@@ -66,44 +66,37 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
                  video.getId(), sceneDescription != null ? sceneDescription : "none");
         
         Scene scene = new Scene();
+        scene.setSceneSource("manual");
         
         try {
-            // 1. Get video duration (no scene cutting - use entire video)
-            // TODO: Implement proper video duration extraction using FFmpeg
-            // For now, set a default duration
+            // 1. Set basic timing (entire video is one scene)
             scene.setStartTimeMs(0L);
-            scene.setEndTimeMs(5000L); // Default 5 seconds
+            // TODO: Extract real duration using FFmpeg
+            scene.setEndTimeMs(5000L); // Default 5 seconds for now
             scene.setSceneDurationInSeconds(5);
             
-            // 2. Extract keyframe from middle of video
+            // 2. Extract keyframe from middle of video (SAME as AI template)
             String keyframeUrl = extractKeyframeFromVideo(video.getUrl(), video.getId());
             if (keyframeUrl != null) {
                 scene.setKeyframeUrl(keyframeUrl);
                 
-                // 3. Process scene with AI shape detection (REUSED from TemplateAIServiceImpl)
+                // 3. Process scene with AI shape detection (EXACT SAME as AI template)
                 processSceneWithShapes(scene, keyframeUrl, language);
             }
             
-            // 4. Fallback to grid if no overlays detected
+            // 4. Fallback to grid if no overlays detected (SAME as AI template)
             if (scene.getOverlayType() == null) {
                 scene.setOverlayType("grid");
-                scene.setScreenGridOverlay(List.of(5)); // Center grid
-                scene.setScreenGridOverlayLabels(List.of("主要内容"));
+                scene.setScreenGridOverlay(List.of(5));
             }
             
-            // 5. Generate AI instructions using scene description as context
-            // TODO: Integrate with VideoSummaryService for AI-generated instructions
-            // For now, set basic instructions
+            // 5. Set scene description if provided
             if (sceneDescription != null && !sceneDescription.isEmpty()) {
-                scene.setBackgroundInstructions("根据场景描述: " + sceneDescription);
-                scene.setSpecificCameraInstructions("保持稳定拍摄");
-                scene.setMovementInstructions("根据场景需求调整");
+                scene.setSceneDescription(sceneDescription);
             }
             
-            // 6. Set metadata
-            scene.setSceneSource("manual");
-            
-            log.info("Scene analysis completed for video: {}", video.getId());
+            log.info("Scene analysis completed for video: {} with overlay type: {}", 
+                     video.getId(), scene.getOverlayType());
             return scene;
             
         } catch (Exception e) {
