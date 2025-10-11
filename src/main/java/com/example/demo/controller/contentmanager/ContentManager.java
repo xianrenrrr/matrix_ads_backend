@@ -4,6 +4,7 @@ import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.UserDao;
 import com.example.demo.dao.SceneSubmissionDao;
 import com.example.demo.model.ManualTemplate;
+import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSubmission;
 import com.example.demo.api.ApiResponse;
 import com.example.demo.service.I18nService;
