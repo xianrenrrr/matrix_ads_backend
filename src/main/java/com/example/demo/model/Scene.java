@@ -2,10 +2,12 @@ package com.example.demo.model;
 
 import com.example.demo.ai.services.OverlayLegendService.LegendItem;
 import com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class Scene {
     private int sceneNumber;
     private String sceneTitle;

@@ -502,7 +502,11 @@ public class ContentManager {
             .sum();
         template.setTotalVideoLength(totalDuration);
         
-        // Derive video format from first scene's device orientation
+        // 6. Generate AI metadata using reasoning model (sets deviceOrientation)
+        log.info("Generating AI metadata for manual template with {} scenes", aiAnalyzedScenes.size());
+        generateManualTemplateMetadata(template, aiAnalyzedScenes, language, templateDescription);
+        
+        // 7. Derive video format from first scene's device orientation (AFTER AI metadata)
         log.info("=== DERIVING VIDEO FORMAT from first scene ===");
         String videoFormat = "1080p 16:9"; // Fallback
         
@@ -524,17 +528,13 @@ public class ContentManager {
         template.setVideoFormat(videoFormat);
         log.info("Template video format set to: {}", videoFormat);
         
-        // 6. Generate AI metadata using reasoning model (SAME as AI template)
-        log.info("Generating AI metadata for manual template with {} scenes", aiAnalyzedScenes.size());
-        generateManualTemplateMetadata(template, aiAnalyzedScenes, language, templateDescription);
-        
-        // 7. Save with groups (REUSE existing code)
+        // 8. Save with groups (REUSE existing code)
         String templateId = templateGroupService.createTemplateWithGroups(template, selectedGroupIds);
         userDao.addCreatedTemplate(userId, templateId);
         
         log.info("Manual template created successfully: {} with {} scenes", templateId, aiAnalyzedScenes.size());
         
-        // 7. Response
+        // 9. Response
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("templateId", templateId);
         responseData.put("template", template);
@@ -721,34 +721,34 @@ public class ContentManager {
     }
     
     /**
-     * Derive aspect ratio from first scene's video (not preset!)
+     * Derive aspect ratio from first scene's keyframe (not preset!)
      * Returns "9:16" for portrait or "16:9" for landscape
      */
     private String deriveAspectRatioFromFirstScene(List<com.example.demo.model.Scene> scenes) {
         try {
             for (com.example.demo.model.Scene s : scenes) {
-                if (s.getVideoId() == null) continue;
-                
-                log.info("Deriving aspect ratio from scene {} video: {}", s.getSceneNumber(), s.getVideoId());
-                
-                // Get video from database
-                com.example.demo.model.Video video = videoDao.getVideoById(s.getVideoId());
-                if (video == null || video.getUrl() == null) {
-                    log.warn("Video not found or has no URL for scene {}", s.getSceneNumber());
-                    continue;
-                }
-                
-                // Extract video metadata
-                com.example.demo.ai.services.VideoMetadataService.VideoMetadata metadata = 
-                    videoMetadataService.getVideoMetadata(video.getUrl());
-                
-                if (metadata != null) {
-                    String aspectRatio = videoMetadataService.getAspectRatio(metadata);
-                    log.info("✅ Derived aspect ratio: {} from video {}x{}", 
-                             aspectRatio, metadata.width, metadata.height);
-                    return aspectRatio;
-                } else {
-                    log.warn("Could not extract metadata from video {}", s.getVideoId());
+                // Use keyframe URL if available (faster and more reliable)
+                if (s.getKeyframeUrl() != null && !s.getKeyframeUrl().isEmpty()) {
+                    log.info("Deriving aspect ratio from scene {} keyframe", s.getSceneNumber());
+                    
+                    try {
+                        java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(
+                            new java.net.URL(s.getKeyframeUrl())
+                        );
+                        
+                        if (img != null) {
+                            int w = img.getWidth();
+                            int h = img.getHeight();
+                            boolean portrait = h >= w;
+                            String aspectRatio = portrait ? "9:16" : "16:9";
+                            
+                            log.info("✅ Derived aspect ratio: {} from keyframe {}x{}", 
+                                     aspectRatio, w, h);
+                            return aspectRatio;
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to read keyframe for scene {}: {}", s.getSceneNumber(), e.getMessage());
+                    }
                 }
             }
         } catch (Exception e) {
