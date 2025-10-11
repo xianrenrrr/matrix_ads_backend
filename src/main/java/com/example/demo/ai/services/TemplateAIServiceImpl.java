@@ -46,12 +46,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Autowired
     private VideoSummaryService videoSummaryService;
     
-    @Autowired
-    private ShapeProcessingUtil shapeProcessingUtil;
-    
-    @Autowired
-    private SceneInstructionService sceneInstructionService;
-    
     @Value("${ai.template.useObjectOverlay:true}")
     private boolean useObjectOverlay;
     
@@ -131,10 +125,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 log.info("Processing scene {}/{} with language: {}", i + 1, sceneSegments.size(), language);
                 
                 Scene scene = processScene(segment, i + 1, video.getUrl(), language);
-                
-                // Generate AI instructions for the scene
-                sceneInstructionService.generateInstructions(scene, null, language);
-                
                 scenes.add(scene);
                 
                 // Collect labels for summary (no more block descriptions)
@@ -199,15 +189,114 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             List<OverlayShape> shapes = segmentationService.detect(keyframeUrl);
             
             if (!shapes.isEmpty()) {
-                // Use shared utility to process shapes and add labels
-                boolean shapesProcessed = shapeProcessingUtil.processShapesWithLabels(
-                    scene, shapes, keyframeUrl, objectLabelService, language
-                );
+                // Process shapes and add Chinese labels
+                boolean hasPolygons = false;
+                boolean hasBoxes = false;
                 
-                // Build legend if needed
-                if (shapesProcessed && includeLegend && !"grid".equals(scene.getOverlayType()) && overlayLegendService != null) {
+                // Build region list (one-shot labeling)
+                java.util.Map<OverlayShape, String> idMap = new java.util.HashMap<>();
+                java.util.List<com.example.demo.ai.label.ObjectLabelService.RegionBox> regions = new java.util.ArrayList<>();
+                int idCounter = 1;
+                for (OverlayShape s : shapes) {
+                    String id = "p" + (idCounter++);
+                    idMap.put(s, id);
+                    double x, y, w, h;
+                    if (s instanceof OverlayBox b) {
+                        x = clamp01(b.x()); y = clamp01(b.y()); w = clamp01(b.w()); h = clamp01(b.h());
+                    } else if (s instanceof OverlayPolygon p) {
+                        double minX = 1.0, minY = 1.0, maxX = 0.0, maxY = 0.0;
+                        for (com.example.demo.ai.seg.dto.Point pt : p.points()) {
+                            minX = Math.min(minX, pt.x()); minY = Math.min(minY, pt.y());
+                            maxX = Math.max(maxX, pt.x()); maxY = Math.max(maxY, pt.y());
+                        }
+                        x = clamp01(minX); y = clamp01(minY); w = clamp01(maxX - minX); h = clamp01(maxY - minY);
+                    } else { continue; }
+                    regions.add(new com.example.demo.ai.label.ObjectLabelService.RegionBox(id, x, y, w, h));
+                }
+
+                java.util.Map<String, com.example.demo.ai.label.ObjectLabelService.LabelResult> regionLabels = java.util.Collections.emptyMap();
+                try {
+                    regionLabels = objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
+                } catch (Exception ignore) {}
+
+                for (OverlayShape shape : shapes) {
+                    String labelZh = null;
+                    String sid = idMap.get(shape);
+                    if (sid != null && regionLabels.containsKey(sid)) {
+                        var lr = regionLabels.get(sid);
+                        // Threshold controlled by property, default 0.8
+                        if (lr != null && lr.labelZh != null && !lr.labelZh.isBlank() && lr.conf >= getRegionsMinConf()) {
+                            labelZh = lr.labelZh;
+                        }
+                    }
+                    if (labelZh == null) labelZh = "未知";
+                    
+                    // Create new shape with Chinese label
+                    if (shape instanceof OverlayPolygon polygon) {
+                        hasPolygons = true;
+                        OverlayPolygon newPolygon = new OverlayPolygon(
+                            polygon.label(),
+                            labelZh,
+                            polygon.confidence(),
+                            polygon.points()
+                        );
+                        if (scene.getOverlayPolygons() == null) {
+                            scene.setOverlayPolygons(new ArrayList<>());
+                        }
+                        // Convert our DTO polygon to GoogleVisionProvider.OverlayPolygon
+                        com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon scenePolygon = new com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon();
+                        scenePolygon.setLabel(newPolygon.label());
+                        scenePolygon.setLabelZh(newPolygon.labelZh());
+                        // Ensure localized label is populated for frontend legend/UI
+                        scenePolygon.setLabelLocalized(newPolygon.labelZh());
+                        scenePolygon.setConfidence((float) newPolygon.confidence());
+                        
+                        // Convert points using the nested Point class
+                        List<com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point> scenePoints = new ArrayList<>();
+                        for (com.example.demo.ai.seg.dto.Point p : newPolygon.points()) {
+                            com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point scenePoint = new com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point((float) p.x(), (float) p.y());
+                            scenePoints.add(scenePoint);
+                        }
+                        scenePolygon.setPoints(scenePoints);
+                        
+                        scene.getOverlayPolygons().add(scenePolygon);
+                    } else if (shape instanceof OverlayBox box) {
+                        hasBoxes = true;
+                        OverlayBox newBox = new OverlayBox(
+                            box.label(),
+                            labelZh,
+                            box.confidence(),
+                            box.x(), box.y(), box.w(), box.h()
+                        );
+                        if (scene.getOverlayObjects() == null) {
+                            scene.setOverlayObjects(new ArrayList<>());
+                        }
+                        scene.getOverlayObjects().add(convertToSceneBox(newBox));
+                    }
+                }
+                
+                // Set overlay type priority: polygons > objects > grid
+                if (hasPolygons) {
+                    scene.setOverlayType("polygons");
+                } else if (hasBoxes) {
+                    scene.setOverlayType("objects");
+                } else {
+                    scene.setOverlayType("grid");
+                }
+                
+                // Build legend to drive mini‑app overlay UI if not grid
+                if (includeLegend && !"grid".equals(scene.getOverlayType()) && overlayLegendService != null) {
                     var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
                     scene.setLegend(legend);
+                }
+
+                // Set dominant object's Chinese label as scene's short label (no recrop)
+                if (!shapes.isEmpty()) {
+                    OverlayShape dominant = shapes.get(0);
+                    String dom = null;
+                    if (dominant instanceof OverlayBox db) dom = db.labelZh();
+                    else if (dominant instanceof OverlayPolygon dp) dom = dp.labelZh();
+                    scene.setShortLabelZh(dom);
                 }
             } else {
                 boolean yoloApplied = applyHuggingFaceYoloFallback(scene, keyframeUrl, language);
@@ -221,7 +310,29 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             // Leave overlayType unset to allow downstream fallback processing
         }
     }
-
+    
+    // Removed convertToScenePolygon method - conversion now done inline
+    
+    private com.example.demo.model.Scene.ObjectOverlay convertToSceneBox(OverlayBox box) {
+        com.example.demo.model.Scene.ObjectOverlay model = new com.example.demo.model.Scene.ObjectOverlay();
+        String zh = box.labelZh();
+        String lbl = box.label();
+        if (zh != null && !zh.isBlank()) {
+            model.setLabelZh(zh);
+            model.setLabelLocalized(zh);
+        }
+        if (lbl == null || lbl.isBlank()) lbl = zh; // fall back to zh to avoid empty label
+        model.setLabel(lbl);
+        if (model.getLabelLocalized() == null || model.getLabelLocalized().isBlank()) {
+            model.setLabelLocalized(lbl);
+        }
+        model.setConfidence((float) box.confidence());
+        model.setX((float) box.x());
+        model.setY((float) box.y());
+        model.setWidth((float) box.w());
+        model.setHeight((float) box.h());
+        return model;
+    }
     
     private String extractKeyframe(Scene scene, SceneSegment segment, String videoUrl) {
         var start = segment.getStartTime();
@@ -308,7 +419,23 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         return template;
     }
 
+    // Configurable threshold (defaults to 0.8 if property is absent)
+    private double getRegionsMinConf() {
+        try {
+            String val = System.getProperty("ai.labeling.regions.minConf");
+            if (val == null) {
+                val = System.getenv("AI_LABELING_REGIONS_MINCONF");
+            }
+            if (val != null) {
+                return Double.parseDouble(val);
+            }
+        } catch (Exception ignored) {}
+        return 0.8;
+    }
 
+    private double clamp01(double v) {
+        if (v < 0) return 0; if (v > 1) return 1; return v;
+    }
 
     private String safeEndpoint(String url) {
         try {
@@ -407,7 +534,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 String zh = null; double conf = 0.0;
                 if (regionLabels != null && regionLabels.containsKey(sid)) {
                     var lr = regionLabels.get(sid);
-                    if (lr != null && lr.labelZh != null && !lr.labelZh.isBlank() && lr.conf >= 0.8) {
+                    if (lr != null && lr.labelZh != null && !lr.labelZh.isBlank() && lr.conf >= getRegionsMinConf()) {
                         zh = lr.labelZh; conf = lr.conf;
                     }
                 }
