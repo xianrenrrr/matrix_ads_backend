@@ -39,3 +39,8 @@ application-dev.properties
 application-local.properties
 *.env
 config/application-local.properties
+###
+ System Files ###
+.DS_Store
+**/.DS_Store
+*.log
