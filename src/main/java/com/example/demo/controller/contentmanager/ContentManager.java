@@ -214,6 +214,32 @@ public class ContentManager {
         public void setTemplateTitle(String templateTitle) { this.templateTitle = templateTitle; }
     }
 
+    /**
+     * Get assigned groups for a template
+     * GET /content-manager/templates/{templateId}/groups
+     * NOTE: This must come BEFORE @GetMapping("/{templateId}") to avoid path matching conflicts
+     */
+    @GetMapping("/{templateId}/groups")
+    public ResponseEntity<ApiResponse<List<String>>> getTemplateGroups(
+            @PathVariable String templateId,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        // Check if template exists
+        ManualTemplate template = templateDao.getTemplate(templateId);
+        if (template == null) {
+            throw new NoSuchElementException("Template not found with ID: " + templateId);
+        }
+        
+        List<String> assignedGroups = template.getAssignedGroups();
+        if (assignedGroups == null) {
+            assignedGroups = new ArrayList<>();
+        }
+        
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, assignedGroups));
+    }
+
     @GetMapping("/{templateId}")
     public ResponseEntity<ApiResponse<ManualTemplate>> getTemplateById(@PathVariable String templateId,
                                                                         @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
