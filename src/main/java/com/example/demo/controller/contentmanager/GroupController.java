@@ -402,17 +402,20 @@ public class GroupController {
                 continue;
             }
             
+            ManualTemplate snapshot = assignment.getTemplateSnapshot();
+            
             Map<String, Object> templateData = new HashMap<>();
-            templateData.put("id", assignment.getId());  // Use assignment ID, not master template ID
+            // Use assignment ID as template ID for mini program
+            templateData.put("id", assignment.getId());
             templateData.put("masterTemplateId", assignment.getMasterTemplateId());
-            templateData.put("templateTitle", assignment.getTemplateSnapshot().getTemplateTitle());
-            templateData.put("templateDescription", assignment.getTemplateSnapshot().getTemplateDescription());
-            templateData.put("videoPurpose", assignment.getTemplateSnapshot().getVideoPurpose());
-            templateData.put("tone", assignment.getTemplateSnapshot().getTone());
-            templateData.put("totalVideoLength", assignment.getTemplateSnapshot().getTotalVideoLength());
-            templateData.put("videoFormat", assignment.getTemplateSnapshot().getVideoFormat());
-            templateData.put("thumbnailUrl", assignment.getTemplateSnapshot().getThumbnailUrl());
-            templateData.put("scenes", assignment.getTemplateSnapshot().getScenes());
+            templateData.put("templateTitle", snapshot.getTemplateTitle());
+            templateData.put("templateDescription", snapshot.getTemplateDescription());
+            templateData.put("videoPurpose", snapshot.getVideoPurpose());
+            templateData.put("tone", snapshot.getTone());
+            templateData.put("totalVideoLength", snapshot.getTotalVideoLength());
+            templateData.put("videoFormat", snapshot.getVideoFormat());
+            templateData.put("thumbnailUrl", snapshot.getThumbnailUrl());
+            templateData.put("sceneCount", snapshot.getScenes() != null ? snapshot.getScenes().size() : 0);
             
             // Add assignment metadata
             templateData.put("pushedAt", assignment.getPushedAt());
