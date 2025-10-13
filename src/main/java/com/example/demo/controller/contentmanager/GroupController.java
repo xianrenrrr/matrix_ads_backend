@@ -365,39 +365,8 @@ public class GroupController {
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }
 
-    // 10. Get Templates Assigned to Group
-    @GetMapping("/{groupId}/templates")
-    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getGroupTemplates(
-            @PathVariable String groupId,
-            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
-        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        
-        Group group = groupDao.findById(groupId);
-        if (group == null || !"active".equals(group.getStatus())) {
-            throw new NoSuchElementException("Group not found with ID: " + groupId);
-        }
-        
-        // Get all templates that include this group using TemplateDao
-        List<Map<String, Object>> templates = new ArrayList<>();
-        try {
-            List<ManualTemplate> groupTemplates = templateDao.getTemplatesAssignedToGroup(groupId);
-            
-            for (ManualTemplate template : groupTemplates) {
-                Map<String, Object> templateData = new HashMap<>();
-                templateData.put("templateId", template.getId());
-                templateData.put("templateTitle", template.getTemplateTitle());
-                templateData.put("templateSource", "manual"); // Since ManualTemplate doesn't have source field
-                templateData.put("sceneCount", template.getScenes() != null ? template.getScenes().size() : 0);
-                templates.add(templateData);
-            }
-        } catch (Exception e) {
-            // Log error but return empty list
-            System.err.println("Error fetching templates for group: " + e.getMessage());
-        }
-        
-        String message = i18nService.getMessage("operation.success", language);
-        return ResponseEntity.ok(ApiResponse.ok(message, templates));
-    }
+    // 10. Get Templates Assigned to Group - REMOVED (duplicate)
+    // Now using TemplateAssignment-based implementation below
 
     private String generateQRCodeUrl(String token) {
         // Generate QR code with mini-program page path format

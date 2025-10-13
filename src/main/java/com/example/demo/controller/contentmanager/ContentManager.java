@@ -177,7 +177,8 @@ public class ContentManager {
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("template", manualTemplate);
         responseData.put("templateId", templateId);
-        responseData.put("assignedGroups", assignedGroupNames);
+        // Legacy: assignedGroups deprecated, return empty for backward compatibility
+        responseData.put("assignedGroups", new ArrayList<>());
         
         String message = i18nService.getMessage("template.created", language);
         if (!assignedGroupNames.isEmpty()) {
@@ -231,10 +232,9 @@ public class ContentManager {
             throw new NoSuchElementException("Template not found with ID: " + templateId);
         }
         
-        List<String> assignedGroups = template.getAssignedGroups();
-        if (assignedGroups == null) {
-            assignedGroups = new ArrayList<>();
-        }
+        // Legacy: assignedGroups field deprecated, now using TemplateAssignment
+        // Return empty list for backward compatibility
+        List<String> assignedGroups = new ArrayList<>();
         
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, assignedGroups));
@@ -343,8 +343,9 @@ public class ContentManager {
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("templateId", templateId);
         responseData.put("templateTitle", updatedTemplate.getTemplateTitle());
-        responseData.put("groupIds", updatedTemplate.getAssignedGroups());
-        responseData.put("groupCount", updatedTemplate.getAssignedGroups() != null ? updatedTemplate.getAssignedGroups().size() : 0);
+        // Legacy: assignedGroups deprecated, return empty for backward compatibility
+        responseData.put("groupIds", new ArrayList<>());
+        responseData.put("groupCount", 0);
         
         String message = i18nService.getMessage("template.groups.updated", language);
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));

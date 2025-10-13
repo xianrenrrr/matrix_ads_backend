@@ -43,9 +43,8 @@ public interface NotificationService {
      * @return Send result
      */
     Map<String, Object> sendInAppNotification(String userId, String type, Map<String, Object> data) throws ExecutionException, InterruptedException;
-}
     
-/**
+    /**
      * Notify manager that a template assignment has expired
      * @param managerId Manager user ID
      * @param groupId Group ID
@@ -84,3 +83,4 @@ public interface NotificationService {
             // Ignore notification errors
         }
     }
+}

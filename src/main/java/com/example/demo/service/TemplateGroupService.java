@@ -49,9 +49,10 @@ public class TemplateGroupService {
             return;
         }
         
-        // Update template with assigned groups
-        DocumentReference templateRef = db.collection("templates").document(templateId);
-        templateRef.update("assignedGroups", groupIds).get();
+        // Legacy: assignedGroups field deprecated, now using TemplateAssignment
+        // This update is kept for backward compatibility but should not be used
+        // DocumentReference templateRef = db.collection("templates").document(templateId);
+        // templateRef.update("assignedGroups", groupIds).get();
         
         // Update each group with this template ID using GroupDao
         for (String groupId : groupIds) {
@@ -67,17 +68,17 @@ public class TemplateGroupService {
         DocumentReference templateRef = db.collection("templates").document(templateId);
         com.google.cloud.firestore.DocumentSnapshot templateDoc = templateRef.get().get();
         
-        if (templateDoc.exists()) {
-            @SuppressWarnings("unchecked")
-            List<String> assignedGroups = (List<String>) templateDoc.get("assignedGroups");
-            
-            if (assignedGroups != null) {
-                // Remove template from each group using GroupDao
-                for (String groupId : assignedGroups) {
-                    groupDao.removeTemplateFromGroup(groupId, templateId);
-                }
-            }
-        }
+        // Legacy: assignedGroups field deprecated, now using TemplateAssignment
+        // Group cleanup is now handled by TemplateAssignmentCleanupScheduler
+        // if (templateDoc.exists()) {
+        //     @SuppressWarnings("unchecked")
+        //     List<String> assignedGroups = (List<String>) templateDoc.get("assignedGroups");
+        //     if (assignedGroups != null) {
+        //         for (String groupId : assignedGroups) {
+        //             groupDao.removeTemplateFromGroup(groupId, templateId);
+        //         }
+        //     }
+        // }
     }
     
     /**
