@@ -131,6 +131,8 @@ public class AuthController {
             userResponse.put("username", user.getUsername());
             userResponse.put("email", user.getEmail());
             userResponse.put("role", user.getRole());
+            userResponse.put("groupId", user.getGroupId());  // Include groupId for mini program
+            userResponse.put("phone", user.getPhone());
             
             // Return response matching mini program expectations
             Map<String, Object> responseData = new HashMap<>();
