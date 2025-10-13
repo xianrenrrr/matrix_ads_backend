@@ -850,9 +850,6 @@ public class ContentManager {
     
     // ==================== Template Assignment APIs ====================
     
-    @Autowired
-    private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
-    
     /**
      * Push template to groups with time-limited assignment
      * POST /content-manager/templates/{templateId}/push
