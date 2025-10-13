@@ -5,6 +5,7 @@ import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.DocumentReference;
 import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.QuerySnapshot;
+import com.google.gson.Gson;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
@@ -154,7 +155,24 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
         assignment.setId(doc.getId());
         assignment.setMasterTemplateId(doc.getString("masterTemplateId"));
         assignment.setGroupId(doc.getString("groupId"));
-        assignment.setTemplateSnapshot(doc.toObject(com.example.demo.model.ManualTemplate.class));
+        
+        // Get templateSnapshot field specifically
+        Object templateSnapshotData = doc.get("templateSnapshot");
+        if (templateSnapshotData != null) {
+            try {
+                // Use Gson to convert the nested object
+                com.google.gson.Gson gson = new com.google.gson.Gson();
+                String json = gson.toJson(templateSnapshotData);
+                com.example.demo.model.ManualTemplate snapshot = 
+                    gson.fromJson(json, com.example.demo.model.ManualTemplate.class);
+                assignment.setTemplateSnapshot(snapshot);
+            } catch (Exception e) {
+                System.err.println("Error converting templateSnapshot: " + e.getMessage());
+                // Set null if conversion fails
+                assignment.setTemplateSnapshot(null);
+            }
+        }
+        
         assignment.setPushedAt(doc.getDate("pushedAt"));
         assignment.setExpiresAt(doc.getDate("expiresAt"));
         

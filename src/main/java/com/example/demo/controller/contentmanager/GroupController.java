@@ -408,14 +408,28 @@ public class GroupController {
             // Use assignment ID as template ID for mini program
             templateData.put("id", assignment.getId());
             templateData.put("masterTemplateId", assignment.getMasterTemplateId());
-            templateData.put("templateTitle", snapshot.getTemplateTitle());
-            templateData.put("templateDescription", snapshot.getTemplateDescription());
-            templateData.put("videoPurpose", snapshot.getVideoPurpose());
-            templateData.put("tone", snapshot.getTone());
-            templateData.put("totalVideoLength", snapshot.getTotalVideoLength());
-            templateData.put("videoFormat", snapshot.getVideoFormat());
-            templateData.put("thumbnailUrl", snapshot.getThumbnailUrl());
-            templateData.put("sceneCount", snapshot.getScenes() != null ? snapshot.getScenes().size() : 0);
+            
+            // Handle null snapshot gracefully
+            if (snapshot != null) {
+                templateData.put("templateTitle", snapshot.getTemplateTitle());
+                templateData.put("templateDescription", snapshot.getTemplateDescription());
+                templateData.put("videoPurpose", snapshot.getVideoPurpose());
+                templateData.put("tone", snapshot.getTone());
+                templateData.put("totalVideoLength", snapshot.getTotalVideoLength());
+                templateData.put("videoFormat", snapshot.getVideoFormat());
+                templateData.put("thumbnailUrl", snapshot.getThumbnailUrl());
+                templateData.put("sceneCount", snapshot.getScenes() != null ? snapshot.getScenes().size() : 0);
+            } else {
+                // Fallback values if snapshot is null
+                templateData.put("templateTitle", "Template " + assignment.getMasterTemplateId());
+                templateData.put("templateDescription", null);
+                templateData.put("videoPurpose", null);
+                templateData.put("tone", null);
+                templateData.put("totalVideoLength", 0);
+                templateData.put("videoFormat", null);
+                templateData.put("thumbnailUrl", null);
+                templateData.put("sceneCount", 0);
+            }
             
             // Add assignment metadata
             templateData.put("pushedAt", assignment.getPushedAt());

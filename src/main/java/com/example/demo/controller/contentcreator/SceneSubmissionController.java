@@ -45,19 +45,22 @@ public class SceneSubmissionController {
     
     @Autowired
     private VideoDao videoDao;
+    
+    @Autowired
+    private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
 
     
     @PostMapping("/upload")
     public ResponseEntity<ApiResponse<Map<String, Object>>> uploadScene(
             @RequestParam("file") MultipartFile file,
-            @RequestParam("templateId") String templateId,
+            @RequestParam("assignmentId") String assignmentId,
             @RequestParam("userId") String userId,
             @RequestParam("sceneNumber") int sceneNumber,
             @RequestParam(value = "sceneTitle", required = false) String sceneTitle) throws Exception {
         
         if (file.isEmpty()) throw new IllegalArgumentException("File is empty");
         
-        ManualTemplate template = templateDao.getTemplate(templateId);
+        ManualTemplate template = getTemplateByAssignmentId(assignmentId);
         if (template == null) throw new NoSuchElementException("Template not found");
         
         if (sceneNumber < 1 || sceneNumber > template.getScenes().size()) {
@@ -65,14 +68,14 @@ public class SceneSubmissionController {
         }
         
         com.example.demo.model.Scene templateScene = template.getScenes().get(sceneNumber - 1);
-        String compositeVideoId = userId + "_" + templateId;
+        String compositeVideoId = userId + "_" + assignmentId;
         
         // Upload file
         String sceneVideoId = UUID.randomUUID().toString();
         FirebaseStorageService.UploadResult uploadResult = firebaseStorageService.uploadVideoWithThumbnail(file, userId, sceneVideoId);
         
         // Create scene submission
-        SceneSubmission sceneSubmission = new SceneSubmission(templateId, userId, sceneNumber, 
+        SceneSubmission sceneSubmission = new SceneSubmission(assignmentId, userId, sceneNumber, 
             sceneTitle != null ? sceneTitle : templateScene.getSceneTitle());
         
         sceneSubmission.setVideoUrl(uploadResult.videoUrl);
@@ -91,7 +94,7 @@ public class SceneSubmissionController {
         String sceneId = sceneSubmissionDao.save(sceneSubmission);
         sceneSubmission.setId(sceneId);
         
-        updateSubmittedVideoWithScene(compositeVideoId, templateId, userId, sceneSubmission);
+        updateSubmittedVideoWithScene(compositeVideoId, assignmentId, userId, sceneSubmission);
         
         // Process AI comparison asynchronously in background
         final String finalSceneId = sceneId;
@@ -255,7 +258,7 @@ public class SceneSubmissionController {
     }
 
     @SuppressWarnings("unchecked")
-    private void updateSubmittedVideoWithScene(String compositeVideoId, String templateId, String userId, SceneSubmission sceneSubmission) throws Exception {
+    private void updateSubmittedVideoWithScene(String compositeVideoId, String assignmentId, String userId, SceneSubmission sceneSubmission) throws Exception {
         DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
         DocumentSnapshot videoDoc = videoDocRef.get().get();
         
@@ -269,7 +272,7 @@ public class SceneSubmissionController {
             
             currentScenes.put(String.valueOf(sceneSubmission.getSceneNumber()), sceneData);
             
-            int templateTotalScenes = getTemplateTotalScenes(templateId);
+            int templateTotalScenes = getTemplateTotalScenes(assignmentId);
             int approvedScenes = 0;
             int pendingScenes = 0;
             
@@ -301,7 +304,7 @@ public class SceneSubmissionController {
         } else {
             Map<String, Object> videoData = new HashMap<>();
             videoData.put("videoId", compositeVideoId);
-            videoData.put("templateId", templateId);
+            videoData.put("assignmentId", assignmentId);
             videoData.put("uploadedBy", userId);
             videoData.put("publishStatus", "pending");
             videoData.put("createdAt", FieldValue.serverTimestamp());
@@ -311,7 +314,7 @@ public class SceneSubmissionController {
             scenes.put(String.valueOf(sceneSubmission.getSceneNumber()), sceneData);
             videoData.put("scenes", scenes);
             
-            int templateTotalScenes = getTemplateTotalScenes(templateId);
+            int templateTotalScenes = getTemplateTotalScenes(assignmentId);
             videoData.put("progress", Map.of(
                 "totalScenes", templateTotalScenes,
                 "approved", 0,
@@ -320,7 +323,7 @@ public class SceneSubmissionController {
             ));
             
             videoDocRef.set(videoData);
-            db.collection("templates").document(templateId).update("submittedVideos", FieldValue.arrayUnion(compositeVideoId));
+            // Note: We don't update the original template's submittedVideos since we're using assignments now
         }
     }
     
@@ -331,9 +334,20 @@ public class SceneSubmissionController {
         return "mp4";
     }
     
-    private int getTemplateTotalScenes(String templateId) throws Exception {
-        ManualTemplate template = templateDao.getTemplate(templateId);
+    private int getTemplateTotalScenes(String assignmentId) throws Exception {
+        ManualTemplate template = getTemplateByAssignmentId(assignmentId);
         return (template != null && template.getScenes() != null) ? template.getScenes().size() : 0;
+    }
+    
+    /**
+     * Get template by assignment ID only
+     */
+    private ManualTemplate getTemplateByAssignmentId(String assignmentId) throws Exception {
+        com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
+        if (assignment == null || assignment.getTemplateSnapshot() == null) {
+            throw new NoSuchElementException("Template assignment not found with ID: " + assignmentId);
+        }
+        return assignment.getTemplateSnapshot();
     }
     
     @SuppressWarnings("unchecked")

@@ -10,7 +10,7 @@ import java.util.Map;
  */
 public class SceneSubmission {
     private String id;                          // Unique scene submission ID
-    private String templateId;                  // Reference to parent template
+    private String templateId;                  // Reference to template assignment ID (not original template)
     private String userId;                      // Content creator who submitted
     private int sceneNumber;                    // Scene order in template (1, 2, 3...)
     private String sceneTitle;                  // Title from template scene
@@ -52,9 +52,9 @@ public class SceneSubmission {
         this.resubmissionCount = 0;
     }
     
-    public SceneSubmission(String templateId, String userId, int sceneNumber, String sceneTitle) {
+    public SceneSubmission(String assignmentId, String userId, int sceneNumber, String sceneTitle) {
         this();
-        this.templateId = templateId;
+        this.templateId = assignmentId;  // Note: field name is templateId but stores assignment ID
         this.userId = userId;
         this.sceneNumber = sceneNumber;
         this.sceneTitle = sceneTitle;
@@ -64,8 +64,8 @@ public class SceneSubmission {
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     
-    public String getTemplateId() { return templateId; }
-    public void setTemplateId(String templateId) { this.templateId = templateId; }
+    public String getTemplateId() { return templateId; }  // Returns assignment ID
+    public void setTemplateId(String templateId) { this.templateId = templateId; }  // Sets assignment ID
     
     public String getUserId() { return userId; }
     public void setUserId(String userId) { this.userId = userId; }
@@ -180,7 +180,7 @@ public class SceneSubmission {
     
     @Override
     public String toString() {
-        return String.format("SceneSubmission{id='%s', template='%s', user='%s', scene=%d, status='%s'}", 
+        return String.format("SceneSubmission{id='%s', assignmentId='%s', user='%s', scene=%d, status='%s'}", 
                            id, templateId, userId, sceneNumber, status);
     }
 }
