@@ -414,4 +414,53 @@ public class GroupController {
     private String generateInviteUrl(String token) {
         return "https://matrix-ads-frontend.onrender.com/invite-signup?token=" + token;
     }
+    
+    /**
+     * Get active template assignments for a group (for mini program)
+     * GET /content-manager/groups/{groupId}/templates
+     */
+    @GetMapping("/{groupId}/templates")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getGroupTemplates(
+            @PathVariable String groupId,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        // Get active assignments for this group
+        List<com.example.demo.model.TemplateAssignment> assignments = 
+            templateAssignmentDao.getAssignmentsByGroup(groupId);
+        
+        List<Map<String, Object>> templates = new ArrayList<>();
+        for (com.example.demo.model.TemplateAssignment assignment : assignments) {
+            // Only return active assignments (not expired)
+            if (assignment.isExpired()) {
+                continue;
+            }
+            
+            Map<String, Object> templateData = new HashMap<>();
+            templateData.put("id", assignment.getId());  // Use assignment ID, not master template ID
+            templateData.put("masterTemplateId", assignment.getMasterTemplateId());
+            templateData.put("templateTitle", assignment.getTemplateSnapshot().getTemplateTitle());
+            templateData.put("templateDescription", assignment.getTemplateSnapshot().getTemplateDescription());
+            templateData.put("videoPurpose", assignment.getTemplateSnapshot().getVideoPurpose());
+            templateData.put("tone", assignment.getTemplateSnapshot().getTone());
+            templateData.put("totalVideoLength", assignment.getTemplateSnapshot().getTotalVideoLength());
+            templateData.put("videoFormat", assignment.getTemplateSnapshot().getVideoFormat());
+            templateData.put("thumbnailUrl", assignment.getTemplateSnapshot().getThumbnailUrl());
+            templateData.put("scenes", assignment.getTemplateSnapshot().getScenes());
+            
+            // Add assignment metadata
+            templateData.put("pushedAt", assignment.getPushedAt());
+            templateData.put("expiresAt", assignment.getExpiresAt());
+            templateData.put("daysUntilExpiry", assignment.getDaysUntilExpiry());
+            templateData.put("status", assignment.getStatus());
+            
+            templates.add(templateData);
+        }
+        
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, templates));
+    }
+    
+    @Autowired
+    private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
 }

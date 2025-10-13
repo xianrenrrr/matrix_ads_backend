@@ -812,8 +812,181 @@ public class ContentManager {
         return s.length() > 60 ? s.substring(0, 60) : s;
     }
     
+    // ==================== Template Assignment APIs ====================
+    
+    @Autowired
+    private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
+    
+    /**
+     * Push template to groups with time-limited assignment
+     * POST /content-manager/templates/{templateId}/push
+     */
+    @PostMapping("/{templateId}/push")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> pushTemplateToGroups(
+            @PathVariable String templateId,
+            @RequestBody Map<String, Object> requestBody,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        // Get master template
+        ManualTemplate master = templateDao.getTemplate(templateId);
+        if (master == null) {
+            throw new NoSuchElementException("Template not found with ID: " + templateId);
+        }
+        
+        // Parse request
+        @SuppressWarnings("unchecked")
+        List<String> groupIds = (List<String>) requestBody.get("groupIds");
+        Integer durationDays = (Integer) requestBody.get("durationDays");
+        String pushedBy = (String) requestBody.get("pushedBy");
+        
+        if (groupIds == null || groupIds.isEmpty()) {
+            throw new IllegalArgumentException("groupIds list is required");
+        }
+        
+        // Create assignments for each group
+        List<Map<String, Object>> results = new ArrayList<>();
+        for (String groupId : groupIds) {
+            com.example.demo.model.TemplateAssignment assignment = new com.example.demo.model.TemplateAssignment();
+            assignment.setMasterTemplateId(templateId);
+            assignment.setGroupId(groupId);
+            assignment.setTemplateSnapshot(master);  // Deep copy
+            assignment.setPushedBy(pushedBy);
+            assignment.setDurationDays(durationDays);
+            
+            // Calculate expiration
+            if (durationDays != null && durationDays > 0) {
+                Calendar cal = Calendar.getInstance();
+                cal.add(Calendar.DAY_OF_MONTH, durationDays);
+                assignment.setExpiresAt(cal.getTime());
+            }
+            // If durationDays is null or 0, expiresAt stays null (permanent)
+            
+            String assignmentId = templateAssignmentDao.createAssignment(assignment);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("groupId", groupId);
+            result.put("assignmentId", assignmentId);
+            result.put("expiresAt", assignment.getExpiresAt());
+            result.put("durationDays", durationDays);
+            results.add(result);
+        }
+        
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("templateId", templateId);
+        responseData.put("assignments", results);
+        
+        String message = i18nService.getMessage("template.pushed", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, responseData));
+    }
+    
+    /**
+     * Get all assignments for a template
+     * GET /content-manager/templates/{templateId}/assignments
+     */
+    @GetMapping("/{templateId}/assignments")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getTemplateAssignments(
+            @PathVariable String templateId,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        List<com.example.demo.model.TemplateAssignment> assignments = 
+            templateAssignmentDao.getAssignmentsByTemplate(templateId);
+        
+        // Enrich with group information
+        List<Map<String, Object>> enrichedAssignments = new ArrayList<>();
+        for (com.example.demo.model.TemplateAssignment assignment : assignments) {
+            Map<String, Object> data = new HashMap<>();
+            data.put("id", assignment.getId());
+            data.put("groupId", assignment.getGroupId());
+            data.put("pushedAt", assignment.getPushedAt());
+            data.put("expiresAt", assignment.getExpiresAt());
+            data.put("status", assignment.getStatus());
+            data.put("durationDays", assignment.getDurationDays());
+            data.put("daysUntilExpiry", assignment.getDaysUntilExpiry());
+            
+            // Get group info
+            try {
+                com.example.demo.model.Group group = groupDao.findById(assignment.getGroupId());
+                if (group != null) {
+                    data.put("groupName", group.getGroupName());
+                    data.put("memberCount", group.getMemberCount());
+                }
+            } catch (Exception e) {
+                // Continue without group info
+            }
+            
+            enrichedAssignments.add(data);
+        }
+        
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, enrichedAssignments));
+    }
+    
+    /**
+     * Renew an assignment (extend expiration)
+     * POST /content-manager/assignments/{assignmentId}/renew
+     */
+    @PostMapping("/assignments/{assignmentId}/renew")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> renewAssignment(
+            @PathVariable String assignmentId,
+            @RequestBody Map<String, Object> requestBody,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        com.example.demo.model.TemplateAssignment assignment = 
+            templateAssignmentDao.getAssignment(assignmentId);
+        
+        if (assignment == null) {
+            throw new NoSuchElementException("Assignment not found with ID: " + assignmentId);
+        }
+        
+        Integer additionalDays = (Integer) requestBody.get("additionalDays");
+        if (additionalDays == null || additionalDays <= 0) {
+            throw new IllegalArgumentException("additionalDays must be positive");
+        }
+        
+        // Extend expiration
+        Calendar cal = Calendar.getInstance();
+        if (assignment.getExpiresAt() != null) {
+            cal.setTime(assignment.getExpiresAt());
+        }
+        cal.add(Calendar.DAY_OF_MONTH, additionalDays);
+        
+        assignment.setExpiresAt(cal.getTime());
+        assignment.setLastRenewed(new Date());
+        assignment.setStatus("active");
+        
+        templateAssignmentDao.updateAssignment(assignment);
+        
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("assignmentId", assignmentId);
+        responseData.put("newExpiresAt", assignment.getExpiresAt());
+        responseData.put("daysUntilExpiry", assignment.getDaysUntilExpiry());
+        
+        String message = i18nService.getMessage("assignment.renewed", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, responseData));
+    }
+    
+    /**
+     * Delete an assignment
+     * DELETE /content-manager/assignments/{assignmentId}
+     */
+    @DeleteMapping("/assignments/{assignmentId}")
+    public ResponseEntity<ApiResponse<Void>> deleteAssignment(
+            @PathVariable String assignmentId,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        templateAssignmentDao.deleteAssignment(assignmentId);
+        
+        String message = i18nService.getMessage("assignment.deleted", language);
+        return ResponseEntity.ok(ApiResponse.ok(message));
+    }
+    
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ContentManager.class);
 }
 // Change Log: Manual scenes always set sceneSource="manual" and overlayType="grid" for dual scene system
 // Added manual-with-ai endpoint for creating templates with per-scene AI analysis (no scene detection)
 // Added AI metadata generation using reasoning model (same as AI template)
+// Added template assignment APIs for time-limited template pushing (Phase 2)

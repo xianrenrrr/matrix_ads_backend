@@ -27,8 +27,13 @@ public class UserController {
     private com.google.cloud.firestore.Firestore db;
 
 
-    // Get assigned templates (Content Creator) - assigned through group  
-    // Returns minimal data for fast loading: id, title, sceneCount, duration, thumbnail, publishStatus
+    @Autowired
+    private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
+    
+    /**
+     * Get assigned templates (Content Creator) - from time-limited assignments
+     * Returns active template assignments for user's group
+     */
     @GetMapping("/users/{userId}/assigned-templates")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getAssignedTemplates(@PathVariable String userId,
                                                                                   @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
@@ -43,18 +48,47 @@ public class UserController {
                 Collections.emptyList()));
         }
         
-        // Get lightweight template summaries (only essential fields from DB)
-        List<Map<String, Object>> templateSummaries = templateDao.getTemplateSummariesForGroup(userGroupId);
+        // Get active template assignments for this group
+        List<com.example.demo.model.TemplateAssignment> assignments = 
+            templateAssignmentDao.getAssignmentsByGroup(userGroupId);
         
-        // Add publish status for each template
-        for (Map<String, Object> summary : templateSummaries) {
-            String templateId = (String) summary.get("id");
-            String publishStatus = getPublishStatus(userId, templateId);
-            summary.put("publishStatus", publishStatus);
+        List<Map<String, Object>> templates = new ArrayList<>();
+        for (com.example.demo.model.TemplateAssignment assignment : assignments) {
+            // Skip expired assignments
+            if (assignment.isExpired()) {
+                continue;
+            }
+            
+            ManualTemplate snapshot = assignment.getTemplateSnapshot();
+            
+            Map<String, Object> templateData = new HashMap<>();
+            // Use assignment ID as template ID for mini program
+            templateData.put("id", assignment.getId());
+            templateData.put("masterTemplateId", assignment.getMasterTemplateId());
+            templateData.put("templateTitle", snapshot.getTemplateTitle());
+            templateData.put("templateDescription", snapshot.getTemplateDescription());
+            templateData.put("videoPurpose", snapshot.getVideoPurpose());
+            templateData.put("tone", snapshot.getTone());
+            templateData.put("totalVideoLength", snapshot.getTotalVideoLength());
+            templateData.put("videoFormat", snapshot.getVideoFormat());
+            templateData.put("thumbnailUrl", snapshot.getThumbnailUrl());
+            templateData.put("sceneCount", snapshot.getScenes() != null ? snapshot.getScenes().size() : 0);
+            
+            // Add assignment metadata
+            templateData.put("pushedAt", assignment.getPushedAt());
+            templateData.put("expiresAt", assignment.getExpiresAt());
+            templateData.put("daysUntilExpiry", assignment.getDaysUntilExpiry());
+            templateData.put("status", assignment.getStatus());
+            
+            // Add publish status
+            String publishStatus = getPublishStatus(userId, assignment.getId());
+            templateData.put("publishStatus", publishStatus);
+            
+            templates.add(templateData);
         }
         
         String message = i18nService.getMessage("operation.success", language);
-        return ResponseEntity.ok(ApiResponse.ok(message, templateSummaries));
+        return ResponseEntity.ok(ApiResponse.ok(message, templates));
     }
     
     /**

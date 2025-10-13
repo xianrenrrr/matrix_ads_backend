@@ -22,6 +22,7 @@ public class ManualTemplate {
     private String localeUsed;  // Locale used for template generation (e.g., "zh-CN")
     
     // Additional database fields to prevent Firestore warnings
+    @Deprecated  // Use TemplateAssignment instead for time-limited assignments
     private List<String> assignedGroups;
     private List<String> submittedVideos;
 
