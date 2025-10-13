@@ -397,7 +397,7 @@ public class GroupController {
         
         List<Map<String, Object>> templates = new ArrayList<>();
         for (com.example.demo.model.TemplateAssignment assignment : assignments) {
-            // Only return active assignments (not expired)
+            // Skip expired assignments
             if (assignment.isExpired()) {
                 continue;
             }
@@ -409,7 +409,7 @@ public class GroupController {
             templateData.put("id", assignment.getId());
             templateData.put("masterTemplateId", assignment.getMasterTemplateId());
             
-            // Handle null snapshot gracefully
+            // Handle null snapshot gracefully - EXACT SAME LOGIC AS UserController
             if (snapshot != null) {
                 templateData.put("templateTitle", snapshot.getTemplateTitle());
                 templateData.put("templateDescription", snapshot.getTemplateDescription());
