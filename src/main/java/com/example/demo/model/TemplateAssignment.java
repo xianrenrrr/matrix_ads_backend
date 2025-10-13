@@ -17,7 +17,6 @@ public class TemplateAssignment {
     // Time management
     private Date pushedAt;
     private Date expiresAt;  // null = permanent
-    private String status;  // "active", "expiring_soon", "expired"
     private Integer durationDays;
     
     // Metadata
@@ -26,7 +25,6 @@ public class TemplateAssignment {
     
     public TemplateAssignment() {
         this.pushedAt = new Date();
-        this.status = "active";
     }
     
     // Helper methods
@@ -34,26 +32,10 @@ public class TemplateAssignment {
         return expiresAt != null && new Date().after(expiresAt);
     }
     
-    public boolean isExpiringSoon() {
-        if (expiresAt == null) return false;
-        long daysUntilExpiry = getDaysUntilExpiry();
-        return daysUntilExpiry <= 7 && daysUntilExpiry > 0;
-    }
-    
     public long getDaysUntilExpiry() {
         if (expiresAt == null) return -1;
         long diffInMillies = expiresAt.getTime() - new Date().getTime();
         return TimeUnit.DAYS.convert(diffInMillies, TimeUnit.MILLISECONDS);
-    }
-    
-    public void updateStatus() {
-        if (isExpired()) {
-            this.status = "expired";
-        } else if (isExpiringSoon()) {
-            this.status = "expiring_soon";
-        } else {
-            this.status = "active";
-        }
     }
     
     // Getters and Setters
@@ -105,13 +87,7 @@ public class TemplateAssignment {
         this.expiresAt = expiresAt;
     }
     
-    public String getStatus() {
-        return status;
-    }
-    
-    public void setStatus(String status) {
-        this.status = status;
-    }
+
     
     public Integer getDurationDays() {
         return durationDays;

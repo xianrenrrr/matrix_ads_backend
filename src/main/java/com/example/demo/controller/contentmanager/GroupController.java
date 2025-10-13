@@ -421,7 +421,6 @@ public class GroupController {
             templateData.put("pushedAt", assignment.getPushedAt());
             templateData.put("expiresAt", assignment.getExpiresAt());
             templateData.put("daysUntilExpiry", assignment.getDaysUntilExpiry());
-            templateData.put("status", assignment.getStatus());
             
             templates.add(templateData);
         }

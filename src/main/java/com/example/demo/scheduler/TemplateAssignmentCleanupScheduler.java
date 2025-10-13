@@ -112,31 +112,4 @@ public class TemplateAssignmentCleanupScheduler {
         }
     }
     
-    /**
-     * Update assignment statuses
-     * Runs every hour
-     */
-    @Scheduled(cron = "0 0 * * * *")
-    public void updateAssignmentStatuses() {
-        try {
-            logger.debug("Updating assignment statuses...");
-            
-            // Get all active assignments
-            List<TemplateAssignment> expiringSoon = assignmentDao.getExpiringSoonAssignments(7);
-            
-            for (TemplateAssignment assignment : expiringSoon) {
-                try {
-                    assignment.updateStatus();
-                    assignmentDao.updateAssignment(assignment);
-                } catch (Exception e) {
-                    logger.error("Failed to update status for assignment: " + assignment.getId(), e);
-                }
-            }
-            
-            logger.debug("Status update completed");
-            
-        } catch (Exception e) {
-            logger.error("Error during status update", e);
-        }
-    }
 }

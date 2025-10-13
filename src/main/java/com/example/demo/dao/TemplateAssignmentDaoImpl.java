@@ -26,7 +26,6 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
     public String createAssignment(TemplateAssignment assignment) throws Exception {
         DocumentReference docRef = db.collection(COLLECTION_NAME).document();
         assignment.setId(docRef.getId());
-        assignment.updateStatus();
         
         Map<String, Object> data = assignmentToMap(assignment);
         docRef.set(data).get();
@@ -61,13 +60,16 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
     public List<TemplateAssignment> getAssignmentsByGroup(String groupId) throws Exception {
         QuerySnapshot querySnapshot = db.collection(COLLECTION_NAME)
             .whereEqualTo("groupId", groupId)
-            .whereEqualTo("status", "active")
             .get()
             .get();
         
+        // Filter out expired assignments in memory
         List<TemplateAssignment> assignments = new ArrayList<>();
         for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
-            assignments.add(mapToAssignment(doc));
+            TemplateAssignment assignment = mapToAssignment(doc);
+            if (!assignment.isExpired()) {
+                assignments.add(assignment);
+            }
         }
         return assignments;
     }
@@ -77,14 +79,13 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
         Date now = new Date();
         QuerySnapshot querySnapshot = db.collection(COLLECTION_NAME)
             .whereLessThan("expiresAt", now)
-            .whereNotEqualTo("status", "expired")
             .get()
             .get();
         
         List<TemplateAssignment> assignments = new ArrayList<>();
         for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
             TemplateAssignment assignment = mapToAssignment(doc);
-            if (assignment.getExpiresAt() != null && assignment.isExpired()) {
+            if (assignment.isExpired()) {
                 assignments.add(assignment);
             }
         }
@@ -93,19 +94,19 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
     
     @Override
     public List<TemplateAssignment> getExpiringSoonAssignments(int daysThreshold) throws Exception {
-        // Get all active assignments and filter in memory
-        // (Firestore doesn't support complex date range queries easily)
+        // Get all assignments and filter in memory
         QuerySnapshot querySnapshot = db.collection(COLLECTION_NAME)
-            .whereEqualTo("status", "active")
             .get()
             .get();
         
         List<TemplateAssignment> assignments = new ArrayList<>();
         for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
             TemplateAssignment assignment = mapToAssignment(doc);
-            long daysUntilExpiry = assignment.getDaysUntilExpiry();
-            if (daysUntilExpiry > 0 && daysUntilExpiry <= daysThreshold) {
-                assignments.add(assignment);
+            if (!assignment.isExpired()) {
+                long daysUntilExpiry = assignment.getDaysUntilExpiry();
+                if (daysUntilExpiry > 0 && daysUntilExpiry <= daysThreshold) {
+                    assignments.add(assignment);
+                }
             }
         }
         return assignments;
@@ -113,7 +114,6 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
     
     @Override
     public void updateAssignment(TemplateAssignment assignment) throws Exception {
-        assignment.updateStatus();
         Map<String, Object> data = assignmentToMap(assignment);
         db.collection(COLLECTION_NAME).document(assignment.getId()).set(data).get();
     }
@@ -143,7 +143,6 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
         data.put("templateSnapshot", assignment.getTemplateSnapshot());
         data.put("pushedAt", assignment.getPushedAt());
         data.put("expiresAt", assignment.getExpiresAt());
-        data.put("status", assignment.getStatus());
         data.put("durationDays", assignment.getDurationDays());
         data.put("pushedBy", assignment.getPushedBy());
         data.put("lastRenewed", assignment.getLastRenewed());
@@ -158,7 +157,6 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
         assignment.setTemplateSnapshot(doc.toObject(com.example.demo.model.ManualTemplate.class));
         assignment.setPushedAt(doc.getDate("pushedAt"));
         assignment.setExpiresAt(doc.getDate("expiresAt"));
-        assignment.setStatus(doc.getString("status"));
         
         Long durationDays = doc.getLong("durationDays");
         assignment.setDurationDays(durationDays != null ? durationDays.intValue() : null);
