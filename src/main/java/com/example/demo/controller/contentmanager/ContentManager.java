@@ -133,7 +133,6 @@ public class ContentManager {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         String userId = request.getUserId();
         ManualTemplate manualTemplate = request.getManualTemplate();
-        List<String> selectedGroupIds = request.getSelectedGroupIds();
         
         manualTemplate.setUserId(userId);
         
@@ -170,8 +169,6 @@ public class ContentManager {
         String templateId = templateDao.createTemplate(manualTemplate);
         userDao.addCreatedTemplate(userId, templateId);
         
-        List<String> assignedGroupNames = selectedGroupIds != null ? selectedGroupIds : new ArrayList<>();
-        
         // Prepare response
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("template", manualTemplate);
@@ -180,9 +177,6 @@ public class ContentManager {
         responseData.put("assignedGroups", new ArrayList<>());
         
         String message = i18nService.getMessage("template.created", language);
-        if (!assignedGroupNames.isEmpty()) {
-            message += " and made available to " + assignedGroupNames.size() + " groups";
-        }
         
         return new ResponseEntity<>(ApiResponse.ok(message, responseData), HttpStatus.CREATED);
     }
@@ -449,7 +443,6 @@ public class ContentManager {
         @RequestParam("templateTitle") String templateTitle,
         @RequestParam(value = "templateDescription", required = false) String templateDescription,
         @RequestParam("scenesMetadata") String scenesMetadataJson,
-        @RequestParam(value = "selectedGroupIds", required = false) String selectedGroupIdsJson,
         @RequestParam Map<String, org.springframework.web.multipart.MultipartFile> videoFiles,
         @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage
     ) throws Exception {
@@ -464,14 +457,7 @@ public class ContentManager {
             new com.fasterxml.jackson.core.type.TypeReference<List<SceneMetadata>>() {}
         );
         
-        // Parse group IDs
-        List<String> selectedGroupIds = null;
-        if (selectedGroupIdsJson != null && !selectedGroupIdsJson.trim().isEmpty()) {
-            selectedGroupIds = mapper.readValue(
-                selectedGroupIdsJson, 
-                new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {}
-            );
-        }
+
         
         log.info("Processing {} scenes for template: {}", scenesMetadata.size(), templateTitle);
         
@@ -584,9 +570,6 @@ public class ContentManager {
         responseData.put("scenesAnalyzed", aiAnalyzedScenes.size());
         
         String message = i18nService.getMessage("template.created", language);
-        if (selectedGroupIds != null && !selectedGroupIds.isEmpty()) {
-            message += " and assigned to " + selectedGroupIds.size() + " groups";
-        }
         
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }

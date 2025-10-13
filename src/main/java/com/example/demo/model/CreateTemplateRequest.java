@@ -6,7 +6,6 @@ public class CreateTemplateRequest {
     private String userId;
     private ManualTemplate manualTemplate;
     private String videoId;
-    private List<String> selectedGroupIds; // List of group IDs to assign this template to
 
     public CreateTemplateRequest() {}
 
@@ -34,11 +33,4 @@ public class CreateTemplateRequest {
         this.videoId = videoId;
     }
 
-    public List<String> getSelectedGroupIds() {
-        return selectedGroupIds;
-    }
-
-    public void setSelectedGroupIds(List<String> selectedGroupIds) {
-        this.selectedGroupIds = selectedGroupIds;
-    }
 }
