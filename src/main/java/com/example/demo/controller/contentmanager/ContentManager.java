@@ -43,6 +43,9 @@ public class ContentManager {
     @Autowired
     private com.example.demo.dao.GroupDao groupDao;
     
+    @Autowired
+    private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
+    
     // --- Submissions grouped by status ---
     @GetMapping("/submissions")
     public ResponseEntity<ApiResponse<Map<String, List<Map<String, Object>>>>> getAllSubmissions(
@@ -50,15 +53,27 @@ public class ContentManager {
             @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
-        // Get manager's groups and their templates/members
+        // Get manager's groups and their assignment IDs
         List<com.example.demo.model.Group> groups = groupDao.findByManagerId(managerId);
-        Set<String> templateIds = new HashSet<>();
+        Set<String> assignmentIds = new HashSet<>();
         Set<String> memberIds = new HashSet<>();
         
         for (com.example.demo.model.Group group : groups) {
-            if (group.getAssignedTemplates() != null) templateIds.addAll(group.getAssignedTemplates());
+            // Get active assignments for this group
+            try {
+                List<com.example.demo.model.TemplateAssignment> assignments = 
+                    templateAssignmentDao.getAssignmentsByGroup(group.getId());
+                for (com.example.demo.model.TemplateAssignment assignment : assignments) {
+                    if (!assignment.isExpired()) {
+                        assignmentIds.add(assignment.getId());
+                    }
+                }
+            } catch (Exception e) {
+                // Continue if assignment lookup fails
+            }
             if (group.getMemberIds() != null) memberIds.addAll(group.getMemberIds());
         }
+        
         com.google.cloud.firestore.CollectionReference submissionsRef = db.collection("submittedVideos");
         com.google.api.core.ApiFuture<com.google.cloud.firestore.QuerySnapshot> querySnapshot = submissionsRef.get();
         List<Map<String, Object>> pending = new ArrayList<>();
@@ -70,10 +85,35 @@ public class ContentManager {
             Map<String, Object> data = doc.getData();
             if (data == null) continue;
             
-            // Filter by template and member
-            String templateId = (String) data.get("templateId");
+            // Filter by assignment ID and member (NEW SYSTEM)
+            String assignmentId = (String) data.get("assignmentId");  // NEW: use assignmentId instead of templateId
+            String templateId = (String) data.get("templateId");      // LEGACY: fallback for old submissions
             String uploadedBy = (String) data.get("uploadedBy");
-            if (!templateIds.contains(templateId) || !memberIds.contains(uploadedBy)) continue;
+            
+            // Check if this submission belongs to manager's assignments
+            boolean belongsToManager = false;
+            if (assignmentId != null && assignmentIds.contains(assignmentId)) {
+                belongsToManager = true;  // NEW system
+            } else if (templateId != null) {
+                // LEGACY: check if templateId matches any assignment's masterTemplateId
+                for (com.example.demo.model.Group group : groups) {
+                    try {
+                        List<com.example.demo.model.TemplateAssignment> assignments = 
+                            templateAssignmentDao.getAssignmentsByGroup(group.getId());
+                        for (com.example.demo.model.TemplateAssignment assignment : assignments) {
+                            if (templateId.equals(assignment.getMasterTemplateId()) && !assignment.isExpired()) {
+                                belongsToManager = true;
+                                break;
+                            }
+                        }
+                        if (belongsToManager) break;
+                    } catch (Exception e) {
+                        // Continue if assignment lookup fails
+                    }
+                }
+            }
+            
+            if (!belongsToManager || !memberIds.contains(uploadedBy)) continue;
             
             // Add document ID for frontend use
             data.put("id", doc.getId());
@@ -94,15 +134,28 @@ public class ContentManager {
             }
             
             // Enrich with template information
-            if (templateId != null) {
+            ManualTemplate template = null;
+            if (assignmentId != null) {
+                // NEW: Get template from assignment snapshot
                 try {
-                    ManualTemplate template = templateDao.getTemplate(templateId);
-                    if (template != null) {
-                        data.put("templateTitle", template.getTemplateTitle());
+                    com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
+                    if (assignment != null) {
+                        template = assignment.getTemplateSnapshot();
                     }
                 } catch (Exception e) {
                     // Continue without template info if fetch fails
                 }
+            } else if (templateId != null) {
+                // LEGACY: Get template directly
+                try {
+                    template = templateDao.getTemplate(templateId);
+                } catch (Exception e) {
+                    // Continue without template info if fetch fails
+                }
+            }
+            
+            if (template != null) {
+                data.put("templateTitle", template.getTemplateTitle());
             }
             
             String status = (String) data.getOrDefault("publishStatus", "pending");
