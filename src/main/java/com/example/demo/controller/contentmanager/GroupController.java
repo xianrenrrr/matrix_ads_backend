@@ -417,7 +417,13 @@ public class GroupController {
                 templateData.put("tone", snapshot.getTone());
                 templateData.put("totalVideoLength", snapshot.getTotalVideoLength());
                 templateData.put("videoFormat", snapshot.getVideoFormat());
-                templateData.put("thumbnailUrl", snapshot.getThumbnailUrl());
+                
+                // Convert thumbnail URL to proxy URL for mini app
+                String thumbnailUrl = snapshot.getThumbnailUrl();
+                if (thumbnailUrl != null) {
+                    thumbnailUrl = convertToProxyUrl(thumbnailUrl);
+                }
+                templateData.put("thumbnailUrl", thumbnailUrl);
                 templateData.put("sceneCount", snapshot.getScenes() != null ? snapshot.getScenes().size() : 0);
             } else {
                 // Fallback values if snapshot is null
@@ -445,4 +451,49 @@ public class GroupController {
     
     @Autowired
     private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
+    
+    /**
+     * Convert Google Storage URL to proxy URL for mini app
+     * Example: https://storage.googleapis.com/matrix_ads_video/keyframes/abc.jpg?signed -> /images/proxy?path=keyframes/abc.jpg
+     */
+    private String convertToProxyUrl(String storageUrl) {
+        if (storageUrl == null || storageUrl.isEmpty()) {
+            return storageUrl;
+        }
+        
+        try {
+            // Remove query params for signed URLs
+            String urlWithoutQuery = storageUrl.split("\\?")[0];
+            String[] urlParts = urlWithoutQuery.split("/");
+            
+            // Find bucket name index
+            int bucketIndex = -1;
+            for (int i = 0; i < urlParts.length; i++) {
+                if ("matrix_ads_video".equals(urlParts[i])) {
+                    bucketIndex = i;
+                    break;
+                }
+            }
+            
+            if (bucketIndex == -1) {
+                return storageUrl; // Return original if bucket not found
+            }
+            
+            // Extract path after bucket name
+            StringBuilder pathBuilder = new StringBuilder();
+            for (int i = bucketIndex + 1; i < urlParts.length; i++) {
+                if (pathBuilder.length() > 0) {
+                    pathBuilder.append("/");
+                }
+                pathBuilder.append(urlParts[i]);
+            }
+            
+            String path = pathBuilder.toString();
+            return "/images/proxy?path=" + java.net.URLEncoder.encode(path, "UTF-8");
+            
+        } catch (Exception e) {
+            // Return original URL if conversion fails
+            return storageUrl;
+        }
+    }
 }
