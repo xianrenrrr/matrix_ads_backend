@@ -164,7 +164,6 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
         assignment.setPushedBy(doc.getString("pushedBy"));
         assignment.setLastRenewed(doc.getDate("lastRenewed"));
         
-        assignment.updateStatus();
         return assignment;
     }
 }

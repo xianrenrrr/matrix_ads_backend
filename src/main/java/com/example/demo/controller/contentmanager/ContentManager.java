@@ -8,7 +8,7 @@ import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSubmission;
 import com.example.demo.api.ApiResponse;
 import com.example.demo.service.I18nService;
-import com.example.demo.service.TemplateGroupService;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,8 +29,7 @@ public class ContentManager {
     @Autowired
     private UserDao userDao;
     
-    @Autowired
-    private TemplateGroupService templateGroupService;
+
 
     @Autowired(required = false)
     private com.example.demo.service.FirebaseStorageService firebaseStorageService;
@@ -167,8 +166,8 @@ public class ContentManager {
             }
         }
         
-        // Create the template using the service wrapper
-        String templateId = templateGroupService.createTemplateWithGroups(manualTemplate, selectedGroupIds);
+        // Create the template (groups are now assigned via push button with TemplateAssignment)
+        String templateId = templateDao.createTemplate(manualTemplate);
         userDao.addCreatedTemplate(userId, templateId);
         
         List<String> assignedGroupNames = selectedGroupIds != null ? selectedGroupIds : new ArrayList<>();
@@ -334,8 +333,8 @@ public class ContentManager {
             throw new NoSuchElementException("Template not found with ID: " + templateId);
         }
         
-        // Update template groups using the service
-        templateGroupService.updateTemplateGroups(templateId, newGroupIds);
+        // Legacy: Group assignment now done via push button with TemplateAssignment
+        // This endpoint is deprecated - use push/delete assignment buttons instead
         
         // Get updated template to return current state
         ManualTemplate updatedTemplate = templateDao.getTemplate(templateId);
@@ -572,8 +571,8 @@ public class ContentManager {
             }
         }
         
-        // 8. Save with groups (REUSE existing code)
-        String templateId = templateGroupService.createTemplateWithGroups(template, selectedGroupIds);
+        // 8. Save template (groups are now assigned via push button with TemplateAssignment)
+        String templateId = templateDao.createTemplate(template);
         userDao.addCreatedTemplate(userId, templateId);
         
         log.info("Manual template created successfully: {} with {} scenes", templateId, aiAnalyzedScenes.size());
@@ -902,7 +901,6 @@ public class ContentManager {
             data.put("groupId", assignment.getGroupId());
             data.put("pushedAt", assignment.getPushedAt());
             data.put("expiresAt", assignment.getExpiresAt());
-            data.put("status", assignment.getStatus());
             data.put("durationDays", assignment.getDurationDays());
             data.put("daysUntilExpiry", assignment.getDaysUntilExpiry());
             
@@ -956,7 +954,6 @@ public class ContentManager {
         
         assignment.setExpiresAt(cal.getTime());
         assignment.setLastRenewed(new Date());
-        assignment.setStatus("active");
         
         templateAssignmentDao.updateAssignment(assignment);
         

@@ -365,9 +365,6 @@ public class GroupController {
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }
 
-    // 10. Get Templates Assigned to Group - REMOVED (duplicate)
-    // Now using TemplateAssignment-based implementation below
-
     private String generateQRCodeUrl(String token) {
         // Generate QR code with mini-program page path format
         // This makes it recognizable by WeChat scanner

@@ -4,7 +4,7 @@ import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.VideoDao;
 import com.example.demo.model.Video;
 import com.example.demo.model.ManualTemplate;
-import com.example.demo.service.TemplateGroupService;
+
 import com.example.demo.service.I18nService;
 import com.example.demo.api.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,8 +59,7 @@ public class VideoController {
     @Autowired(required = false)
     private com.google.cloud.firestore.Firestore db;
     
-    @Autowired
-    private TemplateGroupService templateGroupService;
+
 
     @GetMapping("/{videoId}")
     public ResponseEntity<ApiResponse<Video>> getVideo(@PathVariable String videoId) {
@@ -204,18 +203,13 @@ public class VideoController {
                 aiGeneratedTemplate.setTemplateTitle(title + " - AI 模版 " + today);
             }
             
-            // Use TemplateGroupService wrapper to create template with group assignments
-            List<String> groupIds = null;
-            if (groupIdsStr != null && !groupIdsStr.trim().isEmpty()) {
-                groupIds = java.util.Arrays.asList(groupIdsStr.split(","));
-            }
-            String savedTemplateId = templateGroupService.createTemplateWithGroups(aiGeneratedTemplate, groupIds);
+            // Create template (groups are now assigned via push button with TemplateAssignment)
+            String savedTemplateId = templateDao.createTemplate(aiGeneratedTemplate);
             
             savedVideo.setTemplateId(savedTemplateId);
             videoDao.updateVideo(savedVideo);
             
-            System.out.printf("AI-generated template %s created and assigned to %s groups%n", 
-                savedTemplateId, groupIds != null ? groupIds.size() : 0);
+            System.out.printf("AI-generated template %s created%n", savedTemplateId);
         } else {
             // If templateId is provided, link the existing template
             savedVideo.setTemplateId(templateId);

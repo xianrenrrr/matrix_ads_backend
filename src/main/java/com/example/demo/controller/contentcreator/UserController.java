@@ -78,7 +78,6 @@ public class UserController {
             templateData.put("pushedAt", assignment.getPushedAt());
             templateData.put("expiresAt", assignment.getExpiresAt());
             templateData.put("daysUntilExpiry", assignment.getDaysUntilExpiry());
-            templateData.put("status", assignment.getStatus());
             
             // Add publish status
             String publishStatus = getPublishStatus(userId, assignment.getId());

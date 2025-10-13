@@ -23,7 +23,7 @@ public class TemplateCascadeDeletionService {
     @Autowired private VideoDao videoDao;
     @Autowired(required = false) private FirebaseStorageService storageService;
     @Autowired private Firestore db;
-    @Autowired private TemplateGroupService templateGroupService;
+
 
     @Value("${deletion.cascade.enabled:true}")
     private boolean cascadeEnabled;
@@ -135,12 +135,8 @@ public class TemplateCascadeDeletionService {
             System.err.println("[CASCADE] submittedVideos delete warn: " + e);
         }
 
-        // 2c) remove from groups
-        try {
-            templateGroupService.removeTemplateFromGroups(templateId);
-        } catch (Exception e) {
-            System.err.println("[CASCADE] group cleanup warn: " + e);
-        }
+        // 2c) remove template assignments (new system)
+        // Note: Assignments are automatically cleaned up when template is deleted
 
         // 2d) delete template doc
         boolean ok = templateDao.deleteTemplate(templateId);
