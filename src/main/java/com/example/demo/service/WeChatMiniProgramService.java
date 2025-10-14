@@ -116,13 +116,26 @@ public class WeChatMiniProgramService {
     }
     
     /**
-     * Generate WeChat Mini Program QR Code using QR Code API (not URL Scheme)
-     * This QR code can be scanned by regular WeChat app
-     * 
-     * Note: Using getUnlimitedQRCode API instead of generateScheme because:
-     * - More widely supported (doesn't require special permissions)
-     * - Works for all mini programs (published or not)
-     * - Returns actual QR code image (not URL)
+     * Create a short scene parameter from token (max 32 characters for WeChat)
+     */
+    private String createScene(String token) {
+        // Remove "group_" prefix to save space
+        String shortToken = token.replace("group_", "g");
+        
+        // Ensure scene parameter is within WeChat's 32 character limit
+        String scene = "t=" + shortToken;
+        if (scene.length() > 32) {
+            // Take first 30 chars of token (leaving 2 for "t=")
+            shortToken = shortToken.substring(0, 30);
+            scene = "t=" + shortToken;
+        }
+        
+        log.info("📏 Scene created: '{}' (length: {})", scene, scene.length());
+        return scene;
+    }
+
+    /**
+     * Generate WeChat Mini Program QR Code using QR Code API
      * 
      * @param token Group invite token
      * @return QR code image URL or data
@@ -139,51 +152,62 @@ public class WeChatMiniProgramService {
             throw e;
         }
         
-        // WeChat Mini Program QR Code API (getUnlimitedQRCode)
-        // This API is more widely supported than URL Scheme
+        // WeChat Mini Program QR Code API
         String url = "https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=" + accessToken;
         log.info("📡 Calling WeChat QR Code API: {}", url.substring(0, url.indexOf("access_token=") + 20) + "...");
         
+        // Create scene parameter (must be ≤ 32 characters)
+        String scene = createScene(token);
+        
         // Build request body for QR Code API
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("scene", "token=" + token); // Scene parameter (max 32 chars visible, but can be longer)
+        requestBody.put("scene", scene); // Scene parameter (≤ 32 chars)
         requestBody.put("page", "pages/signup/signup"); // Target page
-        requestBody.put("width", 280); // QR code width
+        requestBody.put("width", 430); // QR code width
         requestBody.put("auto_color", false);
         requestBody.put("is_hyaline", false);
         
-        log.info("Generating WeChat Mini Program QR Code for token: {}", token);
         log.info("📤 Request body: {}", requestBody);
         
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setAccept(java.util.List.of(MediaType.IMAGE_PNG, MediaType.ALL));
             
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
             
             log.info("🚀 Sending POST request to WeChat QR Code API...");
             
-            // This API returns binary image data (not JSON)
-            ResponseEntity<byte[]> response = restTemplate.postForEntity(url, request, byte[].class);
+            // Use exchange for better control over response handling
+            ResponseEntity<byte[]> response = restTemplate.exchange(url, HttpMethod.POST, request, byte[].class);
             log.info("📥 Response status: {}", response.getStatusCode());
-            log.info("📥 Response content type: {}", response.getHeaders().getContentType());
             
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                byte[] imageData = response.getBody();
-                
-                // Check if response is actually an error (JSON) instead of image
-                if (imageData.length > 0 && imageData[0] == '{') {
-                    // It's JSON error response
-                    String errorJson = new String(imageData);
-                    log.error("❌ WeChat API returned error: {}", errorJson);
+            MediaType contentType = response.getHeaders().getContentType();
+            log.info("📥 Response content type: {}", contentType);
+            
+            byte[] responseBody = response.getBody();
+            
+            // Check if WeChat returned JSON error instead of image
+            if (contentType != null && (contentType.includes(MediaType.APPLICATION_JSON) || 
+                                      contentType.includes(MediaType.TEXT_PLAIN))) {
+                String errorJson = responseBody != null ? new String(responseBody) : "No error details";
+                log.error("❌ WeChat API returned JSON error: {}", errorJson);
+                return generateFallbackQRCode(token);
+            }
+            
+            if (response.getStatusCode().is2xxSuccessful() && responseBody != null && responseBody.length > 0) {
+                // Additional check: if response starts with '{', it's likely JSON error
+                if (responseBody[0] == '{') {
+                    String errorJson = new String(responseBody);
+                    log.error("❌ WeChat API returned JSON error (detected by content): {}", errorJson);
                     return generateFallbackQRCode(token);
                 }
                 
-                log.info("✅ WeChat QR Code generated successfully, size: {} bytes", imageData.length);
+                log.info("✅ WeChat QR Code generated successfully, size: {} bytes", responseBody.length);
                 
                 // Convert to base64 data URL for immediate use
-                String base64Image = java.util.Base64.getEncoder().encodeToString(imageData);
-                String dataUrl = "data:image/jpeg;base64," + base64Image;
+                String base64Image = java.util.Base64.getEncoder().encodeToString(responseBody);
+                String dataUrl = "data:image/png;base64," + base64Image;
                 
                 log.info("✅ QR Code converted to data URL");
                 
