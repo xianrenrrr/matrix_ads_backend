@@ -1,11 +1,14 @@
 package com.example.demo.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.BufferingClientHttpRequestFactory;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
@@ -14,12 +17,6 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-/**
- * WeChat Mini Program Service (HC5-free)
- * - Uses SimpleClientHttpRequestFactory with setBufferRequestBody(true) to send Content-Length (no chunked)
- * - Access token caching
- * - QR code generation via getwxacodeunlimit
- */
 @Service
 public class WeChatMiniProgramService {
 
@@ -34,34 +31,25 @@ public class WeChatMiniProgramService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /** ---- Access token cache ---- */
     private static class AccessTokenCache {
         String token;
         long expiresAtMillis;
-        boolean isValid() {
-            return token != null && System.currentTimeMillis() < expiresAtMillis;
-        }
+        boolean isValid() { return token != null && System.currentTimeMillis() < expiresAtMillis; }
     }
     private final AccessTokenCache tokenCache = new AccessTokenCache();
 
-    /** ---- Constructor: RestTemplate with buffered JSON body ---- */
     public WeChatMiniProgramService() {
-        SimpleClientHttpRequestFactory simple = new SimpleClientHttpRequestFactory();
-        simple.setBufferRequestBody(true);   // sends Content-Length (no chunked)
-        simple.setConnectTimeout(10_000);
-        simple.setReadTimeout(20_000);
+        // Apache HttpClient 4.x request factory (sets Content-Length, avoids chunked)
+        CloseableHttpClient httpClient = HttpClients.custom().disableAuthCaching().disableCookieManagement().build();
+        HttpComponentsClientHttpRequestFactory hc = new HttpComponentsClientHttpRequestFactory(httpClient);
+        hc.setConnectTimeout(10_000);
+        hc.setReadTimeout(20_000);
 
-        this.restTemplate = new RestTemplate(simple); // <-- no manual converter reordering
+        // Buffering wrapper lets you read/inspect body if you ever add logging interceptors
+        this.restTemplate = new RestTemplate(new BufferingClientHttpRequestFactory(hc));
     }
 
-    /** ---- Public API ---- */
-
-    /**
-     * Generate a Mini Program QR Code.
-     * @param token your long invite token or group id
-     * @param forceHomepage If true, omit "page" & set "check_path=false" (always opens app; you route by scene).
-     * @return data URL (image/png base64) on success; fallback QR URL on failure.
-     */
+    /** Generate a Mini Program QR Code (returns data URL on success, public QR URL on failure). */
     public String generateMiniProgramQRCode(String token, boolean forceHomepage) throws Exception {
         log.info("🔍 Start WeChat QR generation, token={}", token);
 
@@ -71,10 +59,10 @@ public class WeChatMiniProgramService {
         String scene = createScene(token);
 
         Map<String, Object> reqBody = new LinkedHashMap<>();
-        reqBody.put("scene", scene);               // ≤32, ASCII-safe
+        reqBody.put("scene", scene);                 // ≤32 ASCII
         if (forceHomepage) {
-            reqBody.put("check_path", false);      // don’t validate page, enter app & route by scene
-            // reqBody.put("env_version", "release"); // or "trial"/"develop" if you want
+            reqBody.put("check_path", false);        // don’t validate page
+            // reqBody.put("env_version", "release"); // or "trial"/"develop"
         } else {
             reqBody.put("page", "pages/signup/signup"); // must exist in uploaded code
         }
@@ -82,35 +70,35 @@ public class WeChatMiniProgramService {
         reqBody.put("auto_color", false);
         reqBody.put("is_hyaline", false);
 
+        // 👉 Serialize to JSON String (most reliable for WeChat gateway)
+        String json = objectMapper.writeValueAsString(reqBody);
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setAccept(List.of(MediaType.IMAGE_PNG, MediaType.IMAGE_JPEG, MediaType.ALL));        HttpEntity<Map<String, Object>> httpEntity = new HttpEntity<>(reqBody, headers);
+        headers.setAccept(Arrays.asList(MediaType.IMAGE_PNG, MediaType.IMAGE_JPEG, MediaType.ALL));
+        headers.set(HttpHeaders.USER_AGENT, "Mozilla/5.0"); // some edges are picky
+
+        HttpEntity<String> entity = new HttpEntity<>(json, headers);
+
         try {
-            log.info("📤 POST {}  body={}", url, reqBody);
-            ResponseEntity<byte[]> resp = restTemplate.exchange(url, HttpMethod.POST, httpEntity, byte[].class);
+            log.info("📤 POST {}  body={}", url, json);
+            ResponseEntity<byte[]> resp = restTemplate.exchange(url, HttpMethod.POST, entity, byte[].class);
             MediaType ct = resp.getHeaders().getContentType();
             byte[] body = resp.getBody();
-            log.info("📥 status={} ct={}", resp.getStatusCode(), ct);
+            log.info("📥 status={} ct={} len={}", resp.getStatusCode(), ct,
+                     resp.getHeaders().getFirst(HttpHeaders.CONTENT_LENGTH));
 
-            // Error if non-2xx, empty body, or JSON/text content
+            // Treat non-2xx, empty, or JSON/text bodies as error
             if (!resp.getStatusCode().is2xxSuccessful() || body == null || body.length == 0 ||
-                (ct != null && (ct.includes(MediaType.APPLICATION_JSON) || ct.includes(MediaType.TEXT_PLAIN)))) {
+                (ct != null && (ct.includes(MediaType.APPLICATION_JSON) || ct.includes(MediaType.TEXT_PLAIN))) ||
+                (body.length > 0 && body[0] == '{')) {
                 String err = (body == null ? "" : new String(body));
                 log.error("❌ WeChat QR error: status={} ct={} body={}", resp.getStatusCode(), ct, err);
                 return generateFallbackQRCode(token);
             }
 
-            // Extra guard: JSON payload without proper content-type
-            if (body[0] == '{') {
-                String err = new String(body);
-                log.error("❌ WeChat QR JSON error payload: {}", err);
-                return generateFallbackQRCode(token);
-            }
-
             String base64 = Base64.getEncoder().encodeToString(body);
-            String dataUrl = "data:image/png;base64," + base64;
-            log.info("✅ QR generated, bytes={}", body.length);
-            return dataUrl;
+            return "data:image/png;base64," + base64;
 
         } catch (HttpClientErrorException e) {
             log.error("❌ HTTP error: {} - {}", e.getStatusCode(), e.getMessage());
@@ -122,11 +110,9 @@ public class WeChatMiniProgramService {
         }
     }
 
-    /** ---- Access token (cached) ---- */
-
+    /** Access token (cached; refresh 5 min early). */
     public String getAccessToken() throws Exception {
         if (tokenCache.isValid()) return tokenCache.token;
-
         if (appSecret == null || appSecret.isEmpty()) {
             throw new IllegalStateException("WeChat Mini Program AppSecret not configured. Set MINI_APP_SECRET env var.");
         }
@@ -136,16 +122,13 @@ public class WeChatMiniProgramService {
                 + "&appid=" + appId
                 + "&secret=" + appSecret;
 
-        // ✅ Ask for Map.class so Jackson parses JSON, avoiding the String-extraction error
         ResponseEntity<Map> resp = restTemplate.getForEntity(url, Map.class);
         if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
             throw new RuntimeException("Token HTTP " + resp.getStatusCode());
         }
-
         Map body = resp.getBody();
         Object at = body.get("access_token");
         if (at == null) {
-            // Will show WeChat's error JSON map
             throw new RuntimeException("Token error: " + body);
         }
 
@@ -156,19 +139,16 @@ public class WeChatMiniProgramService {
 
         tokenCache.token = token;
         tokenCache.expiresAtMillis = System.currentTimeMillis() + Math.max(0, (expiresIn - 300)) * 1000L;
-
         log.info("✅ Access token obtained. expiresIn={}s", expiresIn);
         return token;
     }
-
-    /** ---- Helpers ---- */
 
     /** Build a 32-char-safe scene value (ASCII only). */
     private String createScene(String token) {
         String shortToken = token == null ? "" : token.replace("group_", "g");
         shortToken = shortToken.replaceAll("[^A-Za-z0-9_-]", "");
         if (shortToken.length() > 30) shortToken = shortToken.substring(0, 30);
-        String scene = "t_" + shortToken; // avoid '=' to dodge some WAFs
+        String scene = "t_" + shortToken; // avoid '='
         log.info("📏 Scene='{}' (len={})", scene, scene.length());
         return scene;
     }
@@ -179,10 +159,8 @@ public class WeChatMiniProgramService {
         String path = "pages/signup/signup?token=" + (token == null ? "" : token);
         String encoded = URLEncoder.encode(path, StandardCharsets.UTF_8);
         return "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + encoded;
-        // If you want to return a data URL here too, you can fetch and base64 encode; this keeps it simple.
     }
 
-    /** Debug info */
     public boolean isConfigured() {
         return appSecret != null && !appSecret.isEmpty();
     }
