@@ -8,6 +8,7 @@ import com.example.demo.model.User;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.api.ApiResponse;
 import com.example.demo.service.I18nService;
+import com.example.demo.service.WeChatMiniProgramService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -32,6 +33,9 @@ public class GroupController {
     
     @Autowired
     private I18nService i18nService;
+    
+    @Autowired
+    private WeChatMiniProgramService weChatService;
 
     // 1. Create Group/Invite
     @PostMapping("/create")
@@ -366,14 +370,20 @@ public class GroupController {
     }
 
     private String generateQRCodeUrl(String token) {
-        // Generate QR code with mini-program page path format
-        // This makes it recognizable by WeChat scanner
-        String miniProgramPath = "pages/signup/signup?token=" + token;
+        // Use WeChat Mini Program URL Scheme for official WeChat QR codes
+        // These can be scanned by regular WeChat app and will open the mini program
         try {
-            String encodedPath = URLEncoder.encode(miniProgramPath, StandardCharsets.UTF_8);
-            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + encodedPath;
+            return weChatService.generateMiniProgramQRCode(token);
         } catch (Exception e) {
-            return "https://api.qr-server.com/v1/create-qr-code/?size=200x200&data=" + miniProgramPath;
+            // Fallback to simple QR code if WeChat API fails
+            System.err.println("Failed to generate WeChat QR code, using fallback: " + e.getMessage());
+            String miniProgramPath = "pages/signup/signup?token=" + token;
+            try {
+                String encodedPath = URLEncoder.encode(miniProgramPath, StandardCharsets.UTF_8);
+                return "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + encodedPath;
+            } catch (Exception ex) {
+                return "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + miniProgramPath;
+            }
         }
     }
 
