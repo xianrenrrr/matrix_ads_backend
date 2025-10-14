@@ -63,6 +63,8 @@ public class WeChatMiniProgramService {
         }
         
         log.info("Fetching new WeChat access token...");
+        log.info("AppID: {}", appId);
+        log.info("AppSecret configured: {}", (appSecret != null && !appSecret.isEmpty()));
         
         // Request new token from WeChat API
         String url = String.format(
@@ -70,8 +72,11 @@ public class WeChatMiniProgramService {
             appId, appSecret
         );
         
+        log.info("Calling WeChat token API...");
+        
         try {
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+            log.info("WeChat token API response status: {}", response.getStatusCode());
             
             if (response.getStatusCode() == HttpStatus.OK) {
                 Map<String, Object> result = objectMapper.readValue(
@@ -97,6 +102,13 @@ public class WeChatMiniProgramService {
             } else {
                 throw new Exception("Failed to get access token: HTTP " + response.getStatusCode());
             }
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            log.error("❌ WeChat API HTTP Error: {} - {}", e.getStatusCode(), e.getMessage());
+            log.error("Response body: {}", e.getResponseBodyAsString());
+            if (e.getStatusCode().value() == 412) {
+                throw new Exception("WeChat API 412 Error - Possible causes: Wrong AppSecret, IP not whitelisted, or mini program not verified", e);
+            }
+            throw new Exception("Failed to get WeChat access token: " + e.getMessage(), e);
         } catch (Exception e) {
             log.error("❌ Failed to get WeChat access token", e);
             throw new Exception("Failed to get WeChat access token: " + e.getMessage(), e);
@@ -111,10 +123,20 @@ public class WeChatMiniProgramService {
      * @return QR code image URL or data
      */
     public String generateMiniProgramQRCode(String token) throws Exception {
-        String accessToken = getAccessToken();
+        log.info("🔍 Starting WeChat QR code generation for token: {}", token);
+        
+        String accessToken;
+        try {
+            accessToken = getAccessToken();
+            log.info("✅ Got access token: {}...", accessToken.substring(0, Math.min(10, accessToken.length())));
+        } catch (Exception e) {
+            log.error("❌ Failed to get access token: {}", e.getMessage());
+            throw e;
+        }
         
         // WeChat Mini Program URL Scheme API
         String url = "https://api.weixin.qq.com/wxa/generatescheme?access_token=" + accessToken;
+        log.info("📡 Calling WeChat API: {}", url.substring(0, url.indexOf("access_token=") + 20) + "...");
         
         // Build request body
         Map<String, Object> requestBody = new HashMap<>();
@@ -162,7 +184,8 @@ public class WeChatMiniProgramService {
                 return generateFallbackQRCode(token);
             }
         } catch (Exception e) {
-            log.error("❌ Exception generating WeChat QR code", e);
+            log.error("❌ Exception generating WeChat QR code: {} - {}", e.getClass().getName(), e.getMessage());
+            log.error("Full stack trace:", e);
             return generateFallbackQRCode(token);
         }
     }
