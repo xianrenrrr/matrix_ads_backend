@@ -116,8 +116,13 @@ public class WeChatMiniProgramService {
     }
     
     /**
-     * Generate WeChat Mini Program QR Code using URL Scheme
-     * This QR code can be scanned by regular WeChat app (not just mini program scanner)
+     * Generate WeChat Mini Program QR Code using QR Code API (not URL Scheme)
+     * This QR code can be scanned by regular WeChat app
+     * 
+     * Note: Using getUnlimitedQRCode API instead of generateScheme because:
+     * - More widely supported (doesn't require special permissions)
+     * - Works for all mini programs (published or not)
+     * - Returns actual QR code image (not URL)
      * 
      * @param token Group invite token
      * @return QR code image URL or data
@@ -134,22 +139,21 @@ public class WeChatMiniProgramService {
             throw e;
         }
         
-        // WeChat Mini Program URL Scheme API
-        String url = "https://api.weixin.qq.com/wxa/generatescheme?access_token=" + accessToken;
-        log.info("📡 Calling WeChat API: {}", url.substring(0, url.indexOf("access_token=") + 20) + "...");
+        // WeChat Mini Program QR Code API (getUnlimitedQRCode)
+        // This API is more widely supported than URL Scheme
+        String url = "https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=" + accessToken;
+        log.info("📡 Calling WeChat QR Code API: {}", url.substring(0, url.indexOf("access_token=") + 20) + "...");
         
-        // Build request body
+        // Build request body for QR Code API
         Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("scene", "token=" + token); // Scene parameter (max 32 chars visible, but can be longer)
+        requestBody.put("page", "pages/signup/signup"); // Target page
+        requestBody.put("width", 280); // QR code width
+        requestBody.put("auto_color", false);
+        requestBody.put("is_hyaline", false);
         
-        // Jump to signup page with token parameter
-        Map<String, Object> jumpWxa = new HashMap<>();
-        jumpWxa.put("path", "pages/signup/signup");
-        jumpWxa.put("query", "token=" + token);
-        
-        requestBody.put("jump_wxa", jumpWxa);
-        requestBody.put("is_expire", false); // Never expire
-        
-        log.info("Generating WeChat Mini Program URL Scheme for token: {}", token);
+        log.info("Generating WeChat Mini Program QR Code for token: {}", token);
+        log.info("📤 Request body: {}", requestBody);
         
         try {
             HttpHeaders headers = new HttpHeaders();
@@ -157,32 +161,51 @@ public class WeChatMiniProgramService {
             
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
             
-            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+            log.info("🚀 Sending POST request to WeChat QR Code API...");
             
-            if (response.getStatusCode() == HttpStatus.OK) {
-                Map<String, Object> result = objectMapper.readValue(
-                    response.getBody(),
-                    Map.class
-                );
+            // This API returns binary image data (not JSON)
+            ResponseEntity<byte[]> response = restTemplate.postForEntity(url, request, byte[].class);
+            log.info("📥 Response status: {}", response.getStatusCode());
+            log.info("📥 Response content type: {}", response.getHeaders().getContentType());
+            
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                byte[] imageData = response.getBody();
                 
-                if (result.containsKey("openlink")) {
-                    String openlink = (String) result.get("openlink");
-                    log.info("✅ WeChat URL Scheme generated: {}", openlink);
-                    
-                    // Generate QR code from the URL Scheme
-                    return generateQRCodeFromUrl(openlink);
-                } else {
-                    Integer errcode = (Integer) result.get("errcode");
-                    String errmsg = (String) result.get("errmsg");
-                    log.error("❌ WeChat API error: {} - {}", errcode, errmsg);
-                    
-                    // Fallback to old method if API fails
+                // Check if response is actually an error (JSON) instead of image
+                if (imageData.length > 0 && imageData[0] == '{') {
+                    // It's JSON error response
+                    String errorJson = new String(imageData);
+                    log.error("❌ WeChat API returned error: {}", errorJson);
                     return generateFallbackQRCode(token);
                 }
+                
+                log.info("✅ WeChat QR Code generated successfully, size: {} bytes", imageData.length);
+                
+                // Convert to base64 data URL for immediate use
+                String base64Image = java.util.Base64.getEncoder().encodeToString(imageData);
+                String dataUrl = "data:image/jpeg;base64," + base64Image;
+                
+                log.info("✅ QR Code converted to data URL");
+                
+                return dataUrl;
             } else {
-                log.error("❌ Failed to generate URL Scheme: HTTP {}", response.getStatusCode());
+                log.error("❌ Failed to generate QR Code: HTTP {}", response.getStatusCode());
                 return generateFallbackQRCode(token);
             }
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            log.error("❌ WeChat URL Scheme API Error: {} - {}", e.getStatusCode(), e.getMessage());
+            log.error("Response body: {}", e.getResponseBodyAsString());
+            log.error("Request was: POST {} with body: {}", url.substring(0, Math.min(100, url.length())), requestBody);
+            
+            if (e.getStatusCode().value() == 412) {
+                log.error("⚠️ HTTP 412 Error - Possible causes:");
+                log.error("  1. URL Scheme API not enabled in WeChat admin panel");
+                log.error("  2. Mini program not published/verified");
+                log.error("  3. Path 'pages/signup/signup' doesn't exist in mini program");
+                log.error("  4. Mini program configuration incomplete");
+            }
+            
+            return generateFallbackQRCode(token);
         } catch (Exception e) {
             log.error("❌ Exception generating WeChat QR code: {} - {}", e.getClass().getName(), e.getMessage());
             log.error("Full stack trace:", e);
@@ -190,19 +213,7 @@ public class WeChatMiniProgramService {
         }
     }
     
-    /**
-     * Generate QR code image from WeChat URL Scheme
-     */
-    private String generateQRCodeFromUrl(String urlScheme) {
-        try {
-            String encodedUrl = java.net.URLEncoder.encode(urlScheme, "UTF-8");
-            // Use QR code generation service
-            return "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + encodedUrl;
-        } catch (Exception e) {
-            log.error("Failed to encode URL for QR code", e);
-            return "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + urlScheme;
-        }
-    }
+
     
     /**
      * Fallback QR code generation (old method)
