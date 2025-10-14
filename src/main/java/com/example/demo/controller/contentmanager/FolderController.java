@@ -57,7 +57,7 @@ public class FolderController {
         return ResponseEntity.ok(ApiResponse.ok("Folders retrieved", folders));
     }
     
-    // Rename folder
+    // Rename folder or move folder to another parent
     @PutMapping("/{folderId}")
     public ResponseEntity<ApiResponse<TemplateFolder>> updateFolder(
             @PathVariable String folderId,
@@ -72,6 +72,30 @@ public class FolderController {
         String newName = (String) request.get("name");
         if (newName != null) {
             folder.setName(newName);
+        }
+        
+        // Support moving folder to different parent
+        if (request.containsKey("parentId")) {
+            String newParentId = (String) request.get("parentId");
+            
+            // Prevent moving folder into itself or its descendants
+            if (newParentId != null && newParentId.equals(folderId)) {
+                throw new IllegalArgumentException("Cannot move folder into itself");
+            }
+            
+            // Check if newParentId is a descendant of folderId
+            if (newParentId != null) {
+                String checkParent = newParentId;
+                while (checkParent != null) {
+                    if (checkParent.equals(folderId)) {
+                        throw new IllegalArgumentException("Cannot move folder into its descendant");
+                    }
+                    TemplateFolder parentFolder = folderDao.getFolder(checkParent);
+                    checkParent = parentFolder != null ? parentFolder.getParentId() : null;
+                }
+            }
+            
+            folder.setParentId(newParentId);
         }
         
         folder.setUpdatedAt(new Date());
