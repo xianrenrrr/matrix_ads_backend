@@ -146,11 +146,12 @@ public class WeChatMiniProgramService {
         return token;
     }
 
-    private String createScene(String token) {
-        String shortToken = token == null ? "" : token.replace("group_", "g");
-        shortToken = shortToken.replaceAll("[^A-Za-z0-9_-]", "");
-        if (shortToken.length() > 30) shortToken = shortToken.substring(0, 30);
-        String scene = "t_" + shortToken;
+    private String createScene(String groupId) {
+        // For WeChat QR codes, we need to keep scene ≤ 32 chars
+        // Use group ID directly - much simpler than token
+        String cleanGroupId = groupId == null ? "" : groupId.replaceAll("[^A-Za-z0-9_-]", "");
+        if (cleanGroupId.length() > 30) cleanGroupId = cleanGroupId.substring(0, 30);
+        String scene = "g=" + cleanGroupId;
         log.info("📏 Scene='{}' (len={})", scene, scene.length());
         return scene;
     }

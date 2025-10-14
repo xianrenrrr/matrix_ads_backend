@@ -89,7 +89,7 @@ public class GroupController {
         groupDao.save(group);
 
         // Generate QR code and invite URLs
-        String qrCodeUrl = generateQRCodeUrl(token);
+        String qrCodeUrl = generateQRCodeUrl(group.getId());
         String inviteUrl = generateInviteUrl(token);
 
         Map<String, Object> responseData = new HashMap<>();
@@ -137,7 +137,32 @@ public class GroupController {
         return ResponseEntity.ok(ApiResponse.ok(message, groupSummaries));
     }
 
-    // 3. Get Group QR Code
+    // 3. Get Group Info by ID
+    @GetMapping("/{groupId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getGroupById(@PathVariable String groupId,
+                                                                         @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        Group group = groupDao.findById(groupId);
+        if (group == null || !"active".equals(group.getStatus())) {
+            throw new NoSuchElementException("Group not found with ID: " + groupId);
+        }
+
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("id", group.getId());
+        responseData.put("groupName", group.getGroupName());
+        responseData.put("managerName", group.getManagerName());
+        responseData.put("description", group.getDescription());
+        responseData.put("token", group.getToken());
+        responseData.put("memberCount", group.getMemberCount());
+        responseData.put("aiApprovalThreshold", group.getAiApprovalThreshold());
+        responseData.put("aiAutoApprovalEnabled", group.isAiAutoApprovalEnabled());
+        responseData.put("createdAt", group.getCreatedAt());
+
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, responseData));
+    }
+
+    // 4. Get Group QR Code
     @GetMapping("/{groupId}/qrcode")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getGroupQRCode(@PathVariable String groupId,
                                                                             @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
@@ -151,7 +176,7 @@ public class GroupController {
         responseData.put("groupId", group.getId());
         responseData.put("groupName", group.getGroupName());
         responseData.put("token", group.getToken());
-        responseData.put("qrCodeUrl", generateQRCodeUrl(group.getToken()));
+        responseData.put("qrCodeUrl", generateQRCodeUrl(group.getId()));
         responseData.put("inviteUrl", generateInviteUrl(group.getToken()));
         responseData.put("miniProgramPath", "pages/signup/signup?token=" + group.getToken());
 
