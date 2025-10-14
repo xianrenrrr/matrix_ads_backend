@@ -46,6 +46,38 @@ public class ContentManager {
     @Autowired
     private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
     
+    /**
+     * Get manager's groups
+     * GET /content-manager/templates/manager/{managerId}/groups
+     */
+    @GetMapping("/manager/{managerId}/groups")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getManagerGroups(
+            @PathVariable String managerId,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        try {
+            List<com.example.demo.model.Group> groups = groupDao.findByManagerId(managerId);
+            
+            List<Map<String, Object>> groupList = new ArrayList<>();
+            for (com.example.demo.model.Group group : groups) {
+                Map<String, Object> groupData = new HashMap<>();
+                groupData.put("id", group.getId());
+                groupData.put("name", group.getGroupName());
+                groupData.put("status", group.getStatus());
+                groupData.put("memberCount", group.getMemberIds() != null ? group.getMemberIds().size() : 0);
+                groupData.put("createdAt", group.getCreatedAt());
+                groupList.add(groupData);
+            }
+            
+            return ResponseEntity.ok(ApiResponse.ok(
+                i18nService.getMessage("groups.fetch.success", language), groupList));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.fail(i18nService.getMessage("groups.fetch.error", language)));
+        }
+    }
+    
     // --- Submissions grouped by status ---
     @GetMapping("/submissions")
     public ResponseEntity<ApiResponse<Map<String, List<Map<String, Object>>>>> getAllSubmissions(
