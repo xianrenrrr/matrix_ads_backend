@@ -370,13 +370,13 @@ public class GroupController {
     }
 
     private String generateQRCodeUrl(String token) {
-        // Use WeChat Mini Program URL Scheme for official WeChat QR codes
-        // These can be scanned by regular WeChat app and will open the mini program
         try {
-            return weChatService.generateMiniProgramQRCode(token);
+            // Force homepage = true → omit "page" and set check_path=false
+            // (safer until your mini program’s page is actually deployed)
+            return weChatService.generateMiniProgramQRCode(token, true);
         } catch (Exception e) {
-            // Fallback to simple QR code if WeChat API fails
-            System.err.println("Failed to generate WeChat QR code, using fallback: " + e.getMessage());
+            // Log and fallback
+            System.err.println("❌ Failed to generate WeChat QR code, using fallback: " + e.getMessage());
             String miniProgramPath = "pages/signup/signup?token=" + token;
             try {
                 String encodedPath = URLEncoder.encode(miniProgramPath, StandardCharsets.UTF_8);
