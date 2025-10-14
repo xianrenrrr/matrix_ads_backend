@@ -1,13 +1,13 @@
 package com.example.demo.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
-import org.springframework.http.client.BufferingClientHttpRequestFactory;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
@@ -39,17 +39,21 @@ public class WeChatMiniProgramService {
     private final AccessTokenCache tokenCache = new AccessTokenCache();
 
     public WeChatMiniProgramService() {
-        // Apache HttpClient 4.x request factory (sets Content-Length, avoids chunked)
-        CloseableHttpClient httpClient = HttpClients.custom().disableAuthCaching().disableCookieManagement().build();
-        HttpComponentsClientHttpRequestFactory hc = new HttpComponentsClientHttpRequestFactory(httpClient);
-        hc.setConnectTimeout(10_000);
-        hc.setReadTimeout(20_000);
+        RequestConfig rc = RequestConfig.custom()
+            .setConnectTimeout(java.time.Duration.ofSeconds(10))
+            .setResponseTimeout(java.time.Duration.ofSeconds(20))
+            .build();
 
-        // Buffering wrapper lets you read/inspect body if you ever add logging interceptors
-        this.restTemplate = new RestTemplate(new BufferingClientHttpRequestFactory(hc));
+        CloseableHttpClient client = HttpClients.custom()
+            .setDefaultRequestConfig(rc)
+            .disableAuthCaching()
+            .disableCookieManagement()
+            .build();
+
+        HttpComponentsClientHttpRequestFactory hc = new HttpComponentsClientHttpRequestFactory(client);
+        this.restTemplate = new RestTemplate(hc);
     }
 
-    /** Generate a Mini Program QR Code (returns data URL on success, public QR URL on failure). */
     public String generateMiniProgramQRCode(String token, boolean forceHomepage) throws Exception {
         log.info("🔍 Start WeChat QR generation, token={}", token);
 
@@ -59,24 +63,24 @@ public class WeChatMiniProgramService {
         String scene = createScene(token);
 
         Map<String, Object> reqBody = new LinkedHashMap<>();
-        reqBody.put("scene", scene);                 // ≤32 ASCII
+        reqBody.put("scene", scene);
         if (forceHomepage) {
-            reqBody.put("check_path", false);        // don’t validate page
-            // reqBody.put("env_version", "release"); // or "trial"/"develop"
+            reqBody.put("check_path", false);
+            // reqBody.put("env_version", "release"); // optional
         } else {
-            reqBody.put("page", "pages/signup/signup"); // must exist in uploaded code
+            reqBody.put("page", "pages/signup/signup");
         }
         reqBody.put("width", 430);
         reqBody.put("auto_color", false);
         reqBody.put("is_hyaline", false);
 
-        // 👉 Serialize to JSON String (most reliable for WeChat gateway)
+        // Send JSON **String** body (more reliable)
         String json = objectMapper.writeValueAsString(reqBody);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setAccept(Arrays.asList(MediaType.IMAGE_PNG, MediaType.IMAGE_JPEG, MediaType.ALL));
-        headers.set(HttpHeaders.USER_AGENT, "Mozilla/5.0"); // some edges are picky
+        headers.set(HttpHeaders.USER_AGENT, "Mozilla/5.0");
 
         HttpEntity<String> entity = new HttpEntity<>(json, headers);
 
@@ -88,7 +92,6 @@ public class WeChatMiniProgramService {
             log.info("📥 status={} ct={} len={}", resp.getStatusCode(), ct,
                      resp.getHeaders().getFirst(HttpHeaders.CONTENT_LENGTH));
 
-            // Treat non-2xx, empty, or JSON/text bodies as error
             if (!resp.getStatusCode().is2xxSuccessful() || body == null || body.length == 0 ||
                 (ct != null && (ct.includes(MediaType.APPLICATION_JSON) || ct.includes(MediaType.TEXT_PLAIN))) ||
                 (body.length > 0 && body[0] == '{')) {
@@ -110,7 +113,6 @@ public class WeChatMiniProgramService {
         }
     }
 
-    /** Access token (cached; refresh 5 min early). */
     public String getAccessToken() throws Exception {
         if (tokenCache.isValid()) return tokenCache.token;
         if (appSecret == null || appSecret.isEmpty()) {
@@ -143,17 +145,15 @@ public class WeChatMiniProgramService {
         return token;
     }
 
-    /** Build a 32-char-safe scene value (ASCII only). */
     private String createScene(String token) {
         String shortToken = token == null ? "" : token.replace("group_", "g");
         shortToken = shortToken.replaceAll("[^A-Za-z0-9_-]", "");
         if (shortToken.length() > 30) shortToken = shortToken.substring(0, 30);
-        String scene = "t_" + shortToken; // avoid '='
+        String scene = "t_" + shortToken;
         log.info("📏 Scene='{}' (len={})", scene, scene.length());
         return scene;
     }
 
-    /** Fallback QR (public service) if WeChat fails. */
     private String generateFallbackQRCode(String token) {
         log.warn("⚠️ Using fallback QR code generation");
         String path = "pages/signup/signup?token=" + (token == null ? "" : token);
@@ -161,9 +161,8 @@ public class WeChatMiniProgramService {
         return "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + encoded;
     }
 
-    public boolean isConfigured() {
-        return appSecret != null && !appSecret.isEmpty();
-    }
+    public boolean isConfigured() { return appSecret != null && !appSecret.isEmpty(); }
+
     public Map<String, Object> getConfigStatus() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("appId", appId);

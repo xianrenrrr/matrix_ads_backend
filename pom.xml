@@ -16,65 +16,79 @@
   <properties>
     <java.version>17</java.version>
   </properties>
-  <dependencies>
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-web</artifactId>
-    </dependency>
+<dependencies>
+  <!-- Spring Boot Web -->
   <dependency>
-        <groupId>com.google.firebase</groupId>
-        <artifactId>firebase-admin</artifactId>
-        <version>9.2.0</version> <!-- You can check latest version -->
-    </dependency>
-    <dependency>
-        <groupId>com.google.cloud</groupId>
-        <artifactId>google-cloud-storage</artifactId>
-        <version>2.35.0</version> <!-- ✅ Use latest stable if newer -->
-    </dependency>
-    <!-- Google Cloud Firestore SDK -->
-    <dependency>
-        <groupId>com.google.cloud</groupId>
-        <artifactId>google-cloud-firestore</artifactId>
-        <version>3.10.0</version> <!-- You can check latest version -->
-    </dependency>
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-devtools</artifactId>
-      <scope>runtime</scope>
-      <optional>true</optional>
-    </dependency>
-    <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+  </dependency>
+
+  <!-- Firebase / GCP deps you already had... -->
+  <dependency>
+    <groupId>com.google.firebase</groupId>
+    <artifactId>firebase-admin</artifactId>
+    <version>9.2.0</version>
+  </dependency>
+  <dependency>
+    <groupId>com.google.cloud</groupId>
+    <artifactId>google-cloud-storage</artifactId>
+    <version>2.35.0</version>
+  </dependency>
+  <dependency>
+    <groupId>com.google.cloud</groupId>
+    <artifactId>google-cloud-firestore</artifactId>
+    <version>3.10.0</version>
+  </dependency>
+
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-devtools</artifactId>
+    <scope>runtime</scope>
+    <optional>true</optional>
+  </dependency>
+
+  <dependency>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-actuator</artifactId>
-    </dependency>
-    <dependency>
-  <groupId>org.apache.httpcomponents</groupId>
-  <artifactId>httpclient</artifactId>
-  <version>4.5.14</version>
-</dependency>
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-test</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-        <groupId>com.google.cloud</groupId>
-        <artifactId>google-cloud-video-intelligence</artifactId>
-        <version>2.15.0</version> <!-- Check for latest version -->
-    </dependency>
-    <!-- Google Cloud Translate v3 API -->
-    <dependency>
-        <groupId>com.google.cloud</groupId>
-        <artifactId>google-cloud-translate</artifactId>
-        <version>2.20.0</version>
-    </dependency>
-    <!-- Google Cloud Vision API -->
-    <dependency>
-        <groupId>com.google.cloud</groupId>
-        <artifactId>google-cloud-vision</artifactId>
-        <version>3.4.0</version>
-    </dependency>
-  </dependencies>
+  </dependency>
+
+  <!-- ❌ REMOVE this HC4 block
+  <dependency>
+    <groupId>org.apache.httpcomponents</groupId>
+    <artifactId>httpclient</artifactId>
+    <version>4.5.14</version>
+  </dependency>
+  -->
+
+  <!-- ✅ Use HC5 -->
+  <dependency>
+    <groupId>org.apache.httpcomponents.client5</groupId>
+    <artifactId>httpclient5</artifactId>
+    <version>5.2.1</version>
+  </dependency>
+
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-test</artifactId>
+    <scope>test</scope>
+  </dependency>
+
+  <dependency>
+    <groupId>com.google.cloud</groupId>
+    <artifactId>google-cloud-video-intelligence</artifactId>
+    <version>2.15.0</version>
+  </dependency>
+  <dependency>
+    <groupId>com.google.cloud</groupId>
+    <artifactId>google-cloud-translate</artifactId>
+    <version>2.20.0</version>
+  </dependency>
+  <dependency>
+    <groupId>com.google.cloud</groupId>
+    <artifactId>google-cloud-vision</artifactId>
+    <version>3.4.0</version>
+  </dependency>
+</dependencies>
 
   <build>
     <plugins>
