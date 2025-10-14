@@ -4,7 +4,7 @@ import com.example.demo.dao.TemplateFolderDao;
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.model.TemplateFolder;
 import com.example.demo.model.ManualTemplate;
-import com.example.demo.response.ApiResponse;
+import com.example.demo.api.ApiResponse;
 import com.example.demo.service.I18nService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;

@@ -1037,7 +1037,7 @@ public class ContentManager {
         template.setFolderId(folderId);
         templateDao.updateTemplate(templateId, template);
         
-        String message = i18nService.getMessage("template.moved", language, "Template moved successfully");
+        String message = i18nService.getMessage("template.updated", language);
         return ResponseEntity.ok(ApiResponse.ok(message, template));
     }
     
