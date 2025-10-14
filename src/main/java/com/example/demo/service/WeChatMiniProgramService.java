@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
@@ -47,18 +46,12 @@ public class WeChatMiniProgramService {
 
     /** ---- Constructor: RestTemplate with buffered JSON body ---- */
     public WeChatMiniProgramService() {
-        var simple = new SimpleClientHttpRequestFactory();
-        simple.setBufferRequestBody(true);        // <-- forces Content-Length, avoids 412 [no body]
+        SimpleClientHttpRequestFactory simple = new SimpleClientHttpRequestFactory();
+        simple.setBufferRequestBody(true);   // sends Content-Length (no chunked)
         simple.setConnectTimeout(10_000);
         simple.setReadTimeout(20_000);
 
-        RestTemplate rt = new RestTemplate(simple);
-        var converters = new ArrayList<>(rt.getMessageConverters());
-        converters.removeIf(c -> c instanceof MappingJackson2HttpMessageConverter);
-        converters.add(0, new MappingJackson2HttpMessageConverter()); // prioritize JSON
-        rt.setMessageConverters(converters);
-
-        this.restTemplate = rt;
+        this.restTemplate = new RestTemplate(simple); // <-- no manual converter reordering
     }
 
     /** ---- Public API ---- */
@@ -91,9 +84,7 @@ public class WeChatMiniProgramService {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setAccept(List.of(MediaType.IMAGE_PNG, MediaType.ALL));
-        HttpEntity<Map<String, Object>> httpEntity = new HttpEntity<>(reqBody, headers);
-
+        headers.setAccept(List.of(MediaType.IMAGE_PNG, MediaType.IMAGE_JPEG, MediaType.ALL));        HttpEntity<Map<String, Object>> httpEntity = new HttpEntity<>(reqBody, headers);
         try {
             log.info("📤 POST {}  body={}", url, reqBody);
             ResponseEntity<byte[]> resp = restTemplate.exchange(url, HttpMethod.POST, httpEntity, byte[].class);
@@ -145,17 +136,22 @@ public class WeChatMiniProgramService {
                 + "&appid=" + appId
                 + "&secret=" + appSecret;
 
-        ResponseEntity<String> resp = restTemplate.getForEntity(url, String.class);
-        if (!resp.getStatusCode().is2xxSuccessful()) {
+        // ✅ Ask for Map.class so Jackson parses JSON, avoiding the String-extraction error
+        ResponseEntity<Map> resp = restTemplate.getForEntity(url, Map.class);
+        if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
             throw new RuntimeException("Token HTTP " + resp.getStatusCode());
         }
-        Map<?, ?> map = objectMapper.readValue(resp.getBody(), Map.class);
-        if (map.get("access_token") == null) {
-            throw new RuntimeException("Token error: " + resp.getBody());
+
+        Map body = resp.getBody();
+        Object at = body.get("access_token");
+        if (at == null) {
+            // Will show WeChat's error JSON map
+            throw new RuntimeException("Token error: " + body);
         }
-        String token = String.valueOf(map.get("access_token"));
-        int expiresIn = (map.get("expires_in") instanceof Number)
-                ? ((Number) map.get("expires_in")).intValue()
+
+        String token = String.valueOf(at);
+        int expiresIn = body.get("expires_in") instanceof Number
+                ? ((Number) body.get("expires_in")).intValue()
                 : 7200;
 
         tokenCache.token = token;
