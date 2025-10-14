@@ -1015,6 +1015,32 @@ public class ContentManager {
         return ResponseEntity.ok(ApiResponse.ok(message));
     }
     
+    /**
+     * Move template to a folder
+     * PUT /content-manager/templates/{templateId}/folder
+     * Body: { "folderId": "folder_xxx" } or { "folderId": null } for root
+     */
+    @PutMapping("/{templateId}/folder")
+    public ResponseEntity<ApiResponse<ManualTemplate>> moveTemplateToFolder(
+            @PathVariable String templateId,
+            @RequestBody Map<String, Object> request,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        String folderId = (String) request.get("folderId");  // null = move to root
+        
+        ManualTemplate template = templateDao.getTemplate(templateId);
+        if (template == null) {
+            throw new NoSuchElementException("Template not found");
+        }
+        
+        template.setFolderId(folderId);
+        templateDao.updateTemplate(templateId, template);
+        
+        String message = i18nService.getMessage("template.moved", language, "Template moved successfully");
+        return ResponseEntity.ok(ApiResponse.ok(message, template));
+    }
+    
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ContentManager.class);
 }
 // Change Log: Manual scenes always set sceneSource="manual" and overlayType="grid" for dual scene system

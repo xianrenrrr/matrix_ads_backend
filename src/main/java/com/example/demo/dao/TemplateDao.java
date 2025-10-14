@@ -29,4 +29,7 @@ public interface TemplateDao {
     boolean updateTemplate(String templateId, ManualTemplate manualTemplate) throws ExecutionException, InterruptedException;
 
     boolean deleteTemplate(String templateId);
+    
+    // Get templates in a specific folder
+    List<ManualTemplate> getTemplatesByFolder(String folderId) throws ExecutionException, InterruptedException;
 }

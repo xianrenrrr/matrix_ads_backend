@@ -20,6 +20,7 @@ public class ManualTemplate {
     private String videoId;
     private String thumbnailUrl;  // Thumbnail URL for template preview
     private String localeUsed;  // Locale used for template generation (e.g., "zh-CN")
+    private String folderId;  // Folder ID for organization (null = root folder)
     
     // Additional database fields to prevent Firestore warnings
     @Deprecated  // Use TemplateAssignment instead for time-limited assignments
@@ -166,6 +167,14 @@ public class ManualTemplate {
     
     public void setThumbnailUrl(String thumbnailUrl) {
         this.thumbnailUrl = thumbnailUrl;
+    }
+    
+    public String getFolderId() {
+        return folderId;
+    }
+    
+    public void setFolderId(String folderId) {
+        this.folderId = folderId;
     }
 
 }

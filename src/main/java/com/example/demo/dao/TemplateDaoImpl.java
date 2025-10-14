@@ -305,6 +305,21 @@ public class TemplateDaoImpl implements TemplateDao {
         }
     }
     
+    @Override
+    public List<ManualTemplate> getTemplatesByFolder(String folderId) throws ExecutionException, InterruptedException {
+        checkFirestore();
+        
+        Query query = db.collection("templates").whereEqualTo("folderId", folderId);
+        QuerySnapshot snapshot = query.get().get();
+        
+        List<ManualTemplate> templates = new ArrayList<>();
+        for (QueryDocumentSnapshot doc : snapshot.getDocuments()) {
+            templates.add(doc.toObject(ManualTemplate.class));
+        }
+        
+        return templates;
+    }
+    
     /**
      * Convert GCS URL to proxy URL to avoid 403 errors
      * Returns relative URL that works for both web and mini app
