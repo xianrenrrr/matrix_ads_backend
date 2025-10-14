@@ -12,6 +12,7 @@ import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
+import org.apache.hc.core5.util.Timeout;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -40,8 +41,8 @@ public class WeChatMiniProgramService {
 
     public WeChatMiniProgramService() {
         RequestConfig rc = RequestConfig.custom()
-            .setConnectTimeout(java.time.Duration.ofSeconds(10))
-            .setResponseTimeout(java.time.Duration.ofSeconds(20))
+            .setConnectTimeout(Timeout.ofSeconds(10))    // <-- use Timeout, not Duration
+            .setResponseTimeout(Timeout.ofSeconds(20))   // <-- use Timeout, not Duration
             .build();
 
         CloseableHttpClient client = HttpClients.custom()
