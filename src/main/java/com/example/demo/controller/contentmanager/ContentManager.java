@@ -236,29 +236,18 @@ public class ContentManager {
     
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<ApiResponse<List<TemplateSummary>>> getTemplatesByUserId(@PathVariable String userId,
+    public ResponseEntity<ApiResponse<List<com.example.demo.model.TemplateSummary>>> getTemplatesByUserId(@PathVariable String userId,
                                                                                       @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         List<ManualTemplate> templates = templateDao.getTemplatesByUserId(userId);
-        List<TemplateSummary> summaries = templates.stream()
-            .map(t -> new TemplateSummary(t.getId(), t.getTemplateTitle()))
-            .toList();
+        
+        // Convert to lightweight DTO with only essential fields
+        List<com.example.demo.model.TemplateSummary> summaries = templates.stream()
+            .map(com.example.demo.model.TemplateSummary::fromManualTemplate)
+            .collect(java.util.stream.Collectors.toList());
+        
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, summaries));
-    }
-
-    // DTO for summary
-    public static class TemplateSummary {
-        private String id;
-        private String templateTitle;
-        public TemplateSummary(String id, String templateTitle) {
-            this.id = id;
-            this.templateTitle = templateTitle;
-        }
-        public String getId() { return id; }
-        public String getTemplateTitle() { return templateTitle; }
-        public void setId(String id) { this.id = id; }
-        public void setTemplateTitle(String templateTitle) { this.templateTitle = templateTitle; }
     }
 
     /**
@@ -495,6 +484,7 @@ public class ContentManager {
         @RequestParam("userId") String userId,
         @RequestParam("templateTitle") String templateTitle,
         @RequestParam(value = "templateDescription", required = false) String templateDescription,
+        @RequestParam(value = "folderId", required = false) String folderId,
         @RequestParam("scenesMetadata") String scenesMetadataJson,
         @RequestParam Map<String, org.springframework.web.multipart.MultipartFile> videoFiles,
         @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage
@@ -569,6 +559,12 @@ public class ContentManager {
         template.setTemplateDescription(templateDescription);
         template.setScenes(aiAnalyzedScenes);
         template.setLocaleUsed(language);
+        
+        // Set folderId if provided
+        if (folderId != null && !folderId.isBlank()) {
+            template.setFolderId(folderId);
+            log.info("Setting folderId: {} for manual template", folderId);
+        }
         
         // Calculate total video length (sum of all scene durations)
         int totalDuration = aiAnalyzedScenes.stream()

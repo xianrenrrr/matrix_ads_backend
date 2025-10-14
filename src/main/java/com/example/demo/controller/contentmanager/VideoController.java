@@ -158,6 +158,7 @@ public class VideoController {
                                              @RequestParam(value = "description", required = false) String description,
                                              @RequestParam(value = "templateId", required = false) String templateId,
                                              @RequestParam(value = "groupIds", required = false) String groupIdsStr,
+                                             @RequestParam(value = "folderId", required = false) String folderId,
                                              @RequestParam(value = "sceneThreshold", required = false) Double sceneThreshold,
                                              @RequestHeader(value = "Accept-Language", required = false, defaultValue = "en") String acceptLanguage) throws Exception {
         System.out.println("=== VIDEO UPLOAD REQUEST ===");
@@ -167,6 +168,7 @@ public class VideoController {
         System.out.println("Description: " + description);
         System.out.println("Template ID: " + templateId);
         System.out.println("Group IDs: " + groupIdsStr);
+        System.out.println("Folder ID: " + folderId);
         System.out.println("Scene Threshold: " + (sceneThreshold != null ? sceneThreshold : "default"));
         System.out.println("=============================");
         
@@ -197,6 +199,13 @@ public class VideoController {
             aiGeneratedTemplate.setUserId(userId);
             aiGeneratedTemplate.setVideoId(savedVideo.getId());
             aiGeneratedTemplate.setThumbnailUrl(savedVideo.getThumbnailUrl());  // Set thumbnail from video
+            
+            // Set folderId if provided
+            if (folderId != null && !folderId.isBlank()) {
+                aiGeneratedTemplate.setFolderId(folderId);
+                System.out.println("Setting folderId: " + folderId + " for AI template");
+            }
+            
             // Preserve AI-generated title; only prepend user title if provided
             if (title != null && !title.isBlank()) {
                 String today = java.time.LocalDate.now().toString();
