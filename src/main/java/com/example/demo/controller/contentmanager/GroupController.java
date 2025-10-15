@@ -141,8 +141,19 @@ public class GroupController {
     @GetMapping("/{groupId}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getGroupById(@PathVariable String groupId,
                                                                          @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        System.out.println("🔍🔍🔍 [GroupController] API CALL RECEIVED - getGroupById");
+        System.out.println("🔍 [GroupController] groupId parameter: '" + groupId + "'");
+        System.out.println("🔍 [GroupController] Accept-Language: " + acceptLanguage);
+        System.out.println("🔍 [GroupController] Request timestamp: " + new java.util.Date());
+        
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         Group group = groupDao.findById(groupId);
+        
+        System.out.println("🔍 [GroupController] Group found: " + (group != null));
+        if (group != null) {
+            System.out.println("🔍 [GroupController] Group status: " + group.getStatus());
+            System.out.println("🔍 [GroupController] Group name: " + group.getGroupName());
+        }
         if (group == null || !"active".equals(group.getStatus())) {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
