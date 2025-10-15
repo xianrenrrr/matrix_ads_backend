@@ -409,10 +409,9 @@ public class GroupController {
         try {
             // Force homepage = true → omit "page" and set check_path=false
             // (safer until your mini program’s page is actually deployed)
-            // Create scene parameter in correct format: "g=groupId"
-            String sceneParam = "g=" + token;
-            System.out.println("🔍 [GroupController] Generating QR code with scene: " + sceneParam);
-            return weChatService.generateMiniProgramQRCode(sceneParam, true);
+            // Pass just the group ID - WeChatMiniProgramService will add "g=" prefix
+            System.out.println("🔍 [GroupController] Generating QR code with groupId: " + token);
+            return weChatService.generateMiniProgramQRCode(token, true);
         } catch (Exception e) {
             // Log and fallback
             System.err.println("❌ Failed to generate WeChat QR code, using fallback: " + e.getMessage());
