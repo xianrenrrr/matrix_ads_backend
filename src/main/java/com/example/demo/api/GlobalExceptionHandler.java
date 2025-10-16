@@ -58,7 +58,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
+        String userAgent = request.getHeader("User-Agent");
+        String acceptLanguage = request.getHeader("Accept-Language");
+        System.out.println("🔍 [GlobalExceptionHandler] User-Agent: " + userAgent);
+        System.out.println("🔍 [GlobalExceptionHandler] Accept-Language: " + acceptLanguage);
+        
         String language = getLanguageFromRequest(request);
+        System.out.println("🔍 [GlobalExceptionHandler] Detected language: " + language);
+        
         String raw = ex.getMessage() != null ? ex.getMessage() : "";
         String key = switch (raw) {
             case "Username already exists" -> "username.exists";
@@ -68,7 +75,11 @@ public class GlobalExceptionHandler {
             case "Group not found" -> "group.not_found";
             default -> "bad.request";
         };
+        System.out.println("🔍 [GlobalExceptionHandler] i18n key: " + key);
+        
         String message = i18nService.getMessage(key, language);
+        System.out.println("🔍 [GlobalExceptionHandler] Translated message: " + message);
+        
         ApiResponse<Void> response = ApiResponse.fail(message, raw);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
