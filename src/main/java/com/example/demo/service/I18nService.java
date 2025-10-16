@@ -163,4 +163,15 @@ public class I18nService {
         
         return "zh"; // Default to Chinese
     }
+    
+    // Helper method to detect language with mini program override
+    public String detectLanguageFromRequest(String acceptLanguageHeader, String userAgent) {
+        // If mini program, always return Chinese
+        if (userAgent != null && userAgent.toLowerCase().contains("miniprogram")) {
+            return "zh";
+        }
+        
+        // Otherwise use normal detection
+        return detectLanguageFromHeader(acceptLanguageHeader);
+    }
 }

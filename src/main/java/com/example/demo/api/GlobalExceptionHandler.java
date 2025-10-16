@@ -26,10 +26,8 @@ public class GlobalExceptionHandler {
      */
     private String getLanguageFromRequest(HttpServletRequest request) {
         String acceptLanguage = request.getHeader("Accept-Language");
-        if (acceptLanguage != null && acceptLanguage.startsWith("en")) {
-            return "en";
-        }
-        return "zh"; // Default to Chinese for MVP
+        String userAgent = request.getHeader("User-Agent");
+        return i18nService.detectLanguageFromRequest(acceptLanguage, userAgent);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
