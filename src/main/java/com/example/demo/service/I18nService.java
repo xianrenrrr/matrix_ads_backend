@@ -166,8 +166,8 @@ public class I18nService {
     
     // Helper method to detect language with mini program override
     public String detectLanguageFromRequest(String acceptLanguageHeader, String userAgent) {
-        // If mini program, always return Chinese
-        if (userAgent != null && userAgent.toLowerCase().contains("miniprogram")) {
+        // If WeChat mini program (MicroMessenger), always return Chinese
+        if (userAgent != null && userAgent.toLowerCase().contains("micromessenger")) {
             return "zh";
         }
         
