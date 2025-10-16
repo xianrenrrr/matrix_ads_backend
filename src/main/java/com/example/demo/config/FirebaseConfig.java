@@ -25,7 +25,7 @@ public class FirebaseConfig {
 
     @Bean(name = "firebaseApp")
     public FirebaseApp initializeFirebase() throws IOException {
-        System.out.println("Initializing Firebase...");
+        System.out.println("=== Initializing Firebase ===");
         System.out.println("Firebase enabled: " + firebaseEnabled);
         System.out.println("Storage bucket: " + storageBucket);
         
@@ -41,36 +41,70 @@ public class FirebaseConfig {
         
         GoogleCredentials credentials = null;
         
-        // Try environment variable first (for production)
-        String credentialsJson = System.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON");
-        if (credentialsJson != null && !credentialsJson.trim().isEmpty()) {
-            System.out.println("Found GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable");
-            System.out.println("JSON length: " + credentialsJson.length());
-            try {
-                credentials = GoogleCredentials.fromStream(
-                    new java.io.ByteArrayInputStream(credentialsJson.getBytes(java.nio.charset.StandardCharsets.UTF_8))
-                );
-                System.out.println("Successfully loaded Firebase credentials from environment variable");
-            } catch (Exception e) {
-                System.err.println("Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON: " + e.getMessage());
-                throw e;
-            }
-        } else {
-            // Try service account file (for local development)
-            String credentialsPath = System.getenv("GOOGLE_APPLICATION_CREDENTIALS");
-            if (credentialsPath != null && new File(credentialsPath).exists()) {
-                credentials = GoogleCredentials.fromStream(new FileInputStream(credentialsPath));
-            } else if (serviceAccountKeyPath != null && new File(serviceAccountKeyPath).exists()) {
-                credentials = GoogleCredentials.fromStream(new FileInputStream(serviceAccountKeyPath));
+        // Priority 1: Try GOOGLE_APPLICATION_CREDENTIALS file path (Render Secret Files - RECOMMENDED)
+        String credentialsPath = System.getenv("GOOGLE_APPLICATION_CREDENTIALS");
+        if (credentialsPath != null && !credentialsPath.trim().isEmpty()) {
+            File credFile = new File(credentialsPath);
+            if (credFile.exists()) {
+                System.out.println("✅ Found GOOGLE_APPLICATION_CREDENTIALS file: " + credentialsPath);
+                try {
+                    credentials = GoogleCredentials.fromStream(new FileInputStream(credFile));
+                    System.out.println("✅ Successfully loaded Firebase credentials from file");
+                } catch (Exception e) {
+                    System.err.println("❌ Failed to load credentials from file: " + e.getMessage());
+                    throw e;
+                }
             } else {
-                System.out.println("WARNING: No Firebase credentials found. Running without Firebase.");
-                System.out.println("To fix this, either:");
-                System.out.println("1. Set GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable");
-                System.out.println("2. Set GOOGLE_APPLICATION_CREDENTIALS to point to service account file");
-                System.out.println("3. Place serviceAccountKey.json in the specified path");
-                System.out.println("4. Set firebase.enabled=false in application.properties for development");
-                return null;
+                System.err.println("⚠️ GOOGLE_APPLICATION_CREDENTIALS points to non-existent file: " + credentialsPath);
             }
+        }
+        
+        // Priority 2: Try GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable (fallback)
+        if (credentials == null) {
+            String credentialsJson = System.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON");
+            if (credentialsJson != null && !credentialsJson.trim().isEmpty()) {
+                System.out.println("Found GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable");
+                System.out.println("JSON length: " + credentialsJson.length());
+                try {
+                    credentials = GoogleCredentials.fromStream(
+                        new java.io.ByteArrayInputStream(credentialsJson.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                    );
+                    System.out.println("✅ Successfully loaded Firebase credentials from JSON environment variable");
+                } catch (Exception e) {
+                    System.err.println("❌ Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON: " + e.getMessage());
+                    System.err.println("First 100 chars: " + credentialsJson.substring(0, Math.min(100, credentialsJson.length())));
+                    throw e;
+                }
+            }
+        }
+        
+        // Priority 3: Try local service account file (for development)
+        if (credentials == null && serviceAccountKeyPath != null) {
+            File localFile = new File(serviceAccountKeyPath);
+            if (localFile.exists()) {
+                System.out.println("Found local service account file: " + serviceAccountKeyPath);
+                credentials = GoogleCredentials.fromStream(new FileInputStream(localFile));
+                System.out.println("✅ Successfully loaded Firebase credentials from local file");
+            }
+        }
+        
+        // If still no credentials found
+        if (credentials == null) {
+            System.err.println("❌ ERROR: No Firebase credentials found!");
+            System.err.println("");
+            System.err.println("For Render deployment, use Secret Files (RECOMMENDED):");
+            System.err.println("1. In Render Dashboard → Environment → Add Secret File");
+            System.err.println("2. Filename: /etc/secrets/firebase-credentials.json");
+            System.err.println("3. Contents: Paste your Firebase Admin SDK JSON");
+            System.err.println("4. Add environment variable:");
+            System.err.println("   GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/firebase-credentials.json");
+            System.err.println("");
+            System.err.println("Alternative: Use environment variable (less secure):");
+            System.err.println("   GOOGLE_APPLICATION_CREDENTIALS_JSON=<minified-json>");
+            System.err.println("");
+            System.err.println("For local development:");
+            System.err.println("   Set firebase.enabled=false in application.properties");
+            return null;
         }
         
         FirebaseOptions options = FirebaseOptions.builder()
@@ -78,6 +112,8 @@ public class FirebaseConfig {
             .setStorageBucket(storageBucket)
             .build();
         
-        return FirebaseApp.initializeApp(options);
+        FirebaseApp app = FirebaseApp.initializeApp(options);
+        System.out.println("✅ Firebase initialized successfully!");
+        return app;
     }
 }
