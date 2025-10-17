@@ -45,6 +45,13 @@ public class Scene {
     private String shortLabelZh;  // Chinese short label for the dominant object
     private String sceneDescriptionZh;  // Chinese scene description
     
+    // NEW: Unified VL analysis output (from single video analysis call)
+    private String vlRawResponse;  // Complete Qwen VL JSON response (cached)
+    private String sceneDescriptionFromVL;  // Full scene understanding from VL
+    private String dominantAction;  // Main action in scene (e.g., "打电话")
+    private String audioContext;  // Audio description from VL
+    private Map<String, String> objectMotion;  // Object ID → motion description
+    
     // Inner class for object overlay data
     public static class ObjectOverlay {
         private String label;
@@ -384,6 +391,47 @@ public class Scene {
     
     public void setSceneDescriptionZh(String sceneDescriptionZh) {
         this.sceneDescriptionZh = sceneDescriptionZh;
+    }
+    
+    // Getters and setters for unified VL analysis output
+    public String getVlRawResponse() {
+        return vlRawResponse;
+    }
+    
+    public void setVlRawResponse(String vlRawResponse) {
+        this.vlRawResponse = vlRawResponse;
+    }
+    
+    public String getSceneDescriptionFromVL() {
+        return sceneDescriptionFromVL;
+    }
+    
+    public void setSceneDescriptionFromVL(String sceneDescriptionFromVL) {
+        this.sceneDescriptionFromVL = sceneDescriptionFromVL;
+    }
+    
+    public String getDominantAction() {
+        return dominantAction;
+    }
+    
+    public void setDominantAction(String dominantAction) {
+        this.dominantAction = dominantAction;
+    }
+    
+    public String getAudioContext() {
+        return audioContext;
+    }
+    
+    public void setAudioContext(String audioContext) {
+        this.audioContext = audioContext;
+    }
+    
+    public Map<String, String> getObjectMotion() {
+        return objectMotion;
+    }
+    
+    public void setObjectMotion(Map<String, String> objectMotion) {
+        this.objectMotion = objectMotion;
     }
     
 }

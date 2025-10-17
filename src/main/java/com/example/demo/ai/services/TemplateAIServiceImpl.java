@@ -165,16 +165,89 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         // Create base scene with clean data
         Scene scene = SceneProcessor.createFromSegment(segment, sceneNumber, language);
         
-        // Extract keyframe if possible
+        // Extract keyframe for thumbnail/fallback
         String keyframeUrl = extractKeyframe(scene, segment, videoUrl);
         if (keyframeUrl != null) {
             scene.setKeyframeUrl(keyframeUrl);
-            
-            // NEW: Use segmentation service for shape detection
-            processSceneWithShapes(scene, keyframeUrl, language);
         }
         
-        // Removed AI orchestrator fallback; if no overlays after segmentation, we'll default to grid.
+        // NEW: Unified video analysis - analyze entire scene video in one call
+        try {
+            log.info("=== UNIFIED VIDEO ANALYSIS for scene {} ===", sceneNumber);
+            ObjectLabelService.VideoAnalysisResult vlResult = objectLabelService.analyzeSceneVideo(videoUrl, language);
+            
+            if (vlResult != null) {
+                log.info("✅ Video analysis successful: {} objects detected", 
+                        vlResult.objects != null ? vlResult.objects.size() : 0);
+                
+                // Save complete VL response
+                scene.setVlRawResponse(vlResult.rawVLResponse);
+                scene.setSceneDescriptionFromVL(vlResult.sceneDescription);
+                scene.setDominantAction(vlResult.dominantAction);
+                scene.setAudioContext(vlResult.audioContext);
+                
+                // Convert detected objects to scene overlays
+                if (vlResult.objects != null && !vlResult.objects.isEmpty()) {
+                    List<Scene.ObjectOverlay> overlays = new ArrayList<>();
+                    Map<String, String> motionMap = new HashMap<>();
+                    
+                    for (ObjectLabelService.VideoAnalysisResult.DetectedObject obj : vlResult.objects) {
+                        Scene.ObjectOverlay overlay = new Scene.ObjectOverlay();
+                        overlay.setLabel(obj.labelEn != null ? obj.labelEn : obj.labelZh);
+                        overlay.setLabelZh(obj.labelZh);
+                        overlay.setLabelLocalized(obj.labelZh);
+                        overlay.setConfidence((float) obj.confidence);
+                        
+                        if (obj.boundingBox != null) {
+                            overlay.setX((float) obj.boundingBox.x);
+                            overlay.setY((float) obj.boundingBox.y);
+                            overlay.setWidth((float) obj.boundingBox.w);
+                            overlay.setHeight((float) obj.boundingBox.h);
+                        }
+                        
+                        overlays.add(overlay);
+                        
+                        // Store motion description
+                        if (obj.motionDescription != null && !obj.motionDescription.isBlank()) {
+                            motionMap.put(obj.id, obj.motionDescription);
+                        }
+                    }
+                    
+                    scene.setOverlayObjects(overlays);
+                    scene.setOverlayType("objects");
+                    scene.setObjectMotion(motionMap);
+                    
+                    // Set dominant object as short label
+                    if (!vlResult.objects.isEmpty()) {
+                        scene.setShortLabelZh(vlResult.objects.get(0).labelZh);
+                    }
+                    
+                    // Build legend
+                    if (includeLegend && overlayLegendService != null) {
+                        var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
+                        scene.setLegend(legend);
+                    }
+                } else {
+                    // No objects detected, use grid
+                    scene.setOverlayType("grid");
+                    scene.setScreenGridOverlay(java.util.List.of(5));
+                }
+            } else {
+                log.warn("❌ Video analysis returned null, falling back to keyframe analysis");
+                // Fallback to old method if video analysis fails
+                if (keyframeUrl != null) {
+                    processSceneWithShapes(scene, keyframeUrl, language);
+                }
+            }
+        } catch (Exception e) {
+            log.error("❌ Video analysis failed: {}, falling back to keyframe", e.getMessage());
+            // Fallback to old method
+            if (keyframeUrl != null) {
+                processSceneWithShapes(scene, keyframeUrl, language);
+            }
+        }
+        
+        // Final fallback to grid if nothing worked
         if (scene.getOverlayType() == null) {
             scene.setOverlayType("grid");
             scene.setScreenGridOverlay(java.util.List.of(5));

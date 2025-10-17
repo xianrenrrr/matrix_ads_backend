@@ -126,6 +126,143 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         }
     }
     @Override
+    public VideoAnalysisResult analyzeSceneVideo(String videoUrl, String locale) {
+        if (videoUrl == null || videoUrl.isBlank()) {
+            return null;
+        }
+        
+        try {
+            System.out.println("[QWEN-VL] Unified video analysis: " + videoUrl);
+            
+            // Build prompt for complete scene analysis
+            StringBuilder sb = new StringBuilder();
+            sb.append("请观看整段视频，进行完整的场景分析，返回 JSON 格式。\n")
+              .append("要求：\n")
+              .append("1. 检测视频中的主要物体，给出归一化坐标（0~1）和中文标签（≤4字）\n")
+              .append("2. 描述每个物体的运动（如果有）\n")
+              .append("3. 用一句话描述整个场景（≤50字）\n")
+              .append("4. 识别主要动作（≤10字）\n")
+              .append("5. 描述音频内容（如果有声音）\n")
+              .append("\n输出格式（仅 JSON）：\n")
+              .append("{\n")
+              .append("  \"objects\": [\n")
+              .append("    {\n")
+              .append("      \"id\": \"obj1\",\n")
+              .append("      \"labelZh\": \"人物\",\n")
+              .append("      \"labelEn\": \"person\",\n")
+              .append("      \"confidence\": 0.95,\n")
+              .append("      \"boundingBox\": {\"x\": 0.2, \"y\": 0.3, \"w\": 0.4, \"h\": 0.6},\n")
+              .append("      \"motionDescription\": \"从左向右走动\"\n")
+              .append("    }\n")
+              .append("  ],\n")
+              .append("  \"sceneDescription\": \"办公室场景，一个人在走动并使用手机\",\n")
+              .append("  \"dominantAction\": \"打电话\",\n")
+              .append("  \"audioContext\": \"说话声音清晰\"\n")
+              .append("}\n");
+
+            Map<String, Object> request = new HashMap<>();
+            request.put("model", qwenModel);
+            
+            List<Map<String, Object>> messages = new ArrayList<>();
+            Map<String, Object> message = new HashMap<>();
+            message.put("role", "user");
+
+            List<Map<String, Object>> content = new ArrayList<>();
+            
+            // Text prompt
+            Map<String, Object> textContent = new HashMap<>();
+            textContent.put("type", "text");
+            textContent.put("text", sb.toString());
+            content.add(textContent);
+
+            // Video content
+            Map<String, Object> videoContent = new HashMap<>();
+            videoContent.put("type", "video");
+            videoContent.put("video", videoUrl);
+            content.add(videoContent);
+
+            message.put("content", content);
+            messages.add(message);
+            request.put("messages", messages);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + qwenApiKey);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+
+            String endpoint = normalizeChatEndpoint(qwenApiBase);
+            ResponseEntity<String> response = restTemplate.exchange(
+                endpoint,
+                HttpMethod.POST,
+                entity,
+                String.class
+            );
+            
+            String body = response.getBody();
+            System.out.println("[QWEN-VL] Video analysis response status=" + response.getStatusCodeValue() + 
+                             " bodyLen=" + (body == null ? 0 : body.length()));
+            
+            if (!response.getStatusCode().is2xxSuccessful() || body == null) {
+                return null;
+            }
+            
+            String contentStr = extractContent(body);
+            if (contentStr == null || contentStr.isBlank()) {
+                return null;
+            }
+
+            // Parse JSON response
+            Map<String, Object> resultMap = objectMapper.readValue(
+                contentStr, 
+                new TypeReference<Map<String, Object>>(){}
+            );
+            
+            VideoAnalysisResult result = new VideoAnalysisResult();
+            result.rawVLResponse = contentStr;  // Cache complete response
+            result.sceneDescription = (String) resultMap.get("sceneDescription");
+            result.dominantAction = (String) resultMap.get("dominantAction");
+            result.audioContext = (String) resultMap.get("audioContext");
+            
+            // Parse objects
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> objectsList = (List<Map<String, Object>>) resultMap.get("objects");
+            if (objectsList != null) {
+                result.objects = new ArrayList<>();
+                for (Map<String, Object> obj : objectsList) {
+                    VideoAnalysisResult.DetectedObject detObj = new VideoAnalysisResult.DetectedObject();
+                    detObj.id = (String) obj.get("id");
+                    detObj.labelZh = sanitize((String) obj.get("labelZh"));
+                    detObj.labelEn = (String) obj.get("labelEn");
+                    detObj.confidence = ((Number) obj.getOrDefault("confidence", 0.0)).doubleValue();
+                    detObj.motionDescription = (String) obj.get("motionDescription");
+                    
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> bbox = (Map<String, Object>) obj.get("boundingBox");
+                    if (bbox != null) {
+                        detObj.boundingBox = new VideoAnalysisResult.DetectedObject.BoundingBox(
+                            ((Number) bbox.getOrDefault("x", 0.0)).doubleValue(),
+                            ((Number) bbox.getOrDefault("y", 0.0)).doubleValue(),
+                            ((Number) bbox.getOrDefault("w", 0.0)).doubleValue(),
+                            ((Number) bbox.getOrDefault("h", 0.0)).doubleValue()
+                        );
+                    }
+                    
+                    result.objects.add(detObj);
+                }
+            }
+            
+            System.out.println("[QWEN-VL] Video analysis completed: " + 
+                             (result.objects != null ? result.objects.size() : 0) + " objects detected");
+            return result;
+            
+        } catch (Exception e) {
+            System.err.println("[QWEN-VL] Video analysis failed: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+    
+    @Override
     public Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale) {
         Map<String, LabelResult> out = new HashMap<>();
         if (regions == null || regions.isEmpty() || keyframeUrl == null || keyframeUrl.isBlank()) {
