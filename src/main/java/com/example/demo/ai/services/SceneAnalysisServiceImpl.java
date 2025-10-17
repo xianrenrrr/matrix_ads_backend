@@ -48,6 +48,9 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
     @Autowired
     private com.example.demo.ai.providers.vision.FFmpegSceneDetectionService ffmpegSceneDetectionService;
     
+    @Autowired
+    private SceneVLProcessor sceneVLProcessor;
+    
     @Value("${ai.overlay.includeLegend:false}")
     private boolean includeLegend;
     
@@ -111,76 +114,11 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
                 scene.setKeyframeUrl(keyframeUrl);
             }
             
-            // 3. NEW: Unified video analysis - analyze entire video in one call
-            try {
-                log.info("=== UNIFIED VIDEO ANALYSIS for manual scene ===");
-                ObjectLabelService.VideoAnalysisResult vlResult = objectLabelService.analyzeSceneVideo(video.getUrl(), language);
-                
-                if (vlResult != null) {
-                    log.info("✅ Video analysis successful: {} objects detected", 
-                            vlResult.objects != null ? vlResult.objects.size() : 0);
-                    
-                    // Save complete VL response
-                    scene.setVlRawResponse(vlResult.rawVLResponse);
-                    scene.setSceneDescriptionFromVL(vlResult.sceneDescription);
-                    scene.setDominantAction(vlResult.dominantAction);
-                    scene.setAudioContext(vlResult.audioContext);
-                    
-                    // Convert detected objects to scene overlays
-                    if (vlResult.objects != null && !vlResult.objects.isEmpty()) {
-                        List<Scene.ObjectOverlay> overlays = new ArrayList<>();
-                        Map<String, String> motionMap = new HashMap<>();
-                        
-                        for (ObjectLabelService.VideoAnalysisResult.DetectedObject obj : vlResult.objects) {
-                            Scene.ObjectOverlay overlay = new Scene.ObjectOverlay();
-                            overlay.setLabel(obj.labelEn != null ? obj.labelEn : obj.labelZh);
-                            overlay.setLabelZh(obj.labelZh);
-                            overlay.setLabelLocalized(obj.labelZh);
-                            overlay.setConfidence((float) obj.confidence);
-                            
-                            if (obj.boundingBox != null) {
-                                overlay.setX((float) obj.boundingBox.x);
-                                overlay.setY((float) obj.boundingBox.y);
-                                overlay.setWidth((float) obj.boundingBox.w);
-                                overlay.setHeight((float) obj.boundingBox.h);
-                            }
-                            
-                            overlays.add(overlay);
-                            
-                            // Store motion description
-                            if (obj.motionDescription != null && !obj.motionDescription.isBlank()) {
-                                motionMap.put(obj.id, obj.motionDescription);
-                            }
-                        }
-                        
-                        scene.setOverlayObjects(overlays);
-                        scene.setOverlayType("objects");
-                        scene.setObjectMotion(motionMap);
-                        
-                        // Set dominant object as short label
-                        if (!vlResult.objects.isEmpty()) {
-                            scene.setShortLabelZh(vlResult.objects.get(0).labelZh);
-                        }
-                        
-                        // Build legend
-                        if (includeLegend && overlayLegendService != null) {
-                            var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
-                            scene.setLegend(legend);
-                        }
-                    } else {
-                        // No objects detected, use grid
-                        scene.setOverlayType("grid");
-                        scene.setScreenGridOverlay(List.of(5));
-                    }
-                } else {
-                    log.warn("❌ Video analysis returned null, falling back to keyframe analysis");
-                    // Fallback to old method
-                    if (keyframeUrl != null) {
-                        processSceneWithShapes(scene, keyframeUrl, language);
-                    }
-                }
-            } catch (Exception e) {
-                log.error("❌ Video analysis failed: {}, falling back to keyframe", e.getMessage());
+            // 3. NEW: Unified video analysis using shared processor
+            boolean success = sceneVLProcessor.analyzeAndPopulateScene(scene, video.getUrl(), language);
+            
+            if (!success) {
+                log.warn("❌ Video analysis failed, falling back to keyframe analysis");
                 // Fallback to old method
                 if (keyframeUrl != null) {
                     processSceneWithShapes(scene, keyframeUrl, language);

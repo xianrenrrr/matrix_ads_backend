@@ -191,12 +191,27 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
 
             String endpoint = normalizeChatEndpoint(qwenApiBase);
-            ResponseEntity<String> response = restTemplate.exchange(
+            System.out.println("[QWEN-VL] Calling API endpoint: " + safeHost(endpoint));
+            System.out.println("[QWEN-VL] Model: " + qwenModel);
+            System.out.println("[QWEN-VL] Video URL: " + videoUrl);
+            System.out.println("[QWEN-VL] Sending request to Qwen VL...");
+            
+            // Set timeout for video analysis (videos can take longer)
+            org.springframework.http.client.SimpleClientHttpRequestFactory requestFactory = 
+                new org.springframework.http.client.SimpleClientHttpRequestFactory();
+            requestFactory.setConnectTimeout(30000);  // 30 seconds connect timeout
+            requestFactory.setReadTimeout(120000);     // 120 seconds read timeout for video analysis
+            RestTemplate timeoutRestTemplate = new RestTemplate(requestFactory);
+            
+            long startTime = System.currentTimeMillis();
+            ResponseEntity<String> response = timeoutRestTemplate.exchange(
                 endpoint,
                 HttpMethod.POST,
                 entity,
                 String.class
             );
+            long duration = System.currentTimeMillis() - startTime;
+            System.out.println("[QWEN-VL] API call completed in " + duration + "ms");
             
             String body = response.getBody();
             System.out.println("[QWEN-VL] Video analysis response status=" + response.getStatusCodeValue() + 
@@ -256,7 +271,12 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             return result;
             
         } catch (Exception e) {
-            System.err.println("[QWEN-VL] Video analysis failed: " + e.getMessage());
+            System.err.println("[QWEN-VL] ❌ Video analysis FAILED");
+            System.err.println("[QWEN-VL] Error type: " + e.getClass().getName());
+            System.err.println("[QWEN-VL] Error message: " + e.getMessage());
+            if (e.getCause() != null) {
+                System.err.println("[QWEN-VL] Cause: " + e.getCause().getMessage());
+            }
             e.printStackTrace();
             return null;
         }
