@@ -134,31 +134,22 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         try {
             System.out.println("[QWEN-VL] Unified video analysis: " + videoUrl);
             
-            // Build prompt for complete scene analysis
+            // Build prompt for DETAILED scene analysis
             StringBuilder sb = new StringBuilder();
-            sb.append("请观看整段视频，进行完整的场景分析，返回 JSON 格式。\n")
-              .append("要求：\n")
-              .append("1. 检测视频中的主要物体，给出归一化坐标（0~1）和中文标签（≤4字）\n")
-              .append("2. 描述每个物体的运动（如果有）\n")
-              .append("3. 用一句话描述整个场景（≤50字）\n")
-              .append("4. 识别主要动作（≤10字）\n")
-              .append("5. 描述音频内容（如果有声音）\n")
-              .append("\n输出格式（仅 JSON）：\n")
+            sb.append("请详细描述这个视频中的所有内容。用自然语言尽可能详细地描述你看到的一切：\n\n")
+              .append("- 场景环境和氛围\n")
+              .append("- 主要物体、人物和它们的动作\n")
+              .append("- 镜头运动和拍摄风格\n")
+              .append("- 光线、色调、情绪\n")
+              .append("- 任何其他重要细节\n\n")
+              .append("然后，识别视频中最重要的1-3个物体，返回简单的JSON格式：\n\n")
               .append("{\n")
+              .append("  \"description\": \"你的详细描述...\",\n")
               .append("  \"objects\": [\n")
-              .append("    {\n")
-              .append("      \"id\": \"obj1\",\n")
-              .append("      \"labelZh\": \"人物\",\n")
-              .append("      \"labelEn\": \"person\",\n")
-              .append("      \"confidence\": 0.95,\n")
-              .append("      \"boundingBox\": {\"x\": 0.2, \"y\": 0.3, \"w\": 0.4, \"h\": 0.6},\n")
-              .append("      \"motionDescription\": \"从左向右走动\"\n")
-              .append("    }\n")
-              .append("  ],\n")
-              .append("  \"sceneDescription\": \"办公室场景，一个人在走动并使用手机\",\n")
-              .append("  \"dominantAction\": \"打电话\",\n")
-              .append("  \"audioContext\": \"说话声音清晰\"\n")
-              .append("}\n");
+              .append("    {\"id\": \"obj1\", \"labelZh\": \"汽车\", \"labelEn\": \"car\", \"confidence\": 0.95}\n")
+              .append("  ]\n")
+              .append("}\n\n")
+              .append("注意：只需要识别最重要的物体，不需要边界框坐标。description字段请尽可能详细。");
 
             Map<String, Object> request = new HashMap<>();
             request.put("model", qwenModel);
@@ -226,7 +217,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                 return null;
             }
 
-            // Parse JSON response
+            // Parse JSON response - simplified format
             Map<String, Object> resultMap = objectMapper.readValue(
                 contentStr, 
                 new TypeReference<Map<String, Object>>(){}
@@ -234,11 +225,17 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             
             VideoAnalysisResult result = new VideoAnalysisResult();
             result.rawVLResponse = contentStr;  // Cache complete response
-            result.sceneDescription = (String) resultMap.get("sceneDescription");
-            result.dominantAction = (String) resultMap.get("dominantAction");
-            result.audioContext = (String) resultMap.get("audioContext");
             
-            // Parse objects
+            // Get the free-form description
+            String description = (String) resultMap.get("description");
+            result.sceneDescription = description;  // Use full description as scene description
+            
+            // Extract key info from description for backward compatibility
+            // (These fields are optional now)
+            result.dominantAction = null;  // Will be extracted from description if needed
+            result.audioContext = null;    // Will be extracted from description if needed
+            
+            // Parse objects (simplified format - no bounding boxes)
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> objectsList = (List<Map<String, Object>>) resultMap.get("objects");
             if (objectsList != null) {
@@ -249,18 +246,10 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                     detObj.labelZh = sanitize((String) obj.get("labelZh"));
                     detObj.labelEn = (String) obj.get("labelEn");
                     detObj.confidence = ((Number) obj.getOrDefault("confidence", 0.0)).doubleValue();
-                    detObj.motionDescription = (String) obj.get("motionDescription");
                     
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> bbox = (Map<String, Object>) obj.get("boundingBox");
-                    if (bbox != null) {
-                        detObj.boundingBox = new VideoAnalysisResult.DetectedObject.BoundingBox(
-                            ((Number) bbox.getOrDefault("x", 0.0)).doubleValue(),
-                            ((Number) bbox.getOrDefault("y", 0.0)).doubleValue(),
-                            ((Number) bbox.getOrDefault("w", 0.0)).doubleValue(),
-                            ((Number) bbox.getOrDefault("h", 0.0)).doubleValue()
-                        );
-                    }
+                    // No bounding box in simplified format
+                    detObj.boundingBox = null;
+                    detObj.motionDescription = null;
                     
                     result.objects.add(detObj);
                 }
