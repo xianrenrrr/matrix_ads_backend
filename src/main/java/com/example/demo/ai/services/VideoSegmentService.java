@@ -1,9 +1,11 @@
 package com.example.demo.ai.services;
 
 import com.example.demo.ai.shared.GcsFileResolver;
+import com.google.cloud.storage.BlobInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -24,6 +26,9 @@ public class VideoSegmentService {
     @Autowired
     private GcsFileResolver gcsFileResolver;
     
+    @Value("${firebase.storage.bucket}")
+    private String bucketName;
+    
     /**
      * Extract a video segment and upload to storage
      * 
@@ -41,7 +46,8 @@ public class VideoSegmentService {
             log.info("Extracting video segment: {} to {} from {}", startTime, endTime, videoUrl);
             
             // Download original video
-            tempInput = gcsFileResolver.resolveToLocalFile(videoUrl);
+            GcsFileResolver.ResolvedFile resolvedFile = gcsFileResolver.resolve(videoUrl);
+            tempInput = resolvedFile.getPath().toFile();
             
             // Create temp output file
             tempOutput = File.createTempFile("segment_" + segmentId + "_", ".mp4");
@@ -83,7 +89,17 @@ public class VideoSegmentService {
             // Upload segment to storage
             if (firebaseStorageService != null) {
                 String objectName = "segments/" + segmentId + ".mp4";
-                String segmentUrl = firebaseStorageService.uploadFile(tempOutput, objectName);
+                // Upload using storage.create directly
+                BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, objectName)
+                    .setContentType("video/mp4")
+                    .build();
+                com.google.cloud.storage.Storage storage = com.google.firebase.cloud.StorageClient
+                    .getInstance()
+                    .bucket(bucketName)
+                    .getStorage();
+                storage.create(blobInfo, java.nio.file.Files.readAllBytes(tempOutput.toPath()));
+                
+                String segmentUrl = String.format("https://storage.googleapis.com/%s/%s", bucketName, objectName);
                 log.info("✅ Segment uploaded: {}", segmentUrl);
                 return segmentUrl;
             } else {
