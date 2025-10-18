@@ -217,10 +217,15 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 java.util.Map<String, com.example.demo.ai.label.ObjectLabelService.LabelResult> regionLabels = java.util.Collections.emptyMap();
                 try {
                     regionLabels = objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
+                    log.info("[VL] labelRegions returned {} results", regionLabels.size());
                     
                     // NEW: Save VL scene analysis and raw response to scene
                     if (!regionLabels.isEmpty()) {
                         com.example.demo.ai.label.ObjectLabelService.LabelResult firstResult = regionLabels.values().iterator().next();
+                        log.info("[VL] First result - sceneAnalysis: {}, rawResponse: {}", 
+                            firstResult.sceneAnalysis != null ? firstResult.sceneAnalysis.length() + " chars" : "null",
+                            firstResult.rawResponse != null ? firstResult.rawResponse.length() + " chars" : "null");
+                        
                         if (firstResult.sceneAnalysis != null && !firstResult.sceneAnalysis.isEmpty()) {
                             scene.setVlSceneAnalysis(firstResult.sceneAnalysis);
                             log.info("[VL] Scene analysis saved ({} chars)", firstResult.sceneAnalysis.length());
@@ -229,8 +234,12 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                             scene.setVlRawResponse(firstResult.rawResponse);
                             log.info("[VL] Raw response saved ({} chars)", firstResult.rawResponse.length());
                         }
+                    } else {
+                        log.warn("[VL] regionLabels is empty, cannot save VL data");
                     }
-                } catch (Exception ignore) {}
+                } catch (Exception e) {
+                    log.error("[VL] Exception while saving VL data: {}", e.getMessage(), e);
+                }
 
                 for (OverlayShape shape : shapes) {
                     String labelZh = null;
