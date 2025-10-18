@@ -129,8 +129,16 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
 
     @Override
     public Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale) {
+        System.out.println("[QWEN] ========================================");
+        System.out.println("[QWEN] labelRegions called");
+        System.out.println("[QWEN] keyframeUrl: " + (keyframeUrl != null ? keyframeUrl.substring(0, Math.min(100, keyframeUrl.length())) + "..." : "null"));
+        System.out.println("[QWEN] regions count: " + (regions != null ? regions.size() : 0));
+        System.out.println("[QWEN] locale: " + locale);
+        System.out.println("[QWEN] ========================================");
+        
         Map<String, LabelResult> out = new HashMap<>();
         if (regions == null || regions.isEmpty() || keyframeUrl == null || keyframeUrl.isBlank()) {
+            System.err.println("[QWEN] ❌ Early return - regions or keyframeUrl is null/empty");
             return out;
         }
         try {
@@ -203,24 +211,40 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             }
 
             if (!response.getStatusCode().is2xxSuccessful()) {
+                System.err.println("[QWEN] ❌ Non-successful status code: " + response.getStatusCodeValue());
                 return out;
             }
             String contentStr = extractContent(bodyR);
-            if (contentStr == null || contentStr.isBlank()) return out;
+            System.out.println("[QWEN] Extracted content length: " + (contentStr != null ? contentStr.length() : 0));
+            System.out.println("[QWEN] Extracted content: " + (contentStr != null ? contentStr.substring(0, Math.min(500, contentStr.length())) : "null"));
+            
+            if (contentStr == null || contentStr.isBlank()) {
+                System.err.println("[QWEN] ❌ Content is null or blank after extraction");
+                return out;
+            }
 
             // Parse enhanced JSON response
             JsonNode root = objectMapper.readTree(contentStr);
+            System.out.println("[QWEN] Parsed JSON - isObject: " + root.isObject() + ", isArray: " + root.isArray());
+            System.out.println("[QWEN] JSON structure: " + root.toString().substring(0, Math.min(300, root.toString().length())));
+            
             String sceneAnalysis = null;
             
             // Try new format first: {regions: [...], sceneAnalysis: "..."}
             if (root.isObject() && root.has("regions")) {
+                System.out.println("[QWEN] ✅ Found 'regions' field in response");
                 JsonNode regionsNode = root.get("regions");
+                
                 if (root.has("sceneAnalysis")) {
                     sceneAnalysis = root.get("sceneAnalysis").asText();
-                    System.out.println("[QWEN] Scene analysis extracted (" + sceneAnalysis.length() + " chars)");
+                    System.out.println("[QWEN] ✅ Scene analysis extracted (" + sceneAnalysis.length() + " chars)");
+                    System.out.println("[QWEN] Scene analysis preview: " + sceneAnalysis.substring(0, Math.min(200, sceneAnalysis.length())) + "...");
+                } else {
+                    System.err.println("[QWEN] ⚠️ No 'sceneAnalysis' field in response");
                 }
                 
                 if (regionsNode.isArray()) {
+                    System.out.println("[QWEN] Processing " + regionsNode.size() + " regions");
                     for (JsonNode node : regionsNode) {
                         String id = node.path("id").asText(null);
                         String label = sanitize(node.path("labelZh").asText(""));
@@ -229,26 +253,47 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                             LabelResult result = new LabelResult(id, label, conf);
                             result.sceneAnalysis = sceneAnalysis;  // Attach scene analysis to all results
                             out.put(id, result);
+                            System.out.println("[QWEN] Added region: " + id + " -> " + label + " (conf: " + conf + ")");
                         }
                     }
+                } else {
+                    System.err.println("[QWEN] ⚠️ 'regions' is not an array");
                 }
             }
             // Fallback: old format (array) for backward compatibility
             else if (root.isArray()) {
-                System.out.println("[QWEN] Using fallback array format (no scene analysis)");
+                System.out.println("[QWEN] ⚠️ Using fallback array format (no scene analysis)");
                 for (JsonNode node : root) {
                     String id = node.path("id").asText(null);
                     String label = sanitize(node.path("labelZh").asText(""));
                     double conf = clamp(node.path("conf").asDouble(0.0));
                     if (id != null && !label.isEmpty()) {
                         out.put(id, new LabelResult(id, label, conf));
+                        System.out.println("[QWEN] Added region (old format): " + id + " -> " + label);
                     }
                 }
+            } else {
+                System.err.println("[QWEN] ❌ Unexpected JSON format - not object with 'regions' or array");
+            } else {
+                System.err.println("[QWEN] ❌ Unexpected JSON format - not object with 'regions' or array");
             }
             
+            System.out.println("[QWEN] ========================================");
+            System.out.println("[QWEN] ✅ Returning " + out.size() + " labeled regions");
+            if (!out.isEmpty()) {
+                LabelResult first = out.values().iterator().next();
+                System.out.println("[QWEN] First result has sceneAnalysis: " + (first.sceneAnalysis != null));
+                if (first.sceneAnalysis != null) {
+                    System.out.println("[QWEN] Scene analysis length: " + first.sceneAnalysis.length());
+                }
+            }
+            System.out.println("[QWEN] ========================================");
             return out;
         } catch (Exception e) {
-            System.err.println("[QWEN] Error in labelRegions: " + e.getMessage());
+            System.err.println("[QWEN] ========================================");
+            System.err.println("[QWEN] ❌ Exception in labelRegions: " + e.getClass().getName());
+            System.err.println("[QWEN] ❌ Error message: " + e.getMessage());
+            System.err.println("[QWEN] ========================================");
             e.printStackTrace();
             return out;
         }
