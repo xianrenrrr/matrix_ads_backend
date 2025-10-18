@@ -218,12 +218,16 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 try {
                     regionLabels = objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
                     
-                    // NEW: Save VL scene analysis to scene
+                    // NEW: Save VL scene analysis and raw response to scene
                     if (!regionLabels.isEmpty()) {
                         com.example.demo.ai.label.ObjectLabelService.LabelResult firstResult = regionLabels.values().iterator().next();
                         if (firstResult.sceneAnalysis != null && !firstResult.sceneAnalysis.isEmpty()) {
                             scene.setVlSceneAnalysis(firstResult.sceneAnalysis);
                             log.info("[VL] Scene analysis saved ({} chars)", firstResult.sceneAnalysis.length());
+                        }
+                        if (firstResult.rawResponse != null && !firstResult.rawResponse.isEmpty()) {
+                            scene.setVlRawResponse(firstResult.rawResponse);
+                            log.info("[VL] Raw response saved ({} chars)", firstResult.rawResponse.length());
                         }
                     }
                 } catch (Exception ignore) {}

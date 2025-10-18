@@ -30,6 +30,7 @@ public interface ObjectLabelService {
         public String labelZh;
         public double conf;
         public String sceneAnalysis;  // NEW - detailed scene analysis from VL (for comparison)
+        public String rawResponse;    // NEW - raw VL response for debugging/comparison
         public LabelResult() {}
         public LabelResult(String id, String labelZh, double conf) {
             this.id = id; this.labelZh = labelZh; this.conf = conf;

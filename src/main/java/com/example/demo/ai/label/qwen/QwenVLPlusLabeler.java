@@ -249,6 +249,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                 for (RegionBox region : regions) {
                     LabelResult result = new LabelResult(region.id, "未识别", 0.5);
                     result.sceneAnalysis = sceneAnalysis;
+                    result.rawResponse = contentStr;  // Store raw response
                     out.put(region.id, result);
                     System.out.println("[QWEN] Added fallback region: " + region.id + " with raw scene analysis");
                 }
@@ -275,6 +276,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                         if (id != null && !label.isEmpty()) {
                             LabelResult result = new LabelResult(id, label, conf);
                             result.sceneAnalysis = sceneAnalysis;  // Attach scene analysis to all results
+                            result.rawResponse = contentStr;  // Store raw response
                             out.put(id, result);
                             System.out.println("[QWEN] Added region: " + id + " -> " + label + " (conf: " + conf + ")");
                         }
