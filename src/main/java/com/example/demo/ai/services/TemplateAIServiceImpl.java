@@ -184,9 +184,17 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     }
     
     private void processSceneWithShapes(Scene scene, String keyframeUrl, String language) {
+        log.info("[PROCESS] processSceneWithShapes called for scene {}, keyframe: {}", 
+            scene.getSceneNumber(), keyframeUrl != null ? "present" : "null");
         try {
             // Detect shapes using segmentation service
             List<OverlayShape> shapes = segmentationService.detect(keyframeUrl);
+            log.info("[PROCESS] Detected {} shapes", shapes != null ? shapes.size() : 0);
+            
+            // ALWAYS get VL scene analysis, even if no shapes detected
+            // This is valuable for video comparison by reasoning models
+            java.util.List<com.example.demo.ai.label.ObjectLabelService.RegionBox> regions = new java.util.ArrayList<>();
+            java.util.Map<OverlayShape, String> idMap = new java.util.HashMap<>();
             
             if (!shapes.isEmpty()) {
                 // Process shapes and add Chinese labels
@@ -194,8 +202,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 boolean hasBoxes = false;
                 
                 // Build region list (one-shot labeling)
-                java.util.Map<OverlayShape, String> idMap = new java.util.HashMap<>();
-                java.util.List<com.example.demo.ai.label.ObjectLabelService.RegionBox> regions = new java.util.ArrayList<>();
                 int idCounter = 1;
                 for (OverlayShape s : shapes) {
                     String id = "p" + (idCounter++);
@@ -326,12 +332,42 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                     scene.setShortLabelZh(dom);
                 }
             } else {
+                log.info("[VL] No shapes detected, but still calling VL for scene analysis");
                 boolean yoloApplied = applyHuggingFaceYoloFallback(scene, keyframeUrl, language);
                 if (!yoloApplied) {
                     scene.setOverlayType("grid");
                     scene.setScreenGridOverlay(java.util.List.of(5));
                 }
             }
+            
+            // ALWAYS call VL for scene analysis (even if no shapes/regions)
+            // This provides valuable context for video comparison
+            if (regions.isEmpty()) {
+                log.info("[VL] No regions, calling VL for scene analysis only");
+                // Create a dummy region covering the whole frame
+                regions.add(new com.example.demo.ai.label.ObjectLabelService.RegionBox("full", 0.0, 0.0, 1.0, 1.0));
+            }
+            
+            try {
+                log.info("[VL] Calling labelRegions with {} regions for scene analysis", regions.size());
+                java.util.Map<String, com.example.demo.ai.label.ObjectLabelService.LabelResult> vlResults = 
+                    objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
+                
+                if (!vlResults.isEmpty()) {
+                    com.example.demo.ai.label.ObjectLabelService.LabelResult firstResult = vlResults.values().iterator().next();
+                    if (firstResult.sceneAnalysis != null && !firstResult.sceneAnalysis.isEmpty()) {
+                        scene.setVlSceneAnalysis(firstResult.sceneAnalysis);
+                        log.info("[VL] Scene analysis saved ({} chars)", firstResult.sceneAnalysis.length());
+                    }
+                    if (firstResult.rawResponse != null && !firstResult.rawResponse.isEmpty()) {
+                        scene.setVlRawResponse(firstResult.rawResponse);
+                        log.info("[VL] Raw response saved ({} chars)", firstResult.rawResponse.length());
+                    }
+                }
+            } catch (Exception vlEx) {
+                log.error("[VL] Failed to get scene analysis: {}", vlEx.getMessage());
+            }
+            
         } catch (Exception e) {
             log.error("Failed to process scene with shapes: {}", e.getMessage());
             // Leave overlayType unset to allow downstream fallback processing
