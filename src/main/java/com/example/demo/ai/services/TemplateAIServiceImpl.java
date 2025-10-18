@@ -230,10 +230,14 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                         if (firstResult.sceneAnalysis != null && !firstResult.sceneAnalysis.isEmpty()) {
                             scene.setVlSceneAnalysis(firstResult.sceneAnalysis);
                             log.info("[VL] Scene analysis saved ({} chars)", firstResult.sceneAnalysis.length());
+                            log.info("[VL] Verify scene.getVlSceneAnalysis(): {}", 
+                                scene.getVlSceneAnalysis() != null ? scene.getVlSceneAnalysis().length() + " chars" : "NULL!");
                         }
                         if (firstResult.rawResponse != null && !firstResult.rawResponse.isEmpty()) {
                             scene.setVlRawResponse(firstResult.rawResponse);
                             log.info("[VL] Raw response saved ({} chars)", firstResult.rawResponse.length());
+                            log.info("[VL] Verify scene.getVlRawResponse(): {}", 
+                                scene.getVlRawResponse() != null ? scene.getVlRawResponse().length() + " chars" : "NULL!");
                         }
                     } else {
                         log.warn("[VL] regionLabels is empty, cannot save VL data");
@@ -628,11 +632,47 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             }
             payload.put("scenes", sceneArr);
 
+            // BACKUP: Save VL data before guidance generation (in case it gets lost)
+            Map<Integer, String> vlRawBackup = new java.util.HashMap<>();
+            Map<Integer, String> vlAnalysisBackup = new java.util.HashMap<>();
+            for (Scene s : scenes) {
+                if (s.getVlRawResponse() != null) {
+                    vlRawBackup.put(s.getSceneNumber(), s.getVlRawResponse());
+                }
+                if (s.getVlSceneAnalysis() != null) {
+                    vlAnalysisBackup.put(s.getSceneNumber(), s.getVlSceneAnalysis());
+                }
+                log.info("[DEBUG] Scene {} BEFORE guidance - vlRawResponse: {}, vlSceneAnalysis: {}", 
+                    s.getSceneNumber(),
+                    s.getVlRawResponse() != null ? s.getVlRawResponse().length() + " chars" : "null",
+                    s.getVlSceneAnalysis() != null ? s.getVlSceneAnalysis().length() + " chars" : "null");
+            }
+            
             // Ask Qwen (single call) via ObjectLabelService extension
             Map<String, Object> result = objectLabelService.generateTemplateGuidance(payload);
             if (result == null || result.isEmpty()) {
                 log.info("AI guidance unavailable; leaving metadata/guidance empty (no presets)");
                 return;
+            }
+            
+            // RESTORE: Ensure VL data is preserved after guidance generation
+            for (Scene s : scenes) {
+                int sceneNum = s.getSceneNumber();
+                
+                // Restore if lost
+                if (s.getVlRawResponse() == null && vlRawBackup.containsKey(sceneNum)) {
+                    s.setVlRawResponse(vlRawBackup.get(sceneNum));
+                    log.warn("[VL] Restored vlRawResponse for scene {} ({} chars)", sceneNum, vlRawBackup.get(sceneNum).length());
+                }
+                if (s.getVlSceneAnalysis() == null && vlAnalysisBackup.containsKey(sceneNum)) {
+                    s.setVlSceneAnalysis(vlAnalysisBackup.get(sceneNum));
+                    log.warn("[VL] Restored vlSceneAnalysis for scene {} ({} chars)", sceneNum, vlAnalysisBackup.get(sceneNum).length());
+                }
+                
+                log.info("[DEBUG] Scene {} AFTER guidance - vlRawResponse: {}, vlSceneAnalysis: {}", 
+                    sceneNum,
+                    s.getVlRawResponse() != null ? s.getVlRawResponse().length() + " chars" : "null",
+                    s.getVlSceneAnalysis() != null ? s.getVlSceneAnalysis().length() + " chars" : "null");
             }
 
             // Apply template metadata
