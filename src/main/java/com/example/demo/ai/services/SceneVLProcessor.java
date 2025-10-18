@@ -39,29 +39,49 @@ public class SceneVLProcessor {
      * @return true if analysis succeeded, false otherwise
      */
     public boolean analyzeAndPopulateScene(Scene scene, String videoUrl, String language) {
+        return analyzeAndPopulateScene(scene, videoUrl, language, null);
+    }
+    
+    /**
+     * Analyze video and populate scene with VL results (with optional user context)
+     * 
+     * @param scene Scene to populate
+     * @param videoUrl Video URL to analyze
+     * @param language Language for analysis
+     * @param userDescription Optional user-provided description for context
+     * @return true if analysis succeeded, false otherwise
+     */
+    public boolean analyzeAndPopulateScene(Scene scene, String videoUrl, String language, String userDescription) {
         try {
             log.info("=== UNIFIED VIDEO ANALYSIS ===");
-            ObjectLabelService.VideoAnalysisResult vlResult = objectLabelService.analyzeSceneVideo(videoUrl, language);
+            if (userDescription != null && !userDescription.isEmpty()) {
+                log.info("User context: {}", userDescription);
+            }
+            ObjectLabelService.VideoAnalysisResult vlResult = objectLabelService.analyzeSceneVideo(videoUrl, language, userDescription);
             
             if (vlResult != null) {
                 log.info("✅ Video analysis successful: {} objects detected", 
                         vlResult.objects != null ? vlResult.objects.size() : 0);
                 
-                // Save complete VL response
+                // Save complete VL response (ALWAYS save raw output for reasoning model)
                 scene.setVlRawResponse(vlResult.rawVLResponse);
                 scene.setSceneDescriptionFromVL(vlResult.sceneDescription);
                 scene.setDominantAction(vlResult.dominantAction);
                 scene.setAudioContext(vlResult.audioContext);
                 
-                // Convert detected objects to scene overlays
+                log.info("✅ VL raw response saved ({} chars)", 
+                        vlResult.rawVLResponse != null ? vlResult.rawVLResponse.length() : 0);
+                
+                // Convert detected objects to scene overlays (if any)
                 if (vlResult.objects != null && !vlResult.objects.isEmpty()) {
                     convertVLObjectsToSceneOverlays(scene, vlResult, language);
                     return true;
                 } else {
-                    // No objects detected, use grid
+                    // No structured objects, but we have the description - use grid for now
+                    log.info("No structured objects detected, using grid overlay (raw VL text saved for reasoning)");
                     scene.setOverlayType("grid");
                     scene.setScreenGridOverlay(List.of(5));
-                    return true;
+                    return true;  // Still success - we have the VL description!
                 }
             } else {
                 log.warn("❌ Video analysis returned null");

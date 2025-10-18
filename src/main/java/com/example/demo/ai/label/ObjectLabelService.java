@@ -59,6 +59,18 @@ public interface ObjectLabelService {
      * @return VideoAnalysisResult with complete scene analysis
      */
     default VideoAnalysisResult analyzeSceneVideo(String videoUrl, String locale) {
+        return analyzeSceneVideo(videoUrl, locale, null);
+    }
+    
+    /**
+     * Unified video analysis with optional user context
+     * 
+     * @param videoUrl Full scene video URL
+     * @param locale Language for labels (e.g., "zh-CN", "en")
+     * @param userDescription Optional user-provided description for context
+     * @return VideoAnalysisResult with complete scene analysis
+     */
+    default VideoAnalysisResult analyzeSceneVideo(String videoUrl, String locale, String userDescription) {
         return null; // Default no-op for backward compatibility
     }
     

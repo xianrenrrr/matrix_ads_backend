@@ -114,8 +114,8 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
                 scene.setKeyframeUrl(keyframeUrl);
             }
             
-            // 3. NEW: Unified video analysis using shared processor
-            boolean success = sceneVLProcessor.analyzeAndPopulateScene(scene, video.getUrl(), language);
+            // 3. NEW: Unified video analysis using shared processor (with user context)
+            boolean success = sceneVLProcessor.analyzeAndPopulateScene(scene, video.getUrl(), language, sceneDescription);
             
             if (!success) {
                 log.warn("❌ Video analysis failed, falling back to keyframe analysis");
@@ -131,7 +131,7 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
                 scene.setScreenGridOverlay(List.of(5));
             }
             
-            // 5. Set scene description if provided
+            // 5. Set scene description if provided (preserve user input)
             if (sceneDescription != null && !sceneDescription.isEmpty()) {
                 scene.setSceneDescription(sceneDescription);
             }

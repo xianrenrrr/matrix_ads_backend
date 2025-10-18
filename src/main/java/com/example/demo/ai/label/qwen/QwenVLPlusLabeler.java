@@ -126,30 +126,36 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         }
     }
     @Override
-    public VideoAnalysisResult analyzeSceneVideo(String videoUrl, String locale) {
+    public VideoAnalysisResult analyzeSceneVideo(String videoUrl, String locale, String userDescription) {
         if (videoUrl == null || videoUrl.isBlank()) {
             return null;
         }
         
         try {
             System.out.println("[QWEN-VL] Unified video analysis: " + videoUrl);
+            if (userDescription != null && !userDescription.isEmpty()) {
+                System.out.println("[QWEN-VL] User context: " + userDescription);
+            }
             
-            // Build prompt for DETAILED scene analysis
+            // Build prompt for FREE-FORM scene analysis
             StringBuilder sb = new StringBuilder();
-            sb.append("请详细描述这个视频中的所有内容。用自然语言尽可能详细地描述你看到的一切：\n\n")
-              .append("- 场景环境和氛围\n")
-              .append("- 主要物体、人物和它们的动作\n")
-              .append("- 镜头运动和拍摄风格\n")
-              .append("- 光线、色调、情绪\n")
+            
+            sb.append("请详细分析这个视频，尽可能详细地描述你看到的所有内容：\n\n");
+            
+            // Add user context if provided
+            if (userDescription != null && !userDescription.isEmpty()) {
+                sb.append("用户说明：").append(userDescription).append("\n\n");
+            }
+            
+            sb.append("请描述：\n")
+              .append("- 场景环境（室内/室外、地点、背景）\n")
+              .append("- 主要物体和人物\n")
+              .append("- 动作和活动\n")
+              .append("- 镜头运动和拍摄角度\n")
+              .append("- 光线、色调、氛围\n")
+              .append("- 音频（如果有）\n")
               .append("- 任何其他重要细节\n\n")
-              .append("然后，识别视频中最重要的1-3个物体，返回简单的JSON格式：\n\n")
-              .append("{\n")
-              .append("  \"description\": \"你的详细描述...\",\n")
-              .append("  \"objects\": [\n")
-              .append("    {\"id\": \"obj1\", \"labelZh\": \"汽车\", \"labelEn\": \"car\", \"confidence\": 0.95}\n")
-              .append("  ]\n")
-              .append("}\n\n")
-              .append("注意：只需要识别最重要的物体，不需要边界框坐标。description字段请尽可能详细。");
+              .append("请用自然语言详细描述，不需要特定格式。");
 
             Map<String, Object> request = new HashMap<>();
             request.put("model", qwenModel);
@@ -191,7 +197,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             org.springframework.http.client.SimpleClientHttpRequestFactory requestFactory = 
                 new org.springframework.http.client.SimpleClientHttpRequestFactory();
             requestFactory.setConnectTimeout(30000);  // 30 seconds connect timeout
-            requestFactory.setReadTimeout(120000);     // 120 seconds read timeout for video analysis
+            requestFactory.setReadTimeout(240000);     // 240 seconds (4 minutes) read timeout for video analysis
             RestTemplate timeoutRestTemplate = new RestTemplate(requestFactory);
             
             long startTime = System.currentTimeMillis();
@@ -216,43 +222,52 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             if (contentStr == null || contentStr.isBlank()) {
                 return null;
             }
-
-            // Parse JSON response - simplified format
-            Map<String, Object> resultMap = objectMapper.readValue(
-                contentStr, 
-                new TypeReference<Map<String, Object>>(){}
-            );
             
+            // NEW APPROACH: Save raw VL output directly, let reasoning model parse it later
             VideoAnalysisResult result = new VideoAnalysisResult();
-            result.rawVLResponse = contentStr;  // Cache complete response
+            result.rawVLResponse = contentStr;  // Save complete raw response
+            result.sceneDescription = contentStr;  // Use raw text as description
             
-            // Get the free-form description
-            String description = (String) resultMap.get("description");
-            result.sceneDescription = description;  // Use full description as scene description
-            
-            // Extract key info from description for backward compatibility
-            // (These fields are optional now)
-            result.dominantAction = null;  // Will be extracted from description if needed
-            result.audioContext = null;    // Will be extracted from description if needed
-            
-            // Parse objects (simplified format - no bounding boxes)
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> objectsList = (List<Map<String, Object>>) resultMap.get("objects");
-            if (objectsList != null) {
-                result.objects = new ArrayList<>();
-                for (Map<String, Object> obj : objectsList) {
-                    VideoAnalysisResult.DetectedObject detObj = new VideoAnalysisResult.DetectedObject();
-                    detObj.id = (String) obj.get("id");
-                    detObj.labelZh = sanitize((String) obj.get("labelZh"));
-                    detObj.labelEn = (String) obj.get("labelEn");
-                    detObj.confidence = ((Number) obj.getOrDefault("confidence", 0.0)).doubleValue();
+            // Try to extract JSON if present (optional, for backward compatibility)
+            try {
+                String jsonStr = extractJsonFromText(contentStr);
+                if (jsonStr != null && !jsonStr.isBlank()) {
+                    Map<String, Object> resultMap = objectMapper.readValue(
+                        jsonStr, 
+                        new TypeReference<Map<String, Object>>(){}
+                    );
                     
-                    // No bounding box in simplified format
-                    detObj.boundingBox = null;
-                    detObj.motionDescription = null;
+                    // If JSON parsing succeeds, extract structured data
+                    String description = (String) resultMap.get("description");
+                    if (description != null && !description.isEmpty()) {
+                        result.sceneDescription = description;
+                    }
                     
-                    result.objects.add(detObj);
+                    // Parse objects if present
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> objectsList = (List<Map<String, Object>>) resultMap.get("objects");
+                    if (objectsList != null) {
+                        result.objects = new ArrayList<>();
+                        for (Map<String, Object> obj : objectsList) {
+                            VideoAnalysisResult.DetectedObject detObj = new VideoAnalysisResult.DetectedObject();
+                            detObj.id = (String) obj.get("id");
+                            detObj.labelZh = sanitize((String) obj.get("labelZh"));
+                            detObj.labelEn = (String) obj.get("labelEn");
+                            detObj.confidence = ((Number) obj.getOrDefault("confidence", 0.0)).doubleValue();
+                            detObj.boundingBox = null;
+                            detObj.motionDescription = null;
+                            result.objects.add(detObj);
+                        }
+                    }
                 }
+            } catch (Exception parseEx) {
+                // JSON parsing failed - that's OK! We already saved the raw text
+                System.out.println("[QWEN-VL] No structured JSON found, using raw text (this is fine)");
+            }
+            
+            // If no objects were extracted, create empty list (not null)
+            if (result.objects == null) {
+                result.objects = new ArrayList<>();
             }
             
             System.out.println("[QWEN-VL] Video analysis completed: " + 
@@ -404,6 +419,37 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         s = s.replaceAll("(?s)```json\\s*(.*?)\\s*```", "$1");
         s = s.replaceAll("(?s)```\\s*(.*?)\\s*```", "$1");
         return s.trim();
+    }
+    
+    /**
+     * Extract JSON object from text that may contain extra content
+     * Looks for the first { and matching } to extract valid JSON
+     */
+    private String extractJsonFromText(String text) {
+        if (text == null || text.isBlank()) return null;
+        
+        // Try to find JSON object boundaries
+        int firstBrace = text.indexOf('{');
+        if (firstBrace == -1) return null;
+        
+        // Find matching closing brace
+        int braceCount = 0;
+        int lastBrace = -1;
+        for (int i = firstBrace; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '{') braceCount++;
+            else if (c == '}') {
+                braceCount--;
+                if (braceCount == 0) {
+                    lastBrace = i;
+                    break;
+                }
+            }
+        }
+        
+        if (lastBrace == -1) return null;
+        
+        return text.substring(firstBrace, lastBrace + 1);
     }
     private String normalizeChatEndpoint(String base) {
         String def = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
