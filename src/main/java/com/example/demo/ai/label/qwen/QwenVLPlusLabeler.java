@@ -41,7 +41,12 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
     private static final String DEFAULT_LABEL = "未知";
     
     public QwenVLPlusLabeler() {
-        this.restTemplate = new RestTemplate();
+        // Configure RestTemplate with timeouts
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory = 
+            new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10000);  // 10 seconds connect timeout
+        factory.setReadTimeout(60000);     // 60 seconds read timeout (VL can be slow)
+        this.restTemplate = new RestTemplate(factory);
         this.objectMapper = new ObjectMapper();
         this.labelCache = new LabelCache(256);
     }
@@ -208,6 +213,9 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             if (bodyR != null) {
                 String head = bodyR.substring(0, Math.min(200, bodyR.length()));
                 System.out.println("[QWEN] regions body head=" + head.replaceAll("\n", " "));
+                System.out.println("[QWEN] ========== FULL RAW RESPONSE ==========");
+                System.out.println(bodyR);
+                System.out.println("[QWEN] ========== END RAW RESPONSE ==========");
             }
 
             if (!response.getStatusCode().is2xxSuccessful()) {

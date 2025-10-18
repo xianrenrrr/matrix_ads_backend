@@ -216,6 +216,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
 
                 java.util.Map<String, com.example.demo.ai.label.ObjectLabelService.LabelResult> regionLabels = java.util.Collections.emptyMap();
                 try {
+                    log.info("[VL] About to call labelRegions with {} regions", regions.size());
                     regionLabels = objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
                     log.info("[VL] labelRegions returned {} results", regionLabels.size());
                     
