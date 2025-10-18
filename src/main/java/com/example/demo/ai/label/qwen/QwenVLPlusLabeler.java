@@ -274,8 +274,6 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                 }
             } else {
                 System.err.println("[QWEN] ❌ Unexpected JSON format - not object with 'regions' or array");
-            } else {
-                System.err.println("[QWEN] ❌ Unexpected JSON format - not object with 'regions' or array");
             }
             
             System.out.println("[QWEN] ========================================");
