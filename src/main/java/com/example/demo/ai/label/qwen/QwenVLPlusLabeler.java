@@ -125,6 +125,8 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             return null;
         }
     }
+
+
     @Override
     public Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale) {
         Map<String, LabelResult> out = new HashMap<>();
@@ -132,20 +134,29 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             return out;
         }
         try {
-            // Build strict prompt (Chinese, <=4 chars, JSON only)
+            // Build enhanced prompt with detailed scene analysis
             String regionsJson = objectMapper.writeValueAsString(regions);
             StringBuilder sb = new StringBuilder();
-            sb.append("请对图像中的下列区域做中文命名（不超过4个字），逐项返回 JSON 数组。\n")
-              .append("要求：\n")
-              .append("- 使用简体中文标签，≤4字；不确定填“未知”。\n")
-              .append("- 对每个区域返回 0~1 的置信度字段 conf。\n")
-              .append("- 仅对提供的坐标框进行命名，不要额外检测其他区域。\n")
-              .append("输入：\n")
-              .append("- 图像：").append(keyframeUrl).append("\n")
-              .append("- 区域（归一化坐标，0~1）：\n")
-              .append(regionsJson).append("\n")
-              .append("输出格式（仅 JSON 数组）：\n")
-              .append("[\n  {\"id\":\"p1\",\"labelZh\":\"汽车\",\"conf\":0.82},\n  {\"id\":\"p2\",\"labelZh\":\"人物\",\"conf\":0.76}\n]");
+            sb.append("分析这个场景图片，完成两个任务：\n\n")
+            .append("任务1：对指定区域进行标注\n")
+            .append("区域坐标（归一化0~1）：\n")
+            .append(regionsJson).append("\n")
+            .append("要求：使用简体中文标签（≤4字），返回置信度conf（0~1）\n\n")
+            .append("任务2：详细分析整体场景\n")
+            .append("请尽可能详细地描述场景的所有方面，这个分析将用于与其他视频分析结果进行对比。包括：\n")
+            .append("- 环境类型（室内/室外、具体地点、背景元素）\n")
+            .append("- 光线条件（自然光/人工光、明暗程度、光源方向）\n")
+            .append("- 色调和氛围（色彩、情绪、风格）\n")
+            .append("- 主要物体和人物的详细描述\n")
+            .append("- 物体的位置、姿态、状态\n")
+            .append("- 可能的动作或活动\n")
+            .append("- 拍摄角度和构图\n")
+            .append("- 任何其他重要细节\n\n")
+            .append("返回JSON格式：\n")
+            .append("{\n")
+            .append("  \"regions\": [{\"id\":\"p1\",\"labelZh\":\"汽车\",\"conf\":0.95}],\n")
+            .append("  \"sceneAnalysis\": \"详细的场景分析文字...\"\n")
+            .append("}");
 
             Map<String, Object> request = new HashMap<>();
             request.put("model", qwenModel);
@@ -197,22 +208,52 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             String contentStr = extractContent(bodyR);
             if (contentStr == null || contentStr.isBlank()) return out;
 
-            // Parse JSON array
+            // Parse enhanced JSON response
             JsonNode root = objectMapper.readTree(contentStr);
-            if (!root.isArray()) return out;
-            for (JsonNode node : root) {
-                String id = node.path("id").asText(null);
-                String label = sanitize(node.path("labelZh").asText(""));
-                double conf = clamp(node.path("conf").asDouble(0.0));
-                if (id != null && !label.isEmpty()) {
-                    out.put(id, new LabelResult(id, label, conf));
+            String sceneAnalysis = null;
+            
+            // Try new format first: {regions: [...], sceneAnalysis: "..."}
+            if (root.isObject() && root.has("regions")) {
+                JsonNode regionsNode = root.get("regions");
+                if (root.has("sceneAnalysis")) {
+                    sceneAnalysis = root.get("sceneAnalysis").asText();
+                    System.out.println("[QWEN] Scene analysis extracted (" + sceneAnalysis.length() + " chars)");
+                }
+                
+                if (regionsNode.isArray()) {
+                    for (JsonNode node : regionsNode) {
+                        String id = node.path("id").asText(null);
+                        String label = sanitize(node.path("labelZh").asText(""));
+                        double conf = clamp(node.path("conf").asDouble(0.0));
+                        if (id != null && !label.isEmpty()) {
+                            LabelResult result = new LabelResult(id, label, conf);
+                            result.sceneAnalysis = sceneAnalysis;  // Attach scene analysis to all results
+                            out.put(id, result);
+                        }
+                    }
                 }
             }
+            // Fallback: old format (array) for backward compatibility
+            else if (root.isArray()) {
+                System.out.println("[QWEN] Using fallback array format (no scene analysis)");
+                for (JsonNode node : root) {
+                    String id = node.path("id").asText(null);
+                    String label = sanitize(node.path("labelZh").asText(""));
+                    double conf = clamp(node.path("conf").asDouble(0.0));
+                    if (id != null && !label.isEmpty()) {
+                        out.put(id, new LabelResult(id, label, conf));
+                    }
+                }
+            }
+            
             return out;
         } catch (Exception e) {
+            System.err.println("[QWEN] Error in labelRegions: " + e.getMessage());
+            e.printStackTrace();
             return out;
         }
     }
+
 
     private String extractContent(String responseBody) throws Exception {
         if (responseBody == null || responseBody.isBlank()) return null;

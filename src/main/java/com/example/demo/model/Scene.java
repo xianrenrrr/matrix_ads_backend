@@ -45,6 +45,10 @@ public class Scene {
     private String shortLabelZh;  // Chinese short label for the dominant object
     private String sceneDescriptionZh;  // Chinese scene description
     
+    // VL Analysis Output (for comparison and reasoning)
+    private String vlRawResponse;  // Complete raw VL API response (JSON string)
+    private String vlSceneAnalysis;  // Detailed scene analysis from VL (for video comparison)
+    
     // Inner class for object overlay data
     public static class ObjectOverlay {
         private String label;
@@ -384,6 +388,22 @@ public class Scene {
     
     public void setSceneDescriptionZh(String sceneDescriptionZh) {
         this.sceneDescriptionZh = sceneDescriptionZh;
+    }
+    
+    public String getVlRawResponse() {
+        return vlRawResponse;
+    }
+    
+    public void setVlRawResponse(String vlRawResponse) {
+        this.vlRawResponse = vlRawResponse;
+    }
+    
+    public String getVlSceneAnalysis() {
+        return vlSceneAnalysis;
+    }
+    
+    public void setVlSceneAnalysis(String vlSceneAnalysis) {
+        this.vlSceneAnalysis = vlSceneAnalysis;
     }
     
 }

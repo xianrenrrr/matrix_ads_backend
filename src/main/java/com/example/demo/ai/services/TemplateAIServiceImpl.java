@@ -217,6 +217,15 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 java.util.Map<String, com.example.demo.ai.label.ObjectLabelService.LabelResult> regionLabels = java.util.Collections.emptyMap();
                 try {
                     regionLabels = objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
+                    
+                    // NEW: Save VL scene analysis to scene
+                    if (!regionLabels.isEmpty()) {
+                        com.example.demo.ai.label.ObjectLabelService.LabelResult firstResult = regionLabels.values().iterator().next();
+                        if (firstResult.sceneAnalysis != null && !firstResult.sceneAnalysis.isEmpty()) {
+                            scene.setVlSceneAnalysis(firstResult.sceneAnalysis);
+                            log.info("[VL] Scene analysis saved ({} chars)", firstResult.sceneAnalysis.length());
+                        }
+                    }
                 } catch (Exception ignore) {}
 
                 for (OverlayShape shape : shapes) {
@@ -595,6 +604,12 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 }
                 if (labels.size() > 5) labels = labels.subList(0, 5);
                 so.put("detectedObjects", labels);
+                
+                // NEW: Add VL scene analysis for richer context
+                if (s.getVlSceneAnalysis() != null && !s.getVlSceneAnalysis().isEmpty()) {
+                    so.put("sceneAnalysis", s.getVlSceneAnalysis());
+                }
+                
                 sceneArr.add(so);
             }
             payload.put("scenes", sceneArr);
