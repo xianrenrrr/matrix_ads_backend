@@ -150,16 +150,15 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             .append("区域坐标（归一化0~1）：\n")
             .append(regionsJson).append("\n")
             .append("要求：使用简体中文标签（≤4字），返回置信度conf（0~1）\n\n")
-            .append("任务2：详细分析整体场景\n")
-            .append("请尽可能详细地描述场景的所有方面，这个分析将用于与其他视频分析结果进行对比。包括：\n")
-            .append("- 环境类型（室内/室外、具体地点、背景元素）\n")
-            .append("- 光线条件（自然光/人工光、明暗程度、光源方向）\n")
-            .append("- 色调和氛围（色彩、情绪、风格）\n")
-            .append("- 主要物体和人物的详细描述\n")
-            .append("- 物体的位置、姿态、状态\n")
-            .append("- 可能的动作或活动\n")
-            .append("- 拍摄角度和构图\n")
-            .append("- 任何其他重要细节\n\n")
+            .append("任务2：场景分析（用于视频对比）\n")
+            .append("请在200字内描述以下要素，保持客观一致的描述风格：\n")
+            .append("1. 环境类型（室内/室外、场所）\n")
+            .append("2. 光线条件（自然光/人工光、明暗）\n")
+            .append("3. 色调氛围（主要颜色、情绪）\n")
+            .append("4. 主要物体（类型、位置、状态）\n")
+            .append("5. 动作活动（如有）\n")
+            .append("6. 拍摄角度（俯视/平视/仰视等）\n")
+            .append("注意：此分析将与其他视频的分析结果进行对比匹配。\n\n")
             .append("返回JSON格式：\n")
             .append("{\n")
             .append("  \"regions\": [{\"id\":\"p1\",\"labelZh\":\"汽车\",\"conf\":0.95}],\n")
@@ -168,6 +167,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
 
             Map<String, Object> request = new HashMap<>();
             request.put("model", qwenModel);
+            request.put("max_tokens", 2000); // Increase token limit for detailed scene analysis
             List<Map<String, Object>> messages = new ArrayList<>();
             Map<String, Object> message = new HashMap<>();
             message.put("role", "user");
@@ -224,14 +224,37 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             }
 
             // Parse enhanced JSON response
-            JsonNode root = objectMapper.readTree(contentStr);
-            System.out.println("[QWEN] Parsed JSON - isObject: " + root.isObject() + ", isArray: " + root.isArray());
-            System.out.println("[QWEN] JSON structure: " + root.toString().substring(0, Math.min(300, root.toString().length())));
-            
+            JsonNode root;
             String sceneAnalysis = null;
+            boolean isValidJson = true;
             
+            try {
+                root = objectMapper.readTree(contentStr);
+                System.out.println("[QWEN] Parsed JSON - isObject: " + root.isObject() + ", isArray: " + root.isArray());
+                System.out.println("[QWEN] JSON structure: " + root.toString().substring(0, Math.min(300, root.toString().length())));
+            } catch (Exception jsonEx) {
+                System.err.println("[QWEN] ⚠️ Failed to parse as JSON, using raw text as scene analysis");
+                System.err.println("[QWEN] JSON parse error: " + jsonEx.getMessage());
+                isValidJson = false;
+                root = null;
+                // Store the entire response as scene analysis for later comparison
+                sceneAnalysis = contentStr;
+                System.out.println("[QWEN] Stored raw response as scene analysis (" + sceneAnalysis.length() + " chars)");
+            }
+            
+            // If not valid JSON, create dummy results with scene analysis for comparison
+            if (!isValidJson) {
+                System.out.println("[QWEN] Creating fallback results with raw text for comparison");
+                // Create a result for each region with the raw text as scene analysis
+                for (RegionBox region : regions) {
+                    LabelResult result = new LabelResult(region.id, "未识别", 0.5);
+                    result.sceneAnalysis = sceneAnalysis;
+                    out.put(region.id, result);
+                    System.out.println("[QWEN] Added fallback region: " + region.id + " with raw scene analysis");
+                }
+            }
             // Try new format first: {regions: [...], sceneAnalysis: "..."}
-            if (root.isObject() && root.has("regions")) {
+            else if (root.isObject() && root.has("regions")) {
                 System.out.println("[QWEN] ✅ Found 'regions' field in response");
                 JsonNode regionsNode = root.get("regions");
                 
