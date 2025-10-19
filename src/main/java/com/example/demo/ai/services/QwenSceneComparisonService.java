@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -24,7 +25,7 @@ import java.util.Map;
  * 3. Use Qwen Reasoning to evaluate similarity and generate suggestions
  */
 @Service
-public class QwenSceneComparisonService {
+public class QwenSceneComparisonService implements ObjectLabelService {
     
     private static final Logger log = LoggerFactory.getLogger(QwenSceneComparisonService.class);
     
@@ -35,6 +36,17 @@ public class QwenSceneComparisonService {
     private ObjectLabelService objectLabelService;
     
     private final ObjectMapper objectMapper = new ObjectMapper();
+    
+    @Value("${AI_QWEN_ENDPOINT:${qwen.api.base:}}")
+    private String qwenApiBase;
+    
+    @Value("${AI_QWEN_API_KEY:${qwen.api.key:}}")
+    private String qwenApiKey;
+    
+    @Value("${AI_QWEN_MODEL:${qwen.model:qwen-plus}}")
+    private String qwenModel;
+    
+    private final org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
     
     /**
      * Compare user video with template scene using Qwen VL + Reasoning
@@ -249,28 +261,16 @@ public class QwenSceneComparisonService {
     }
     
     /**
-     * Call Qwen directly for comparison (bypasses template guidance format)
+     * Call Qwen directly for comparison
      */
     private Map<String, Object> callQwenForComparison(String prompt) {
         try {
-            // Build simple Qwen API request
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", "qwen-plus");
+            // Call our own override method
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("prompt", prompt);
+            Map<String, Object> rawResponse = this.generateTemplateGuidance(payload);
             
-            List<Map<String, String>> messages = new ArrayList<>();
-            Map<String, String> userMessage = new HashMap<>();
-            userMessage.put("role", "user");
-            userMessage.put("content", prompt);
-            messages.add(userMessage);
-            requestBody.put("messages", messages);
-            
-            // Call Qwen API through ObjectLabelService (reuse existing connection)
-            // For now, use generateTemplateGuidance but extract score/suggestions from text
-            Map<String, Object> tempPayload = new HashMap<>();
-            tempPayload.put("prompt", prompt);
-            Map<String, Object> rawResponse = objectLabelService.generateTemplateGuidance(tempPayload);
-            
-            // Try to extract score and suggestions from the response text
+            // Try to extract score and suggestions from the response
             return extractScoreAndSuggestions(rawResponse);
             
         } catch (Exception e) {
@@ -343,5 +343,111 @@ public class QwenSceneComparisonService {
         }
         
         return result;
+    }
+    
+    // ========== ObjectLabelService Implementation ==========
+    
+    @Override
+    public String labelZh(byte[] imageBytes) {
+        return null;  // Not used in comparison service
+    }
+    
+    @Override
+    public Map<String, Object> generateTemplateGuidance(Map<String, Object> payload) {
+        try {
+            if (payload == null || !payload.containsKey("prompt")) {
+                return null;
+            }
+            
+            String prompt = (String) payload.get("prompt");
+            
+            // Build Qwen API request for comparison
+            Map<String, Object> request = new HashMap<>();
+            request.put("model", qwenModel);
+            
+            List<Map<String, Object>> messages = new ArrayList<>();
+            Map<String, Object> message = new HashMap<>();
+            message.put("role", "user");
+            message.put("content", prompt);
+            messages.add(message);
+            request.put("messages", messages);
+            
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + qwenApiKey);
+            
+            org.springframework.http.HttpEntity<Map<String, Object>> entity = 
+                new org.springframework.http.HttpEntity<>(request, headers);
+            
+            String endpoint = normalizeEndpoint(qwenApiBase);
+            org.springframework.http.ResponseEntity<String> response = restTemplate.exchange(
+                endpoint,
+                org.springframework.http.HttpMethod.POST,
+                entity,
+                String.class
+            );
+            
+            String body = response.getBody();
+            log.info("[QWEN-COMPARISON] API response status={} bodyLen={}", 
+                response.getStatusCodeValue(), body != null ? body.length() : 0);
+            
+            if (!response.getStatusCode().is2xxSuccessful() || body == null) {
+                return null;
+            }
+            
+            // Extract content from response
+            String contentStr = extractContent(body);
+            if (contentStr == null || contentStr.isBlank()) {
+                return null;
+            }
+            
+            // Try to parse as JSON
+            try {
+                return objectMapper.readValue(contentStr, 
+                    new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){});
+            } catch (Exception e) {
+                log.warn("[QWEN-COMPARISON] Failed to parse JSON response: {}", e.getMessage());
+                return null;
+            }
+            
+        } catch (Exception e) {
+            log.error("[QWEN-COMPARISON] Error calling Qwen API: {}", e.getMessage(), e);
+            return null;
+        }
+    }
+    
+    private String normalizeEndpoint(String base) {
+        if (base == null || base.isBlank()) {
+            return "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+        }
+        if (!base.endsWith("/chat/completions")) {
+            if (base.endsWith("/")) {
+                return base + "chat/completions";
+            }
+            return base + "/chat/completions";
+        }
+        return base;
+    }
+    
+    private String extractContent(String responseBody) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(responseBody);
+            com.fasterxml.jackson.databind.JsonNode choices = root.get("choices");
+            if (choices != null && choices.isArray() && choices.size() > 0) {
+                com.fasterxml.jackson.databind.JsonNode message = choices.get(0).get("message");
+                if (message != null) {
+                    com.fasterxml.jackson.databind.JsonNode content = message.get("content");
+                    if (content != null) {
+                        String text = content.asText();
+                        // Strip markdown code fences
+                        text = text.replaceAll("(?s)```json\\s*", "").replaceAll("(?s)```\\s*$", "").trim();
+                        return text;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[QWEN-COMPARISON] Failed to extract content: {}", e.getMessage());
+        }
+        return null;
     }
 }
