@@ -109,99 +109,100 @@ public class ContentManager {
             if (group.getMemberIds() != null) memberIds.addAll(group.getMemberIds());
         }
         
-        com.google.cloud.firestore.CollectionReference submissionsRef = db.collection("submittedVideos");
-        com.google.api.core.ApiFuture<com.google.cloud.firestore.QuerySnapshot> querySnapshot = submissionsRef.get();
+        // Optimize: Query only relevant submissions using whereIn (Firestore limit: 10 items per whereIn)
+        // If more than 10 assignmentIds, we need to batch the queries
         List<Map<String, Object>> pending = new ArrayList<>();
         List<Map<String, Object>> approved = new ArrayList<>();
         List<Map<String, Object>> published = new ArrayList<>();
         List<Map<String, Object>> rejected = new ArrayList<>();
         
-        for (com.google.cloud.firestore.DocumentSnapshot doc : querySnapshot.get().getDocuments()) {
-            Map<String, Object> data = doc.getData();
-            if (data == null) continue;
+        if (assignmentIds.isEmpty()) {
+            // No assignments, return empty result
+            Map<String, List<Map<String, Object>>> result = new HashMap<>();
+            result.put("pending", pending);
+            result.put("approved", approved);
+            result.put("published", published);
+            result.put("rejected", rejected);
+            return ResponseEntity.ok(ApiResponse.ok(i18nService.getMessage("operation.success", language), result));
+        }
+        
+        // Firestore whereIn limit is 10, so batch if needed
+        List<String> assignmentIdList = new ArrayList<>(assignmentIds);
+        int batchSize = 10;
+        
+        for (int i = 0; i < assignmentIdList.size(); i += batchSize) {
+            List<String> batch = assignmentIdList.subList(i, Math.min(i + batchSize, assignmentIdList.size()));
             
-            // Filter by assignment ID and member (NEW SYSTEM)
-            String assignmentId = (String) data.get("assignmentId");  // NEW: use assignmentId instead of templateId
-            String templateId = (String) data.get("templateId");      // LEGACY: fallback for old submissions
-            String uploadedBy = (String) data.get("uploadedBy");
+            // Query with filter - MUCH faster than getting all submissions!
+            com.google.cloud.firestore.Query query = db.collection("submittedVideos")
+                .whereIn("assignmentId", batch);
             
-            // Check if this submission belongs to manager's assignments
-            boolean belongsToManager = false;
-            if (assignmentId != null && assignmentIds.contains(assignmentId)) {
-                belongsToManager = true;  // NEW system
-            } else if (templateId != null) {
-                // LEGACY: check if templateId matches any assignment's masterTemplateId
-                for (com.example.demo.model.Group group : groups) {
+            com.google.api.core.ApiFuture<com.google.cloud.firestore.QuerySnapshot> querySnapshot = query.get();
+            
+            for (com.google.cloud.firestore.DocumentSnapshot doc : querySnapshot.get().getDocuments()) {
+                Map<String, Object> data = doc.getData();
+                if (data == null) continue;
+                
+                String uploadedBy = (String) data.get("uploadedBy");
+                
+                // Filter by member (user must be in one of manager's groups)
+                if (!memberIds.contains(uploadedBy)) continue;
+                
+                // Add document ID for frontend use
+                data.put("id", doc.getId());
+                
+                // Enrich with user information
+                if (uploadedBy != null) {
                     try {
-                        List<com.example.demo.model.TemplateAssignment> assignments = 
-                            templateAssignmentDao.getAssignmentsByGroup(group.getId());
-                        for (com.example.demo.model.TemplateAssignment assignment : assignments) {
-                            if (templateId.equals(assignment.getMasterTemplateId()) && !assignment.isExpired()) {
-                                belongsToManager = true;
-                                break;
-                            }
+                        com.google.cloud.firestore.DocumentSnapshot userDoc = db.collection("users").document(uploadedBy).get().get();
+                        if (userDoc.exists()) {
+                            String username = userDoc.getString("username");
+                            String city = userDoc.getString("city");
+                            data.put("uploaderName", username);
+                            data.put("uploaderCity", city);
                         }
-                        if (belongsToManager) break;
                     } catch (Exception e) {
-                        // Continue if assignment lookup fails
+                        // Continue without user info if fetch fails
                     }
                 }
-            }
-            
-            if (!belongsToManager || !memberIds.contains(uploadedBy)) continue;
-            
-            // Add document ID for frontend use
-            data.put("id", doc.getId());
-            
-            // Enrich with user information
-            if (uploadedBy != null) {
-                try {
-                    com.google.cloud.firestore.DocumentSnapshot userDoc = db.collection("users").document(uploadedBy).get().get();
-                    if (userDoc.exists()) {
-                        String username = userDoc.getString("username");
-                        String city = userDoc.getString("city");
-                        data.put("uploaderName", username);
-                        data.put("uploaderCity", city);
+                
+                // Enrich with template information
+                String assignmentId = (String) data.get("assignmentId");
+                String templateId = (String) data.get("templateId");
+                ManualTemplate template = null;
+                if (assignmentId != null) {
+                    // NEW: Get template from assignment snapshot
+                    try {
+                        com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
+                        if (assignment != null) {
+                            template = assignment.getTemplateSnapshot();
+                        }
+                    } catch (Exception e) {
+                        // Continue without template info if fetch fails
                     }
-                } catch (Exception e) {
-                    // Continue without user info if fetch fails
-                }
-            }
-            
-            // Enrich with template information
-            ManualTemplate template = null;
-            if (assignmentId != null) {
-                // NEW: Get template from assignment snapshot
-                try {
-                    com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
-                    if (assignment != null) {
-                        template = assignment.getTemplateSnapshot();
+                } else if (templateId != null) {
+                    // LEGACY: Get template directly
+                    try {
+                        template = templateDao.getTemplate(templateId);
+                    } catch (Exception e) {
+                        // Continue without template info if fetch fails
                     }
-                } catch (Exception e) {
-                    // Continue without template info if fetch fails
                 }
-            } else if (templateId != null) {
-                // LEGACY: Get template directly
-                try {
-                    template = templateDao.getTemplate(templateId);
-                } catch (Exception e) {
-                    // Continue without template info if fetch fails
+                
+                if (template != null) {
+                    data.put("templateTitle", template.getTemplateTitle());
                 }
-            }
-            
-            if (template != null) {
-                data.put("templateTitle", template.getTemplateTitle());
-            }
-            
-            String status = (String) data.getOrDefault("publishStatus", "pending");
-            if ("approved".equalsIgnoreCase(status)) {
-                approved.add(data);
-            } else if ("published".equalsIgnoreCase(status)) {
-                published.add(data);
-            } else if ("rejected".equalsIgnoreCase(status)) {
-                rejected.add(data);
-            } else {
-                pending.add(data);
+                
+                String status = (String) data.getOrDefault("publishStatus", "pending");
+                if ("approved".equalsIgnoreCase(status)) {
+                    approved.add(data);
+                } else if ("published".equalsIgnoreCase(status)) {
+                    published.add(data);
+                } else if ("rejected".equalsIgnoreCase(status)) {
+                    rejected.add(data);
+                } else {
+                    pending.add(data);
+                }
             }
         }
         
@@ -439,6 +440,31 @@ public class ContentManager {
         
         Map<String, Object> videoData = new HashMap<>(videoDoc.getData());
         
+        // Get user's group to check auto-reject threshold
+        // Note: This endpoint is only called by managers viewing their submissions
+        // So we don't need managerId param - we infer it from the submission
+        String uploadedBy = (String) videoData.get("uploadedBy");
+        double autoRejectThreshold = 0.0;  // Default: no filtering
+        
+        if (uploadedBy != null) {
+            try {
+                // Get assignment to find the manager, then get their groups
+                String assignmentId = (String) videoData.get("assignmentId");
+                if (assignmentId != null) {
+                    com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
+                    if (assignment != null) {
+                        // Get the group for this assignment
+                        com.example.demo.model.Group group = groupDao.findById(assignment.getGroupId());
+                        if (group != null) {
+                            autoRejectThreshold = group.getAiAutoRejectThreshold();
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to get group threshold for filtering: {}", e.getMessage());
+            }
+        }
+        
         // Fetch full scene details from sceneSubmissions collection using scene IDs
         @SuppressWarnings("unchecked")
         Map<String, Object> scenes = (Map<String, Object>) videoData.get("scenes");
@@ -453,6 +479,14 @@ public class ContentManager {
                 if (sceneId != null) {
                     SceneSubmission sceneSubmission = sceneSubmissionDao.findById(sceneId);
                     if (sceneSubmission != null) {
+                        // Filter: Skip scenes below auto-reject threshold
+                        Double similarityScore = sceneSubmission.getSimilarityScore();
+                        if (similarityScore != null && similarityScore >= 0 && similarityScore < autoRejectThreshold) {
+                            log.debug("Filtering scene {} - similarity {} below threshold {}", 
+                                sceneId, similarityScore, autoRejectThreshold);
+                            continue;  // Skip this scene
+                        }
+                        
                         Map<String, Object> fullSceneData = new HashMap<>();
                         fullSceneData.put("sceneId", sceneSubmission.getId());
                         fullSceneData.put("sceneNumber", sceneSubmission.getSceneNumber());
