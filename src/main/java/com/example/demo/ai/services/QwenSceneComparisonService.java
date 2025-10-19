@@ -25,15 +25,12 @@ import java.util.Map;
  * 3. Use Qwen Reasoning to evaluate similarity and generate suggestions
  */
 @Service
-public class QwenSceneComparisonService implements ObjectLabelService {
+public class QwenSceneComparisonService {
     
     private static final Logger log = LoggerFactory.getLogger(QwenSceneComparisonService.class);
     
     @Autowired
     private UnifiedSceneAnalysisService unifiedService;
-    
-    @Autowired
-    private ObjectLabelService objectLabelService;
     
     private final ObjectMapper objectMapper = new ObjectMapper();
     
@@ -265,10 +262,8 @@ public class QwenSceneComparisonService implements ObjectLabelService {
      */
     private Map<String, Object> callQwenForComparison(String prompt) {
         try {
-            // Call our own override method
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("prompt", prompt);
-            Map<String, Object> rawResponse = this.generateTemplateGuidance(payload);
+            // Call Qwen API directly
+            Map<String, Object> rawResponse = callQwenAPI(prompt);
             
             // Try to extract score and suggestions from the response
             return extractScoreAndSuggestions(rawResponse);
@@ -345,21 +340,16 @@ public class QwenSceneComparisonService implements ObjectLabelService {
         return result;
     }
     
-    // ========== ObjectLabelService Implementation ==========
+    // ========== Qwen API Direct Call ==========
     
-    @Override
-    public String labelZh(byte[] imageBytes) {
-        return null;  // Not used in comparison service
-    }
-    
-    @Override
-    public Map<String, Object> generateTemplateGuidance(Map<String, Object> payload) {
+    /**
+     * Call Qwen API directly for comparison scoring
+     */
+    private Map<String, Object> callQwenAPI(String prompt) {
         try {
-            if (payload == null || !payload.containsKey("prompt")) {
+            if (prompt == null || prompt.isBlank()) {
                 return null;
             }
-            
-            String prompt = (String) payload.get("prompt");
             
             // Build Qwen API request for comparison
             Map<String, Object> request = new HashMap<>();
