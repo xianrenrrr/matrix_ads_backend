@@ -253,7 +253,7 @@ public class UnifiedSceneAnalysisService {
                 scenePolygon.setLabel(polygon.label());
                 scenePolygon.setLabelZh(labelZh);
                 scenePolygon.setLabelLocalized(labelZh);
-                scenePolygon.setConfidence(polygon.confidence());
+                scenePolygon.setConfidence((float) polygon.confidence());
                 
                 // Convert points
                 List<com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point> scenePoints = new ArrayList<>();
@@ -271,11 +271,11 @@ public class UnifiedSceneAnalysisService {
                 obj.setLabel(box.label());
                 obj.setLabelZh(labelZh);
                 obj.setLabelLocalized(labelZh);
-                obj.setConfidence(box.confidence());
-                obj.setX(box.x());
-                obj.setY(box.y());
-                obj.setWidth(box.w());
-                obj.setHeight(box.h());
+                obj.setConfidence((float) box.confidence());
+                obj.setX((float) box.x());
+                obj.setY((float) box.y());
+                obj.setWidth((float) box.w());
+                obj.setHeight((float) box.h());
                 objects.add(obj);
             }
         }
