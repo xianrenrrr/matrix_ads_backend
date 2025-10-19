@@ -40,8 +40,8 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
             // Get credentials using utility (environment or file)
             GoogleCredentials credentials = firebaseCredentialsUtil.getCredentials();
             
-            // Use scene start timestamp
-            Duration target = startTime;
+            // Use scene start timestamp (default to 0 if null)
+            Duration target = startTime != null ? startTime : Duration.ZERO;
             double targetSeconds = target.getSeconds() + target.getNano() / 1_000_000_000.0;
             
             // Extract bucket name and object name from GCS URL
