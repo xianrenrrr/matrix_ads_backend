@@ -1,7 +1,7 @@
 package com.example.demo.ai.services;
 
 import com.example.demo.ai.services.OverlayLegendService.LegendItem;
-import com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon;
+import com.example.demo.ai.seg.dto.OverlayPolygonClass;
 import com.example.demo.model.Scene;
 import com.example.demo.model.Scene.ObjectOverlay;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,12 +62,12 @@ public class OverlayLegendServiceTest {
         Scene scene = new Scene();
         scene.setOverlayType("polygons");
         
-        OverlayPolygon polygon1 = new OverlayPolygon();
+        OverlayPolygonClass polygon1 = new OverlayPolygonClass();
         polygon1.setLabel("person");
         polygon1.setLabelLocalized("人");
         polygon1.setConfidence(0.85f);
         
-        OverlayPolygon polygon2 = new OverlayPolygon();
+        OverlayPolygonClass polygon2 = new OverlayPolygonClass();
         polygon2.setLabel("car");
         polygon2.setLabelLocalized("汽车");
         polygon2.setConfidence(0.92f);

@@ -1,7 +1,7 @@
 package com.example.demo.testsupport;
 
 import com.example.demo.ai.services.KeyframeExtractionService;
-import com.example.demo.ai.providers.llm.VideoSummaryService;
+// VideoSummaryService removed - not used
 import com.example.demo.dao.*;
 import com.example.demo.model.*;
 import com.example.demo.service.*;
@@ -32,14 +32,7 @@ public class CiTestConfig {
     }
 
 
-    @Bean
-    @Primary
-    public VideoSummaryService videoSummaryService() {
-        VideoSummaryService service = Mockito.mock(VideoSummaryService.class);
-        when(service.generateSummary(any(Video.class), anyList(), anyMap()))
-            .thenReturn("Test video summary");
-        return service;
-    }
+    // VideoSummaryService bean removed - service no longer exists
 
     @Bean
     @Primary
