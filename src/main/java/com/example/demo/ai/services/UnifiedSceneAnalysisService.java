@@ -176,6 +176,33 @@ public class UnifiedSceneAnalysisService {
             // Step 5: Build overlay objects/polygons
             if (!detectedShapes.isEmpty()) {
                 buildOverlays(result, detectedShapes, vlResults);
+            } else if (providedRegions != null && !providedRegions.isEmpty() && !vlResults.isEmpty()) {
+                // Comparison mode: build overlays from VL results on provided regions
+                log.info("[UNIFIED] Building overlays from VL results on provided regions");
+                List<Scene.ObjectOverlay> objects = new ArrayList<>();
+                int counter = 1;
+                for (Scene.ObjectOverlay providedOverlay : providedRegions) {
+                    String id = "p" + counter++;
+                    if (vlResults.containsKey(id)) {
+                        ObjectLabelService.LabelResult lr = vlResults.get(id);
+                        Scene.ObjectOverlay obj = new Scene.ObjectOverlay();
+                        obj.setLabelZh(lr.labelZh != null ? lr.labelZh : "未知");
+                        obj.setLabelLocalized(lr.labelZh != null ? lr.labelZh : "未知");
+                        obj.setLabel(lr.labelZh != null ? lr.labelZh : "unknown");
+                        obj.setConfidence((float) lr.conf);
+                        obj.setX(providedOverlay.getX());
+                        obj.setY(providedOverlay.getY());
+                        obj.setWidth(providedOverlay.getWidth());
+                        obj.setHeight(providedOverlay.getHeight());
+                        objects.add(obj);
+                    }
+                }
+                result.setOverlayObjects(objects);
+                result.setOverlayType("objects");
+                if (!objects.isEmpty()) {
+                    result.setShortLabelZh(objects.get(0).getLabelZh());
+                }
+                log.info("[UNIFIED] Built {} overlay objects from VL results", objects.size());
             } else {
                 // No shapes detected, default to grid
                 result.setOverlayType("grid");
