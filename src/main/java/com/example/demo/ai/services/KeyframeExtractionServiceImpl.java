@@ -95,17 +95,14 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
                     .setContentType("image/jpeg")
                     .build();
                 
-                Blob uploadedBlob = storage.create(blobInfo, keyframeBytes);
+                storage.create(blobInfo, keyframeBytes);
                 
-                // Make the blob publicly readable for YOLO compatibility
-                uploadedBlob.createAcl(com.google.cloud.storage.Acl.of(
-                    com.google.cloud.storage.Acl.User.ofAllUsers(),
-                    com.google.cloud.storage.Acl.Role.READER
-                ));
+                // Use proxy URL for YOLO compatibility (avoids signed URL signature issues)
+                // The proxy endpoint handles authentication internally
+                String proxyUrl = String.format("https://xpectra-ai-backend.onrender.com/images/proxy?path=%s", 
+                    java.net.URLEncoder.encode(keyframeObjectName, "UTF-8"));
                 
-                // Use public URL instead of signed URL (keyframes are temporary and non-sensitive)
-                String signedUrlString = String.format("https://storage.googleapis.com/%s/%s", 
-                    bucketName, keyframeObjectName);
+                String signedUrlString = proxyUrl;
                 System.out.printf("✅ Keyframe extracted and uploaded successfully:%n");
                 System.out.printf("   Object name: %s%n", keyframeObjectName);
                 System.out.printf("   Blob exists: %s%n", storage.get(bucketName, keyframeObjectName).exists());
