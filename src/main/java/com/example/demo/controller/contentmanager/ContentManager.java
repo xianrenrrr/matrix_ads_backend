@@ -46,6 +46,9 @@ public class ContentManager {
     @Autowired
     private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
     
+    @Autowired
+    private com.example.demo.ai.services.UnifiedSceneAnalysisService unifiedSceneAnalysisService;
+    
     /**
      * Get manager's groups
      * GET /content-manager/templates/manager/{managerId}/groups
@@ -573,13 +576,28 @@ public class ContentManager {
             
             // Analyze the video for AI metadata (VL analysis, overlays, etc.)
             try {
-                com.example.demo.ai.services.UnifiedSceneAnalysisService unifiedService = 
-                    applicationContext.getBean(com.example.demo.ai.services.UnifiedSceneAnalysisService.class);
-                com.example.demo.ai.services.SceneAnalysisResult analysisResult = 
-                    unifiedService.analyzeScene(video.getUrl(), language, null, null);
-                analysisResult.applyToScene(aiScene);
+                if (unifiedSceneAnalysisService == null) {
+                    log.error("❌ UnifiedSceneAnalysisService is NULL - service not autowired!");
+                } else {
+                    log.info("✅ Calling UnifiedSceneAnalysisService for scene {} with videoUrl: {}", 
+                        metadata.getSceneNumber(), 
+                        video.getUrl() != null ? video.getUrl().substring(0, Math.min(80, video.getUrl().length())) : "null");
+                    
+                    com.example.demo.ai.services.SceneAnalysisResult analysisResult = 
+                        unifiedSceneAnalysisService.analyzeScene(video.getUrl(), language, null, null);
+                    
+                    log.info("✅ UnifiedSceneAnalysisService returned result for scene {}", metadata.getSceneNumber());
+                    
+                    if (analysisResult == null) {
+                        log.warn("⚠️ Analysis result is NULL for scene {}", metadata.getSceneNumber());
+                    } else {
+                        analysisResult.applyToScene(aiScene);
+                        log.info("✅ Applied analysis result to scene {}", metadata.getSceneNumber());
+                    }
+                }
             } catch (Exception e) {
-                log.warn("Scene analysis failed for scene {}: {}", metadata.getSceneNumber(), e.getMessage());
+                log.error("❌ Scene analysis failed for scene {}: {} - {}", 
+                    metadata.getSceneNumber(), e.getClass().getSimpleName(), e.getMessage(), e);
                 // Continue with basic scene
             }
             
@@ -697,8 +715,6 @@ public class ContentManager {
             String language,
             String userDescription) {
         try {
-            log.info("Generating AI metadata for manual template with {} scenes", scenes.size());
-            
             // Build payload for reasoning model (SAME as AI template)
             Map<String, Object> payload = new HashMap<>();
             Map<String, Object> tpl = new HashMap<>();

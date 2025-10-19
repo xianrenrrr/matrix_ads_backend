@@ -170,7 +170,7 @@ public class UnifiedSceneAnalysisService {
                 }
             } catch (Exception vlEx) {
                 log.error("[UNIFIED] VL analysis failed: {} - {}", vlEx.getClass().getSimpleName(), vlEx.getMessage());
-                // Continue without VL data - scene will still be created with grid overlay
+                // Continue without VL data - will default to grid overlay below
             }
             
             // Step 5: Build overlay objects/polygons
@@ -203,10 +203,12 @@ public class UnifiedSceneAnalysisService {
                     result.setShortLabelZh(objects.get(0).getLabelZh());
                 }
                 log.info("[UNIFIED] Built {} overlay objects from VL results", objects.size());
-            } else {
-                // No shapes detected, default to grid
+            }
+            
+            // Ensure overlay type is always set (fallback to grid if not set)
+            if (result.getOverlayType() == null) {
                 result.setOverlayType("grid");
-                log.info("[UNIFIED] No shapes detected, defaulting to grid overlay");
+                log.info("[UNIFIED] No overlay type set, defaulting to grid");
             }
             
             log.info("[UNIFIED] Analysis complete - overlayType: {}", result.getOverlayType());
