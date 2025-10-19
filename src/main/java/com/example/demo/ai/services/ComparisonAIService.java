@@ -19,7 +19,16 @@ import java.util.*;
 /**
  * Scene-to-Scene Comparison Service
  * Implements AIWorkflow.md comparison algorithm using AI orchestrator
+ * 
+ * @deprecated Replaced by QwenSceneComparisonService
+ * This service uses old Google Vision-based comparison with complex geometry calculations.
+ * Use QwenSceneComparisonService for new Qwen VL + Reasoning based comparison.
+ * 
+ * Migration:
+ * OLD: comparisonAIService.compareScenes(templateScene, userVideoUrl, templateVideoUrl)
+ * NEW: qwenComparisonService.compareScenes(templateScene, userVideoUrl, language)
  */
+@Deprecated
 @Service
 public class ComparisonAIService {
     

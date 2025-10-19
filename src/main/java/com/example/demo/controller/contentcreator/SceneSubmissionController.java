@@ -41,7 +41,10 @@ public class SceneSubmissionController {
     private Firestore db;
     
     @Autowired
-    private ComparisonAIService comparisonAIService;
+    private ComparisonAIService comparisonAIService;  // Old service - to be deprecated
+    
+    @Autowired
+    private com.example.demo.ai.services.QwenSceneComparisonService qwenComparisonService;  // New Qwen-based comparison
     
     @Autowired
     private VideoDao videoDao;
@@ -103,35 +106,33 @@ public class SceneSubmissionController {
         
         java.util.concurrent.CompletableFuture.runAsync(() -> {
             try {
-                log.info("Starting async AI comparison for scene {}", sceneNumber);
+                log.info("Starting async AI comparison for scene {} using QwenSceneComparisonService", sceneNumber);
                 
-                ComparisonAIService.SceneComparisonResult comparisonResult = comparisonAIService.compareScenes(
-                    templateScene, userVideoUrl, templateVideoUrl);
+                // NEW: Use Qwen-based comparison (VL + Reasoning)
+                com.example.demo.ai.services.ComparisonResult comparisonResult = qwenComparisonService.compareScenes(
+                    templateScene, userVideoUrl, "zh-CN");
                 
                 // Update the scene submission with AI results
                 SceneSubmission updatedSubmission = sceneSubmissionDao.findById(finalSceneId);
                 if (updatedSubmission != null) {
-                    updatedSubmission.setSimilarityScore(comparisonResult.similarityScore);
-                    updatedSubmission.setAiSuggestions(comparisonResult.suggestions);
+                    // Convert score from 0-100 to 0-1 for DB
+                    updatedSubmission.setSimilarityScore(comparisonResult.getScore() / 100.0);
+                    updatedSubmission.setAiSuggestions(comparisonResult.getSuggestions());
                     
-                    // Auto-approval logic: per-group threshold
-                    String autoStatus = determineAutoStatus(userId, comparisonResult.similarityScore);
+                    // Auto-approval logic: per-group threshold (score is now 0-1 in DB)
+                    String autoStatus = determineAutoStatus(userId, updatedSubmission.getSimilarityScore());
                     if (autoStatus != null) {
                         updatedSubmission.setStatus(autoStatus);
                     }
                     
                     sceneSubmissionDao.update(updatedSubmission);
                     
-                    // Log a remapped display score
-                    double raw = comparisonResult.similarityScore;
-                    double floor = 0.20;
-                    double mapped = (raw - floor) / (1.0 - floor);
-                    if (mapped < 0) mapped = 0;
-                    if (mapped > 1) mapped = 1;
-                    int displayPercent = (int) Math.round(mapped * 100.0);
-                    
-                    log.info("AI Comparison completed for scene {}: score={}%, raw={}, suggestions={}",
-                            sceneNumber, displayPercent, String.format("%.4f", raw), comparisonResult.suggestions);
+                    // Log the score
+                    log.info("AI Comparison completed for scene {}: score={}/100 ({}%), suggestions={}",
+                            sceneNumber, 
+                            comparisonResult.getScore(),
+                            String.format("%.1f", updatedSubmission.getSimilarityScore() * 100),
+                            comparisonResult.getSuggestions());
                 }
                 
             } catch (Exception e) {

@@ -49,6 +49,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Autowired
     private VideoMetadataService videoMetadataService;
     
+    @Autowired
+    private UnifiedSceneAnalysisService unifiedSceneAnalysisService;
+    
     @Value("${ai.template.useObjectOverlay:true}")
     private boolean useObjectOverlay;
     
@@ -165,216 +168,38 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         // Create base scene with clean data
         Scene scene = SceneProcessor.createFromSegment(segment, sceneNumber, language);
         
-        // Extract keyframe if possible
-        String keyframeUrl = extractKeyframe(scene, segment, videoUrl);
-        if (keyframeUrl != null) {
-            scene.setKeyframeUrl(keyframeUrl);
-            
-            // NEW: Use segmentation service for shape detection
-            processSceneWithShapes(scene, keyframeUrl, language);
-        }
+        // Use unified scene analysis service
+        log.info("Analyzing scene {} using UnifiedSceneAnalysisService", sceneNumber);
+        SceneAnalysisResult analysisResult = unifiedSceneAnalysisService.analyzeScene(
+            videoUrl,
+            language,
+            segment.getStartTime(),
+            segment.getEndTime()
+        );
         
-        // Removed AI orchestrator fallback; if no overlays after segmentation, we'll default to grid.
+        // Apply analysis results to scene
+        analysisResult.applyToScene(scene);
+        
+        // Fallback to grid if no overlays
         if (scene.getOverlayType() == null) {
             scene.setOverlayType("grid");
             scene.setScreenGridOverlay(java.util.List.of(5));
         }
         
+        // Build legend if needed
+        if (includeLegend && !"grid".equals(scene.getOverlayType()) && overlayLegendService != null) {
+            var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
+            scene.setLegend(legend);
+        }
+        
         return scene;
     }
     
-    private void processSceneWithShapes(Scene scene, String keyframeUrl, String language) {
-        log.info("[PROCESS] processSceneWithShapes called for scene {}, keyframe: {}", 
-            scene.getSceneNumber(), keyframeUrl != null ? "present" : "null");
-        try {
-            // Detect shapes using segmentation service
-            List<OverlayShape> shapes = segmentationService.detect(keyframeUrl);
-            log.info("[PROCESS] Detected {} shapes", shapes != null ? shapes.size() : 0);
-            
-            // ALWAYS get VL scene analysis, even if no shapes detected
-            // This is valuable for video comparison by reasoning models
-            java.util.List<com.example.demo.ai.label.ObjectLabelService.RegionBox> regions = new java.util.ArrayList<>();
-            java.util.Map<OverlayShape, String> idMap = new java.util.HashMap<>();
-            
-            if (!shapes.isEmpty()) {
-                // Process shapes and add Chinese labels
-                boolean hasPolygons = false;
-                boolean hasBoxes = false;
-                
-                // Build region list (one-shot labeling)
-                int idCounter = 1;
-                for (OverlayShape s : shapes) {
-                    String id = "p" + (idCounter++);
-                    idMap.put(s, id);
-                    double x, y, w, h;
-                    if (s instanceof OverlayBox b) {
-                        x = clamp01(b.x()); y = clamp01(b.y()); w = clamp01(b.w()); h = clamp01(b.h());
-                    } else if (s instanceof OverlayPolygon p) {
-                        double minX = 1.0, minY = 1.0, maxX = 0.0, maxY = 0.0;
-                        for (com.example.demo.ai.seg.dto.Point pt : p.points()) {
-                            minX = Math.min(minX, pt.x()); minY = Math.min(minY, pt.y());
-                            maxX = Math.max(maxX, pt.x()); maxY = Math.max(maxY, pt.y());
-                        }
-                        x = clamp01(minX); y = clamp01(minY); w = clamp01(maxX - minX); h = clamp01(maxY - minY);
-                    } else { continue; }
-                    regions.add(new com.example.demo.ai.label.ObjectLabelService.RegionBox(id, x, y, w, h));
-                }
-
-                java.util.Map<String, com.example.demo.ai.label.ObjectLabelService.LabelResult> regionLabels = java.util.Collections.emptyMap();
-                try {
-                    log.info("[VL] About to call labelRegions with {} regions", regions.size());
-                    regionLabels = objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
-                    log.info("[VL] labelRegions returned {} results", regionLabels.size());
-                    
-                    // NEW: Save VL scene analysis and raw response to scene
-                    if (!regionLabels.isEmpty()) {
-                        com.example.demo.ai.label.ObjectLabelService.LabelResult firstResult = regionLabels.values().iterator().next();
-                        log.info("[VL] First result - sceneAnalysis: {}, rawResponse: {}", 
-                            firstResult.sceneAnalysis != null ? firstResult.sceneAnalysis.length() + " chars" : "null",
-                            firstResult.rawResponse != null ? firstResult.rawResponse.length() + " chars" : "null");
-                        
-                        if (firstResult.sceneAnalysis != null && !firstResult.sceneAnalysis.isEmpty()) {
-                            scene.setVlSceneAnalysis(firstResult.sceneAnalysis);
-                            log.info("[VL] Scene analysis saved ({} chars)", firstResult.sceneAnalysis.length());
-                            log.info("[VL] Verify scene.getVlSceneAnalysis(): {}", 
-                                scene.getVlSceneAnalysis() != null ? scene.getVlSceneAnalysis().length() + " chars" : "NULL!");
-                        }
-                        if (firstResult.rawResponse != null && !firstResult.rawResponse.isEmpty()) {
-                            scene.setVlRawResponse(firstResult.rawResponse);
-                            log.info("[VL] Raw response saved ({} chars)", firstResult.rawResponse.length());
-                            log.info("[VL] Verify scene.getVlRawResponse(): {}", 
-                                scene.getVlRawResponse() != null ? scene.getVlRawResponse().length() + " chars" : "NULL!");
-                        }
-                    } else {
-                        log.warn("[VL] regionLabels is empty, cannot save VL data");
-                    }
-                } catch (Exception e) {
-                    log.error("[VL] Exception while saving VL data: {}", e.getMessage(), e);
-                }
-
-                for (OverlayShape shape : shapes) {
-                    String labelZh = null;
-                    String sid = idMap.get(shape);
-                    if (sid != null && regionLabels.containsKey(sid)) {
-                        var lr = regionLabels.get(sid);
-                        // Threshold controlled by property, default 0.8
-                        if (lr != null && lr.labelZh != null && !lr.labelZh.isBlank() && lr.conf >= getRegionsMinConf()) {
-                            labelZh = lr.labelZh;
-                        }
-                    }
-                    if (labelZh == null) labelZh = "未知";
-                    
-                    // Create new shape with Chinese label
-                    if (shape instanceof OverlayPolygon polygon) {
-                        hasPolygons = true;
-                        OverlayPolygon newPolygon = new OverlayPolygon(
-                            polygon.label(),
-                            labelZh,
-                            polygon.confidence(),
-                            polygon.points()
-                        );
-                        if (scene.getOverlayPolygons() == null) {
-                            scene.setOverlayPolygons(new ArrayList<>());
-                        }
-                        // Convert our DTO polygon to GoogleVisionProvider.OverlayPolygon
-                        com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon scenePolygon = new com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon();
-                        scenePolygon.setLabel(newPolygon.label());
-                        scenePolygon.setLabelZh(newPolygon.labelZh());
-                        // Ensure localized label is populated for frontend legend/UI
-                        scenePolygon.setLabelLocalized(newPolygon.labelZh());
-                        scenePolygon.setConfidence((float) newPolygon.confidence());
-                        
-                        // Convert points using the nested Point class
-                        List<com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point> scenePoints = new ArrayList<>();
-                        for (com.example.demo.ai.seg.dto.Point p : newPolygon.points()) {
-                            com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point scenePoint = new com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point((float) p.x(), (float) p.y());
-                            scenePoints.add(scenePoint);
-                        }
-                        scenePolygon.setPoints(scenePoints);
-                        
-                        scene.getOverlayPolygons().add(scenePolygon);
-                    } else if (shape instanceof OverlayBox box) {
-                        hasBoxes = true;
-                        OverlayBox newBox = new OverlayBox(
-                            box.label(),
-                            labelZh,
-                            box.confidence(),
-                            box.x(), box.y(), box.w(), box.h()
-                        );
-                        if (scene.getOverlayObjects() == null) {
-                            scene.setOverlayObjects(new ArrayList<>());
-                        }
-                        scene.getOverlayObjects().add(convertToSceneBox(newBox));
-                    }
-                }
-                
-                // Set overlay type priority: polygons > objects > grid
-                if (hasPolygons) {
-                    scene.setOverlayType("polygons");
-                } else if (hasBoxes) {
-                    scene.setOverlayType("objects");
-                } else {
-                    scene.setOverlayType("grid");
-                }
-                
-                // Build legend to drive mini‑app overlay UI if not grid
-                if (includeLegend && !"grid".equals(scene.getOverlayType()) && overlayLegendService != null) {
-                    var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
-                    scene.setLegend(legend);
-                }
-
-                // Set dominant object's Chinese label as scene's short label (no recrop)
-                if (!shapes.isEmpty()) {
-                    OverlayShape dominant = shapes.get(0);
-                    String dom = null;
-                    if (dominant instanceof OverlayBox db) dom = db.labelZh();
-                    else if (dominant instanceof OverlayPolygon dp) dom = dp.labelZh();
-                    scene.setShortLabelZh(dom);
-                }
-            } else {
-                log.info("[VL] No shapes detected, but still calling VL for scene analysis");
-                boolean yoloApplied = applyHuggingFaceYoloFallback(scene, keyframeUrl, language);
-                if (!yoloApplied) {
-                    scene.setOverlayType("grid");
-                    scene.setScreenGridOverlay(java.util.List.of(5));
-                }
-            }
-            
-            // ALWAYS call VL for scene analysis (even if no shapes/regions)
-            // This provides valuable context for video comparison
-            if (regions.isEmpty()) {
-                log.info("[VL] No regions, calling VL for scene analysis only");
-                // Create a dummy region covering the whole frame
-                regions.add(new com.example.demo.ai.label.ObjectLabelService.RegionBox("full", 0.0, 0.0, 1.0, 1.0));
-            }
-            
-            try {
-                log.info("[VL] Calling labelRegions with {} regions for scene analysis", regions.size());
-                java.util.Map<String, com.example.demo.ai.label.ObjectLabelService.LabelResult> vlResults = 
-                    objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
-                
-                if (!vlResults.isEmpty()) {
-                    com.example.demo.ai.label.ObjectLabelService.LabelResult firstResult = vlResults.values().iterator().next();
-                    if (firstResult.sceneAnalysis != null && !firstResult.sceneAnalysis.isEmpty()) {
-                        scene.setVlSceneAnalysis(firstResult.sceneAnalysis);
-                        log.info("[VL] Scene analysis saved ({} chars)", firstResult.sceneAnalysis.length());
-                    }
-                    if (firstResult.rawResponse != null && !firstResult.rawResponse.isEmpty()) {
-                        scene.setVlRawResponse(firstResult.rawResponse);
-                        log.info("[VL] Raw response saved ({} chars)", firstResult.rawResponse.length());
-                    }
-                }
-            } catch (Exception vlEx) {
-                log.error("[VL] Failed to get scene analysis: {}", vlEx.getMessage());
-            }
-            
-        } catch (Exception e) {
-            log.error("Failed to process scene with shapes: {}", e.getMessage());
-            // Leave overlayType unset to allow downstream fallback processing
-        }
-    }
-    
-    // Removed convertToScenePolygon method - conversion now done inline
+    /**
+     * @deprecated Replaced by UnifiedSceneAnalysisService
+     * This method is no longer used. Scene analysis is now handled by UnifiedSceneAnalysisService.
+     */
+    @Deprecated
     
     private com.example.demo.model.Scene.ObjectOverlay convertToSceneBox(OverlayBox box) {
         com.example.demo.model.Scene.ObjectOverlay model = new com.example.demo.model.Scene.ObjectOverlay();

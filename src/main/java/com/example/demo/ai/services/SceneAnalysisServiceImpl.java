@@ -48,6 +48,9 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
     @Autowired
     private com.example.demo.ai.providers.vision.FFmpegSceneDetectionService ffmpegSceneDetectionService;
     
+    @Autowired
+    private UnifiedSceneAnalysisService unifiedSceneAnalysisService;
+    
     @Value("${ai.overlay.includeLegend:false}")
     private boolean includeLegend;
     
@@ -68,18 +71,23 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
 
     @Override
     public Scene analyzeSingleScene(Video video, String language, String sceneDescription) {
-        log.info("Analyzing single scene video: {} with description: {}", 
+        log.info("Analyzing single scene video: {} with description: {} using UnifiedSceneAnalysisService", 
                  video.getId(), sceneDescription != null ? sceneDescription : "none");
         
         Scene scene = new Scene();
         scene.setSceneSource("manual");
+        scene.setSceneNumber(1);
+        
+        // Set scene title based on language
+        if ("zh".equals(language) || "zh-CN".equals(language)) {
+            scene.setSceneTitle("场景 1");
+        } else {
+            scene.setSceneTitle("Scene 1");
+        }
         
         try {
-            // 1. Extract real video duration using FFmpeg (no scene detection needed)
-            log.info("=== EXTRACTING VIDEO DURATION for video: {} ===", video.getId());
-            log.info("Video URL: {}", video.getUrl());
-            
-            // Use FFmpegSceneDetectionService to get duration only (no scene cutting)
+            // 1. Extract video duration
+            log.info("Extracting video duration for: {}", video.getId());
             Double durationDouble = ffmpegSceneDetectionService.getVideoDurationOnly(video.getUrl());
             
             long durationMs;
@@ -88,12 +96,9 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
             if (durationDouble != null && durationDouble > 0) {
                 durationMs = (long) (durationDouble * 1000);
                 durationSeconds = (long) Math.ceil(durationDouble);
-                
-                log.info("✅ SUCCESS: Extracted video duration: {}s ({}ms) for video {} using FFmpeg", 
-                         durationSeconds, durationMs, video.getId());
+                log.info("✅ Video duration: {}s", durationSeconds);
             } else {
-                // Fallback only if extraction fails
-                log.warn("❌ FAILED: Could not extract video duration for {}, using fallback 5s", video.getId());
+                log.warn("❌ Could not extract duration, using fallback 5s");
                 durationMs = 5000L;
                 durationSeconds = 5L;
             }
@@ -102,47 +107,55 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
             scene.setEndTimeMs(durationMs);
             scene.setSceneDurationInSeconds(durationSeconds);
             
-            log.info("Scene timing set: startMs={}, endMs={}, durationSeconds={}", 
-                     0L, durationMs, durationSeconds);
+            // 2. Use unified scene analysis service (keyframe + YOLO + VL)
+            log.info("Analyzing scene with UnifiedSceneAnalysisService");
+            SceneAnalysisResult analysisResult = unifiedSceneAnalysisService.analyzeScene(
+                video.getUrl(),
+                language,
+                null,  // Full video, no start time
+                null   // Full video, no end time
+            );
             
-            // 2. Extract keyframe from middle of video (SAME as AI template)
-            String keyframeUrl = extractKeyframeFromVideo(video.getUrl(), video.getId());
-            if (keyframeUrl != null) {
-                scene.setKeyframeUrl(keyframeUrl);
-                
-                // 3. Process scene with AI shape detection (EXACT SAME as AI template)
-                processSceneWithShapes(scene, keyframeUrl, language);
-            }
+            // 3. Apply analysis results
+            analysisResult.applyToScene(scene);
             
-            // 4. Fallback to grid if no overlays detected (SAME as AI template)
+            // 4. Fallback to grid if no overlays
             if (scene.getOverlayType() == null) {
                 scene.setOverlayType("grid");
                 scene.setScreenGridOverlay(List.of(5));
             }
             
-            // 5. Set scene description if provided
+            // 5. Build legend if needed
+            if (includeLegend && !"grid".equals(scene.getOverlayType()) && overlayLegendService != null) {
+                var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
+                scene.setLegend(legend);
+            }
+            
+            // 6. Set user-provided scene description
             if (sceneDescription != null && !sceneDescription.isEmpty()) {
                 scene.setSceneDescription(sceneDescription);
             }
             
-            log.info("Scene analysis completed for video: {} with overlay type: {}", 
-                     video.getId(), scene.getOverlayType());
+            log.info("✅ Scene analysis completed - overlayType: {}, vlSceneAnalysis: {}", 
+                     scene.getOverlayType(),
+                     scene.getVlSceneAnalysis() != null ? scene.getVlSceneAnalysis().length() + " chars" : "null");
+            
             return scene;
             
         } catch (Exception e) {
-            log.error("Error analyzing scene video {}: {}", video.getId(), e.getMessage(), e);
+            log.error("❌ Error analyzing scene: {}", e.getMessage(), e);
             // Return basic scene with grid overlay
             scene.setOverlayType("grid");
             scene.setScreenGridOverlay(List.of(5));
-            scene.setSceneSource("manual");
             return scene;
         }
     }
     
     /**
-     * Extract keyframe from video (REUSED logic from TemplateAIServiceImpl)
-     * NOTE: For single scene videos, we extract from the middle of the video
+     * @deprecated Replaced by UnifiedSceneAnalysisService
+     * This method is no longer used. Keyframe extraction is now handled by UnifiedSceneAnalysisService.
      */
+    @Deprecated
     private String extractKeyframeFromVideo(String videoUrl, String videoId) {
         try {
             log.info("Extracting keyframe from video: {}", videoId);
@@ -157,9 +170,10 @@ public class SceneAnalysisServiceImpl implements SceneAnalysisService {
     }
     
     /**
-     * Process scene with shape detection (REUSED from TemplateAIServiceImpl)
-     * NOTE: This is duplicated code - consider refactoring to shared utility class
+     * @deprecated Replaced by UnifiedSceneAnalysisService
+     * This method is no longer used. Scene analysis is now handled by UnifiedSceneAnalysisService.
      */
+    @Deprecated
     private void processSceneWithShapes(Scene scene, String keyframeUrl, String language) {
         try {
             // Detect shapes using segmentation service
