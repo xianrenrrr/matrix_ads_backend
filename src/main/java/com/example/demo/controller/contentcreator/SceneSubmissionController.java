@@ -40,7 +40,6 @@ public class SceneSubmissionController {
     @Autowired
     private Firestore db;
     
-    @Autowired
     // ComparisonAIService removed - using QwenSceneComparisonService
     
     @Autowired

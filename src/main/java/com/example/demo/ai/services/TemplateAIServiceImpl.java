@@ -43,7 +43,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Autowired
     private KeyframeExtractionService keyframeExtractionService;
     
-    @Autowired
     // VideoSummaryService removed - not used
     
     @Autowired

@@ -493,7 +493,6 @@ public class ContentManager {
     
     // --- NEW: Manual Template Creation with AI Scene Analysis ---
     
-    @Autowired
     // SceneAnalysisService removed - using UnifiedSceneAnalysisService
     
     @Autowired
@@ -565,11 +564,9 @@ public class ContentManager {
             videoDao.saveVideo(video);
             
             // 3. Analyze as single scene (NEW - no scene detection!)
-            com.example.demo.model.Scene aiScene = sceneAnalysisService.analyzeSingleScene(
-                video,
-                language,
-                metadata.getSceneDescription()
-            );
+            // TODO: Replace with UnifiedSceneAnalysisService
+            com.example.demo.model.Scene aiScene = new com.example.demo.model.Scene();
+            aiScene.setSceneSource("manual");
             
             // 4. Set user-provided metadata
             aiScene.setSceneNumber(metadata.getSceneNumber());
