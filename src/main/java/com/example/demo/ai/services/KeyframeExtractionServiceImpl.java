@@ -95,17 +95,17 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
                     .setContentType("image/jpeg")
                     .build();
                 
-                storage.create(blobInfo, keyframeBytes);
+                Blob uploadedBlob = storage.create(blobInfo, keyframeBytes);
                 
-                // Generate a signed URL for secure access (valid for 15 minutes)
-                URL signedUrl = storage.signUrl(
-                    blobInfo,
-                    15, TimeUnit.MINUTES,
-                    SignUrlOption.httpMethod(com.google.cloud.storage.HttpMethod.GET),
-                    SignUrlOption.withV4Signature()
-                );
+                // Make the blob publicly readable for YOLO compatibility
+                uploadedBlob.createAcl(com.google.cloud.storage.Acl.of(
+                    com.google.cloud.storage.Acl.User.ofAllUsers(),
+                    com.google.cloud.storage.Acl.Role.READER
+                ));
                 
-                String signedUrlString = signedUrl.toString();
+                // Use public URL instead of signed URL (keyframes are temporary and non-sensitive)
+                String signedUrlString = String.format("https://storage.googleapis.com/%s/%s", 
+                    bucketName, keyframeObjectName);
                 System.out.printf("✅ Keyframe extracted and uploaded successfully:%n");
                 System.out.printf("   Object name: %s%n", keyframeObjectName);
                 System.out.printf("   Blob exists: %s%n", storage.get(bucketName, keyframeObjectName).exists());
