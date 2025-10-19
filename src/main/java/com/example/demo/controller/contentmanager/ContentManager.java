@@ -150,6 +150,60 @@ public class ContentManager {
             
             if (!belongsToManager || !memberIds.contains(uploadedBy)) continue;
             
+            // ===== AI AUTO-REJECT FILTERING =====
+            // Find the group this user belongs to and check auto-reject threshold
+            com.example.demo.model.Group userGroup = null;
+            for (com.example.demo.model.Group group : groups) {
+                if (group.getMemberIds() != null && group.getMemberIds().contains(uploadedBy)) {
+                    userGroup = group;
+                    break;
+                }
+            }
+            
+            // Check if any scene is below the auto-reject threshold
+            if (userGroup != null) {
+                double autoRejectThreshold = userGroup.getAiAutoRejectThreshold();
+                boolean shouldAutoReject = false;
+                
+                // Get scenes data
+                @SuppressWarnings("unchecked")
+                Map<String, Object> scenes = (Map<String, Object>) data.get("scenes");
+                if (scenes != null && !scenes.isEmpty()) {
+                    for (Object sceneObj : scenes.values()) {
+                        if (sceneObj instanceof Map) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> sceneData = (Map<String, Object>) sceneObj;
+                            String sceneId = (String) sceneData.get("sceneId");
+                            
+                            if (sceneId != null) {
+                                try {
+                                    // Fetch scene submission to get similarity score
+                                    SceneSubmission sceneSubmission = sceneSubmissionDao.findById(sceneId);
+                                    if (sceneSubmission != null) {
+                                        Double similarityScore = sceneSubmission.getSimilarityScore();
+                                        if (similarityScore != null && similarityScore < autoRejectThreshold) {
+                                            shouldAutoReject = true;
+                                            log.info("Auto-rejecting submission {} - Scene {} similarity {} below threshold {}", 
+                                                doc.getId(), sceneId, similarityScore, autoRejectThreshold);
+                                            break;
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    log.warn("Failed to check scene {} for auto-reject: {}", sceneId, e.getMessage());
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Skip this submission if it should be auto-rejected
+                if (shouldAutoReject) {
+                    log.info("Filtering out submission {} due to auto-reject threshold", doc.getId());
+                    continue;
+                }
+            }
+            // ===== END AUTO-REJECT FILTERING =====
+            
             // Add document ID for frontend use
             data.put("id", doc.getId());
             

@@ -27,6 +27,7 @@ public class Group {
     
     // AI Settings
     private double aiApprovalThreshold = 0.85;      // Similarity threshold for auto-approval (0-1)
+    private double aiAutoRejectThreshold = 0.50;    // Similarity threshold for auto-rejection (0-1) - submissions below this are auto-rejected and hidden
     private boolean aiAutoApprovalEnabled = true;   // Whether AI auto-approval is enabled
     private boolean allowManualOverride = true;     // Whether managers can override AI decisions
     private Map<String, Double> sceneThresholds;    // Custom thresholds for specific scenes
@@ -123,6 +124,12 @@ public class Group {
     public double getAiApprovalThreshold() { return aiApprovalThreshold; }
     public void setAiApprovalThreshold(double aiApprovalThreshold) { 
         this.aiApprovalThreshold = aiApprovalThreshold; 
+        this.updatedAt = new Date();
+    }
+    
+    public double getAiAutoRejectThreshold() { return aiAutoRejectThreshold; }
+    public void setAiAutoRejectThreshold(double aiAutoRejectThreshold) { 
+        this.aiAutoRejectThreshold = aiAutoRejectThreshold; 
         this.updatedAt = new Date();
     }
     
