@@ -98,6 +98,21 @@ public class UnifiedSceneAnalysisService {
                 return result;
             }
             
+            // Detect aspect ratio from keyframe
+            try {
+                java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(new java.net.URL(keyframeUrl));
+                if (img != null) {
+                    int w = img.getWidth();
+                    int h = img.getHeight();
+                    boolean portrait = h >= w;
+                    String aspectRatio = portrait ? "9:16" : "16:9";
+                    result.setSourceAspect(aspectRatio);
+                    log.info("[UNIFIED] Detected aspect ratio: {} ({}x{})", aspectRatio, w, h);
+                }
+            } catch (Exception e) {
+                log.warn("[UNIFIED] Failed to detect aspect ratio: {}", e.getMessage());
+            }
+            
             // Step 2: Get regions (either provided or auto-detect)
             List<ObjectLabelService.RegionBox> regions = new ArrayList<>();
             List<OverlayShape> detectedShapes = new ArrayList<>();
@@ -125,22 +140,46 @@ public class UnifiedSceneAnalysisService {
             }
             
             log.info("[UNIFIED] Calling Qwen VL with {} regions", regions.size());
-            Map<String, ObjectLabelService.LabelResult> vlResults = 
-                objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
+            Map<String, ObjectLabelService.LabelResult> vlResults = new java.util.HashMap<>();
             
-            // Step 4: Extract VL data
-            if (!vlResults.isEmpty()) {
-                ObjectLabelService.LabelResult firstResult = vlResults.values().iterator().next();
-                result.setVlRawResponse(firstResult.rawResponse);
-                result.setVlSceneAnalysis(firstResult.sceneAnalysis);
-                log.info("[UNIFIED] VL analysis complete - rawResponse: {}, sceneAnalysis: {}",
-                    firstResult.rawResponse != null ? firstResult.rawResponse.length() + " chars" : "null",
-                    firstResult.sceneAnalysis != null ? firstResult.sceneAnalysis.length() + " chars" : "null");
+            try {
+                vlResults = objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
+                
+                // Step 4: Extract VL data
+                if (!vlResults.isEmpty()) {
+                    ObjectLabelService.LabelResult firstResult = vlResults.values().iterator().next();
+                    result.setVlRawResponse(firstResult.rawResponse);
+                    result.setVlSceneAnalysis(firstResult.sceneAnalysis);
+                    
+                    // Set sceneDescriptionZh (same as vlSceneAnalysis for Chinese)
+                    if (firstResult.sceneAnalysis != null && !firstResult.sceneAnalysis.isEmpty()) {
+                        result.setSceneDescriptionZh(firstResult.sceneAnalysis);
+                    }
+                    
+                    // Extract shortLabelZh from VL result if available
+                    if (firstResult.labelZh != null && !firstResult.labelZh.isEmpty()) {
+                        result.setShortLabelZh(firstResult.labelZh);
+                        log.info("[UNIFIED] Extracted shortLabelZh from VL: {}", firstResult.labelZh);
+                    }
+                    
+                    log.info("[UNIFIED] VL analysis complete - rawResponse: {}, sceneAnalysis: {}",
+                        firstResult.rawResponse != null ? firstResult.rawResponse.length() + " chars" : "null",
+                        firstResult.sceneAnalysis != null ? firstResult.sceneAnalysis.length() + " chars" : "null");
+                } else {
+                    log.warn("[UNIFIED] VL returned empty results");
+                }
+            } catch (Exception vlEx) {
+                log.error("[UNIFIED] VL analysis failed: {} - {}", vlEx.getClass().getSimpleName(), vlEx.getMessage());
+                // Continue without VL data - scene will still be created with grid overlay
             }
             
             // Step 5: Build overlay objects/polygons
             if (!detectedShapes.isEmpty()) {
                 buildOverlays(result, detectedShapes, vlResults);
+            } else {
+                // No shapes detected, default to grid
+                result.setOverlayType("grid");
+                log.info("[UNIFIED] No shapes detected, defaulting to grid overlay");
             }
             
             log.info("[UNIFIED] Analysis complete - overlayType: {}", result.getOverlayType());

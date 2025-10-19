@@ -16,6 +16,8 @@ public class SceneAnalysisResult {
     private List<com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon> overlayPolygons;
     private String overlayType;  // "objects", "polygons", or "grid"
     private String shortLabelZh;
+    private String sceneDescriptionZh;  // Chinese scene description (same as vlSceneAnalysis)
+    private String sourceAspect;  // e.g., "9:16" or "16:9"
     
     public SceneAnalysisResult() {}
     
@@ -77,6 +79,22 @@ public class SceneAnalysisResult {
         this.shortLabelZh = shortLabelZh;
     }
     
+    public String getSceneDescriptionZh() {
+        return sceneDescriptionZh;
+    }
+    
+    public void setSceneDescriptionZh(String sceneDescriptionZh) {
+        this.sceneDescriptionZh = sceneDescriptionZh;
+    }
+    
+    public String getSourceAspect() {
+        return sourceAspect;
+    }
+    
+    public void setSourceAspect(String sourceAspect) {
+        this.sourceAspect = sourceAspect;
+    }
+    
     /**
      * Apply this result to a Scene object
      */
@@ -101,6 +119,12 @@ public class SceneAnalysisResult {
         }
         if (shortLabelZh != null) {
             scene.setShortLabelZh(shortLabelZh);
+        }
+        if (sceneDescriptionZh != null) {
+            scene.setSceneDescriptionZh(sceneDescriptionZh);
+        }
+        if (sourceAspect != null) {
+            scene.setSourceAspect(sourceAspect);
         }
     }
 }

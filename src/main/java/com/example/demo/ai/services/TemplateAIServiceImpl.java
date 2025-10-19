@@ -152,8 +152,14 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             template.setTotalVideoLength(calculateTotalDuration(sceneSegments));
             
             // AI-driven template metadata & per-scene guidance (no presets if AI fails)
-            log.info("=== AI TEMPLATE GUIDANCE GENERATION ===");
-            generateAIMetadata(template, video, scenes, allSceneLabels, language, userDescription);            
+            log.info("=== AI TEMPLATE GUIDANCE GENERATION START ===");
+            log.info("About to call generateAIMetadata with {} scenes", scenes.size());
+            try {
+                generateAIMetadata(template, video, scenes, allSceneLabels, language, userDescription);
+                log.info("=== AI TEMPLATE GUIDANCE GENERATION COMPLETE ===");
+            } catch (Exception e) {
+                log.error("=== AI TEMPLATE GUIDANCE GENERATION FAILED ===", e);
+            }
             log.info("AI template generation completed for video ID: {} with {} scenes", 
                              video.getId(), scenes.size());
             return template;
@@ -168,17 +174,23 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         // Create base scene with clean data
         Scene scene = SceneProcessor.createFromSegment(segment, sceneNumber, language);
         
-        // Use unified scene analysis service
-        log.info("Analyzing scene {} using UnifiedSceneAnalysisService", sceneNumber);
-        SceneAnalysisResult analysisResult = unifiedSceneAnalysisService.analyzeScene(
-            videoUrl,
-            language,
-            segment.getStartTime(),
-            segment.getEndTime()
-        );
-        
-        // Apply analysis results to scene
-        analysisResult.applyToScene(scene);
+        try {
+            // Use unified scene analysis service
+            log.info("Analyzing scene {} using UnifiedSceneAnalysisService", sceneNumber);
+            SceneAnalysisResult analysisResult = unifiedSceneAnalysisService.analyzeScene(
+                videoUrl,
+                language,
+                segment.getStartTime(),
+                segment.getEndTime()
+            );
+            
+            // Apply analysis results to scene
+            analysisResult.applyToScene(scene);
+            
+        } catch (Exception e) {
+            log.error("Scene analysis failed for scene {}: {} - {}", sceneNumber, e.getClass().getSimpleName(), e.getMessage());
+            // Continue with basic scene - will use grid overlay as fallback
+        }
         
         // Fallback to grid if no overlays
         if (scene.getOverlayType() == null) {
@@ -448,6 +460,8 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     
     private void generateAIMetadata(ManualTemplate template, Video video, List<Scene> scenes, 
                                    List<String> sceneLabels, String language, String userDescription) {
+        log.info("[METADATA] generateAIMetadata called with {} scenes, language={}, userDescription={}", 
+            scenes.size(), language, userDescription != null ? "provided" : "null");
         try {
             // Build compact payload for one-shot Chinese guidance
             Map<String, Object> payload = new java.util.HashMap<>();
@@ -510,9 +524,11 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             }
             
             // Ask Qwen (single call) via ObjectLabelService extension
+            log.info("[METADATA] Calling objectLabelService.generateTemplateGuidance with payload size: {}", payload.size());
             Map<String, Object> result = objectLabelService.generateTemplateGuidance(payload);
+            log.info("[METADATA] generateTemplateGuidance returned: {}", result != null ? "result with " + result.size() + " keys" : "null");
             if (result == null || result.isEmpty()) {
-                log.info("AI guidance unavailable; leaving metadata/guidance empty (no presets)");
+                log.warn("[METADATA] AI guidance unavailable; leaving metadata/guidance empty (no presets)");
                 return;
             }
             
@@ -539,16 +555,18 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             // Apply template metadata
             @SuppressWarnings("unchecked")
             Map<String, Object> t = (Map<String, Object>) result.get("template");
+            log.info("[METADATA] Template metadata from AI: {}", t != null ? t.keySet() : "null");
             if (t != null) {
-                Object vp = t.get("videoPurpose"); if (vp instanceof String s) template.setVideoPurpose(trim40(s));
-                Object tone = t.get("tone"); if (tone instanceof String s) template.setTone(trim40(s));
-                Object light = t.get("lightingRequirements"); if (light instanceof String s) template.setLightingRequirements(trim60(s));
-                Object bgm = t.get("backgroundMusic"); if (bgm instanceof String s) template.setBackgroundMusic(trim40(s));
+                Object vp = t.get("videoPurpose"); if (vp instanceof String s) { template.setVideoPurpose(trim40(s)); log.info("[METADATA] Set videoPurpose: {}", s); }
+                Object tone = t.get("tone"); if (tone instanceof String s) { template.setTone(trim40(s)); log.info("[METADATA] Set tone: {}", s); }
+                Object light = t.get("lightingRequirements"); if (light instanceof String s) { template.setLightingRequirements(trim60(s)); log.info("[METADATA] Set lightingRequirements: {}", s); }
+                Object bgm = t.get("backgroundMusic"); if (bgm instanceof String s) { template.setBackgroundMusic(trim40(s)); log.info("[METADATA] Set backgroundMusic: {}", s); }
             }
 
             // Apply per-scene guidance
             @SuppressWarnings("unchecked")
             java.util.List<Map<String, Object>> rs = (java.util.List<Map<String, Object>>) result.get("scenes");
+            log.info("[METADATA] Scene guidance from AI: {} scenes", rs != null ? rs.size() : "null");
             if (rs != null) {
                 java.util.Map<Integer, Map<String, Object>> byNum = new java.util.HashMap<>();
                 for (Map<String, Object> one : rs) {
