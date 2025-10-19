@@ -563,18 +563,31 @@ public class ContentManager {
             video.setThumbnailUrl(uploadResult.thumbnailUrl);
             videoDao.saveVideo(video);
             
-            // 3. Analyze as single scene (NEW - no scene detection!)
-            // TODO: Replace with UnifiedSceneAnalysisService
+            // 3. Analyze as single scene using UnifiedSceneAnalysisService
             com.example.demo.model.Scene aiScene = new com.example.demo.model.Scene();
             aiScene.setSceneSource("manual");
-            
-            // 4. Set user-provided metadata
             aiScene.setSceneNumber(metadata.getSceneNumber());
             aiScene.setSceneTitle(metadata.getSceneTitle());
             aiScene.setSceneDescription(metadata.getSceneDescription());
-            
-            // 5. IMPORTANT: Set videoId so mini app can fetch the scene video
             aiScene.setVideoId(videoId);
+            
+            // Analyze the video for AI metadata (VL analysis, overlays, etc.)
+            try {
+                com.example.demo.ai.services.UnifiedSceneAnalysisService unifiedService = 
+                    applicationContext.getBean(com.example.demo.ai.services.UnifiedSceneAnalysisService.class);
+                com.example.demo.ai.services.SceneAnalysisResult analysisResult = 
+                    unifiedService.analyzeScene(video.getUrl(), language, null, null);
+                analysisResult.applyToScene(aiScene);
+            } catch (Exception e) {
+                log.warn("Scene analysis failed for scene {}: {}", metadata.getSceneNumber(), e.getMessage());
+                // Continue with basic scene
+            }
+            
+            // Fallback to grid if no overlay type set
+            if (aiScene.getOverlayType() == null) {
+                aiScene.setOverlayType("grid");
+                aiScene.setScreenGridOverlay(java.util.List.of(5));
+            }
             
             aiAnalyzedScenes.add(aiScene);
             log.info("Scene {} analyzed successfully with overlay type: {}", 
