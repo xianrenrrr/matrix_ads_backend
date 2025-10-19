@@ -494,7 +494,7 @@ public class ContentManager {
     // --- NEW: Manual Template Creation with AI Scene Analysis ---
     
     @Autowired
-    private com.example.demo.ai.services.SceneAnalysisService sceneAnalysisService;
+    // SceneAnalysisService removed - using UnifiedSceneAnalysisService
     
     @Autowired
     private com.example.demo.dao.VideoDao videoDao;

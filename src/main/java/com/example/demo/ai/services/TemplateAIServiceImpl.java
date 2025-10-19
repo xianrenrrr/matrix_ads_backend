@@ -1,7 +1,7 @@
 package com.example.demo.ai.services;
 
 import com.example.demo.ai.providers.vision.FFmpegSceneDetectionService;
-import com.example.demo.ai.providers.llm.VideoSummaryService;
+// VideoSummaryService removed - not used
 import java.net.URL;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -44,7 +44,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     private KeyframeExtractionService keyframeExtractionService;
     
     @Autowired
-    private VideoSummaryService videoSummaryService;
+    // VideoSummaryService removed - not used
     
     @Autowired
     private VideoMetadataService videoMetadataService;

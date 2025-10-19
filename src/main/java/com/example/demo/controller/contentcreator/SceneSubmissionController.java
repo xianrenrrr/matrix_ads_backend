@@ -8,7 +8,7 @@ import com.example.demo.api.ApiResponse;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Video;
 import com.example.demo.service.FirebaseStorageService;
-import com.example.demo.ai.services.ComparisonAIService;
+// ComparisonAIService removed - using QwenSceneComparisonService
 import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.DocumentReference;
 import com.google.cloud.firestore.DocumentSnapshot;
@@ -41,7 +41,7 @@ public class SceneSubmissionController {
     private Firestore db;
     
     @Autowired
-    private ComparisonAIService comparisonAIService;  // Old service - to be deprecated
+    // ComparisonAIService removed - using QwenSceneComparisonService
     
     @Autowired
     private com.example.demo.ai.services.QwenSceneComparisonService qwenComparisonService;  // New Qwen-based comparison

@@ -13,7 +13,7 @@ public class SceneAnalysisResult {
     private String vlRawResponse;
     private String vlSceneAnalysis;
     private List<Scene.ObjectOverlay> overlayObjects;
-    private List<com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon> overlayPolygons;
+    private List<com.example.demo.ai.seg.dto.OverlayPolygonClass> overlayPolygons;
     private String overlayType;  // "objects", "polygons", or "grid"
     private String shortLabelZh;
     private String sceneDescriptionZh;  // Chinese scene description (same as vlSceneAnalysis)
@@ -55,11 +55,11 @@ public class SceneAnalysisResult {
         this.overlayObjects = overlayObjects;
     }
     
-    public List<com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon> getOverlayPolygons() {
+    public List<com.example.demo.ai.seg.dto.OverlayPolygonClass> getOverlayPolygons() {
         return overlayPolygons;
     }
     
-    public void setOverlayPolygons(List<com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon> overlayPolygons) {
+    public void setOverlayPolygons(List<com.example.demo.ai.seg.dto.OverlayPolygonClass> overlayPolygons) {
         this.overlayPolygons = overlayPolygons;
     }
     

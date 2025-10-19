@@ -1,7 +1,7 @@
 package com.example.demo.model;
 
 import com.example.demo.ai.services.OverlayLegendService.LegendItem;
-import com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon;
+import com.example.demo.ai.seg.dto.OverlayPolygonClass;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Duration;
 import java.util.List;
@@ -38,7 +38,7 @@ public class Scene {
     private String sceneSource;  // "manual" | "ai" - how the scene was created
     private String overlayType;  // "grid" | "objects" | "polygons" - how to render guidance
     private List<ObjectOverlay> overlayObjects;  // only when overlayType="objects"
-    private List<OverlayPolygon> overlayPolygons; // only when overlayType="polygons"
+    private List<OverlayPolygonClass> overlayPolygons; // only when overlayType="polygons"
  // Color legend for overlays (same order as overlays) // Source aspect ratio, e.g., "9:16" or "16:9"
     private List<LegendItem> legend;  // color-coded legend for overlays
     private String sourceAspect;  // e.g., "9:16" for mini-app pixel mapping
@@ -366,11 +366,11 @@ public class Scene {
         this.sourceAspect = sourceAspect;
     }
     
-    public List<OverlayPolygon> getOverlayPolygons() {
+    public List<OverlayPolygonClass> getOverlayPolygons() {
         return overlayPolygons;
     }
     
-    public void setOverlayPolygons(List<OverlayPolygon> overlayPolygons) {
+    public void setOverlayPolygons(List<OverlayPolygonClass> overlayPolygons) {
         this.overlayPolygons = overlayPolygons;
     }
     

@@ -285,7 +285,7 @@ public class UnifiedSceneAnalysisService {
         Map<String, ObjectLabelService.LabelResult> vlResults
     ) {
         List<Scene.ObjectOverlay> objects = new ArrayList<>();
-        List<com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon> polygons = new ArrayList<>();
+        List<com.example.demo.ai.seg.dto.OverlayPolygonClass> polygons = new ArrayList<>();
         
         boolean hasPolygons = false;
         boolean hasBoxes = false;
@@ -313,18 +313,18 @@ public class UnifiedSceneAnalysisService {
             // Create overlay based on shape type
             if (shape instanceof OverlayPolygon polygon) {
                 hasPolygons = true;
-                // Create GoogleVisionProvider.OverlayPolygon
-                com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon scenePolygon = 
-                    new com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon();
+                // Create OverlayPolygonClass
+                com.example.demo.ai.seg.dto.OverlayPolygonClass scenePolygon = 
+                    new com.example.demo.ai.seg.dto.OverlayPolygonClass();
                 scenePolygon.setLabel(polygon.label());
                 scenePolygon.setLabelZh(labelZh);
                 scenePolygon.setLabelLocalized(labelZh);
                 scenePolygon.setConfidence((float) polygon.confidence());
                 
                 // Convert points
-                List<com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point> scenePoints = new ArrayList<>();
+                List<com.example.demo.ai.seg.dto.OverlayPolygonClass.Point> scenePoints = new ArrayList<>();
                 for (com.example.demo.ai.seg.dto.Point p : polygon.points()) {
-                    scenePoints.add(new com.example.demo.ai.providers.vision.GoogleVisionProvider.OverlayPolygon.Point(
+                    scenePoints.add(new com.example.demo.ai.seg.dto.OverlayPolygonClass.Point(
                         (float) p.x(), (float) p.y()
                     ));
                 }
