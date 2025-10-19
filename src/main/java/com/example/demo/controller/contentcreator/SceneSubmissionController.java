@@ -126,23 +126,6 @@ public class SceneSubmissionController {
                     
                     sceneSubmissionDao.update(updatedSubmission);
                     
-                    // Also update the similarityScore in submittedVideos for fast filtering
-                    try {
-                        DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
-                        DocumentSnapshot videoDoc = videoDocRef.get().get();
-                        if (videoDoc.exists()) {
-                            String sceneKey = "scenes." + sceneNumber + ".similarityScore";
-                            String statusKey = "scenes." + sceneNumber + ".status";
-                            Map<String, Object> updates = new HashMap<>();
-                            updates.put(sceneKey, updatedSubmission.getSimilarityScore());
-                            updates.put(statusKey, updatedSubmission.getStatus());
-                            videoDocRef.update(updates);
-                            log.info("Updated submittedVideos with similarityScore for scene {}", sceneNumber);
-                        }
-                    } catch (Exception e) {
-                        log.warn("Failed to update submittedVideos with similarityScore: {}", e.getMessage());
-                    }
-                    
                     // Log the score
                     log.info("AI Comparison completed for scene {}: score={}/100 ({}%), suggestions={}",
                             sceneNumber, 
@@ -282,7 +265,6 @@ public class SceneSubmissionController {
         Map<String, Object> sceneData = new HashMap<>();
         sceneData.put("sceneId", sceneSubmission.getId());
         sceneData.put("status", sceneSubmission.getStatus());
-        sceneData.put("similarityScore", sceneSubmission.getSimilarityScore());  // Denormalize for performance
         
         if (videoDoc.exists()) {
             Map<String, Object> currentScenes = (Map<String, Object>) videoDoc.get("scenes");
