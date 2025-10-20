@@ -1,6 +1,7 @@
 package com.example.demo.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -9,6 +10,8 @@ public class ManualTemplate {
     private String userId;
     private String templateTitle;
     private String templateDescription;  // NEW: Template description for manual templates
+    
+    @JsonDeserialize(using = DurationToIntDeserializer.class)
     private int totalVideoLength;
     private String videoPurpose;
     private String tone;
