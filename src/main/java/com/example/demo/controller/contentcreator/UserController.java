@@ -34,24 +34,6 @@ public class UserController {
     
     // Removed getPublishStatus - no longer needed
 
-
-    // No longer need TemplateDao - using assignments only
-    
-    // Get template details (Content Creator) - using assignment ID only
-    @GetMapping("/templates/{assignmentId}")
-    public ResponseEntity<ApiResponse<ManualTemplate>> getTemplateByIdForContentCreator(@PathVariable String assignmentId,
-                                                                                          @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
-        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        
-        // Get template from assignment
-        com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
-        if (assignment == null || assignment.getTemplateSnapshot() == null) {
-            throw new NoSuchElementException("Template assignment not found with ID: " + assignmentId);
-        }
-        
-        ManualTemplate template = assignment.getTemplateSnapshot();
-        String message = i18nService.getMessage("operation.success", language);
-        return ResponseEntity.ok(ApiResponse.ok(message, template));
-    }
+    // Removed getTemplateByIdForContentCreator - unused endpoint (0 references)
     
 }

@@ -538,9 +538,6 @@ public class ContentManager {
     @Autowired
     private com.example.demo.ai.label.ObjectLabelService objectLabelService;
     
-    @Autowired
-    private com.example.demo.ai.services.VideoMetadataService videoMetadataService;
-    
     /**
      * Create manual template with AI analysis for each scene video.
      * Each uploaded video is analyzed as ONE complete scene (no scene detection/cutting).
@@ -1001,91 +998,9 @@ public class ContentManager {
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }
     
-    /**
-     * Get all assignments for a template
-     * GET /content-manager/templates/{templateId}/assignments
-     */
-    @GetMapping("/{templateId}/assignments")
-    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getTemplateAssignments(
-            @PathVariable String templateId,
-            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
-        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        
-        List<com.example.demo.model.TemplateAssignment> assignments = 
-            templateAssignmentDao.getAssignmentsByTemplate(templateId);
-        
-        // Enrich with group information
-        List<Map<String, Object>> enrichedAssignments = new ArrayList<>();
-        for (com.example.demo.model.TemplateAssignment assignment : assignments) {
-            Map<String, Object> data = new HashMap<>();
-            data.put("id", assignment.getId());
-            data.put("groupId", assignment.getGroupId());
-            data.put("pushedAt", assignment.getPushedAt());
-            data.put("expiresAt", assignment.getExpiresAt());
-            data.put("durationDays", assignment.getDurationDays());
-            data.put("daysUntilExpiry", assignment.getDaysUntilExpiry());
-            
-            // Get group info
-            try {
-                com.example.demo.model.Group group = groupDao.findById(assignment.getGroupId());
-                if (group != null) {
-                    data.put("groupName", group.getGroupName());
-                    data.put("memberCount", group.getMemberCount());
-                }
-            } catch (Exception e) {
-                // Continue without group info
-            }
-            
-            enrichedAssignments.add(data);
-        }
-        
-        String message = i18nService.getMessage("operation.success", language);
-        return ResponseEntity.ok(ApiResponse.ok(message, enrichedAssignments));
-    }
+    // Removed getTemplateAssignments - unused endpoint (0 references)
     
-    /**
-     * Renew an assignment (extend expiration)
-     * POST /content-manager/assignments/{assignmentId}/renew
-     */
-    @PostMapping("/assignments/{assignmentId}/renew")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> renewAssignment(
-            @PathVariable String assignmentId,
-            @RequestBody Map<String, Object> requestBody,
-            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
-        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        
-        com.example.demo.model.TemplateAssignment assignment = 
-            templateAssignmentDao.getAssignment(assignmentId);
-        
-        if (assignment == null) {
-            throw new NoSuchElementException("Assignment not found with ID: " + assignmentId);
-        }
-        
-        Integer additionalDays = (Integer) requestBody.get("additionalDays");
-        if (additionalDays == null || additionalDays <= 0) {
-            throw new IllegalArgumentException("additionalDays must be positive");
-        }
-        
-        // Extend expiration
-        Calendar cal = Calendar.getInstance();
-        if (assignment.getExpiresAt() != null) {
-            cal.setTime(assignment.getExpiresAt());
-        }
-        cal.add(Calendar.DAY_OF_MONTH, additionalDays);
-        
-        assignment.setExpiresAt(cal.getTime());
-        assignment.setLastRenewed(new Date());
-        
-        templateAssignmentDao.updateAssignment(assignment);
-        
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("assignmentId", assignmentId);
-        responseData.put("newExpiresAt", assignment.getExpiresAt());
-        responseData.put("daysUntilExpiry", assignment.getDaysUntilExpiry());
-        
-        String message = i18nService.getMessage("assignment.renewed", language);
-        return ResponseEntity.ok(ApiResponse.ok(message, responseData));
-    }
+    // Removed renewAssignment - unused endpoint (0 references)
     
     /**
      * Delete an assignment

@@ -44,9 +44,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     private KeyframeExtractionService keyframeExtractionService;
     
     // VideoSummaryService removed - not used
-    
-    @Autowired
-    private VideoMetadataService videoMetadataService;
+    // VideoMetadataService removed - not used
     
     @Autowired
     private UnifiedSceneAnalysisService unifiedSceneAnalysisService;
@@ -171,7 +169,12 @@ public class TemplateAIServiceImpl implements TemplateAIService {
 
     private Scene processScene(SceneSegment segment, int sceneNumber, String videoUrl, String language) {
         // Create base scene with clean data
-        Scene scene = SceneProcessor.createFromSegment(segment, sceneNumber, language);
+        Scene scene = new Scene();
+        scene.setSceneNumber(sceneNumber);
+        scene.setStartTimeMs(segment.getStartTime());
+        scene.setEndTimeMs(segment.getEndTime());
+        scene.setSceneDurationInSeconds((segment.getEndTime() - segment.getStartTime()) / 1000);
+        scene.setSceneSource("ai");
         
         try {
             // Use unified scene analysis service
