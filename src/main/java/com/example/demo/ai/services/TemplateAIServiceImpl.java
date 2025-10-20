@@ -171,9 +171,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         // Create base scene with clean data
         Scene scene = new Scene();
         scene.setSceneNumber(sceneNumber);
-        scene.setStartTimeMs(segment.getStartTime());
-        scene.setEndTimeMs(segment.getEndTime());
-        scene.setSceneDurationInSeconds((segment.getEndTime() - segment.getStartTime()) / 1000);
+        scene.setStartTimeMs(segment.getStartTimeMs());
+        scene.setEndTimeMs(segment.getEndTimeMs());
+        scene.setSceneDurationInSeconds((segment.getEndTimeMs() - segment.getStartTimeMs()) / 1000);
         scene.setSceneSource("ai");
         
         try {
