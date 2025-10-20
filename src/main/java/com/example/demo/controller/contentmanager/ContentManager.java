@@ -329,12 +329,24 @@ public class ContentManager {
             @PathVariable String templateId, 
             @RequestBody ManualTemplate updatedTemplate,
             @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        log.info("=== UPDATE TEMPLATE REQUEST ===");
+        log.info("Template ID: {}", templateId);
+        log.info("Template Title: {}", updatedTemplate.getTemplateTitle());
+        log.info("Total Video Length (incoming): {}", updatedTemplate.getTotalVideoLength());
+        log.info("Number of scenes: {}", updatedTemplate.getScenes() != null ? updatedTemplate.getScenes().size() : 0);
+        
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         updatedTemplate.setId(templateId); // Ensure ID matches path parameter
         
         // Mark all scenes as manual with grid overlay for updates and validate minimum duration
         if (updatedTemplate.getScenes() != null) {
+            log.info("Processing {} scenes for update", updatedTemplate.getScenes().size());
+            int sceneIndex = 0;
             for (com.example.demo.model.Scene scene : updatedTemplate.getScenes()) {
+                sceneIndex++;
+                log.info("Scene {}: title='{}', duration={}s", 
+                    sceneIndex, scene.getSceneTitle(), scene.getSceneDurationInSeconds());
+                
                 if (scene.getSceneSource() == null) {
                     scene.setSceneSource("manual");
                 }
@@ -355,14 +367,16 @@ public class ContentManager {
                     }
                 }
             }
-        }
+            }
         
         boolean updated = templateDao.updateTemplate(templateId, updatedTemplate);
         
         if (updated) {
+            log.info("✅ Template updated successfully");
             String message = i18nService.getMessage("template.updated", language);
             return ResponseEntity.ok(ApiResponse.ok(message, updatedTemplate));
         } else {
+            log.error("❌ Template not found with ID: {}", templateId);
             throw new NoSuchElementException("Template not found with ID: " + templateId);
         }
     }
@@ -379,47 +393,6 @@ public class ContentManager {
             String message = i18nService.getMessage("template.deleted", language);
             return ResponseEntity.ok(ApiResponse.ok(message));
         }
-    }
-    
-    /**
-     * Update template groups (add/remove groups from template)
-     * PUT /content-manager/templates/{templateId}/groups
-     */
-    @PutMapping("/{templateId}/groups")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> updateTemplateGroups(
-            @PathVariable String templateId,
-            @RequestBody Map<String, Object> requestBody,
-            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
-        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        
-        // Get the new group IDs from request
-        @SuppressWarnings("unchecked")
-        List<String> newGroupIds = (List<String>) requestBody.get("groupIds");
-        if (newGroupIds == null) {
-            throw new IllegalArgumentException("groupIds list is required");
-        }
-        
-        // Check if template exists
-        ManualTemplate template = templateDao.getTemplate(templateId);
-        if (template == null) {
-            throw new NoSuchElementException("Template not found with ID: " + templateId);
-        }
-        
-        // Legacy: Group assignment now done via push button with TemplateAssignment
-        // This endpoint is deprecated - use push/delete assignment buttons instead
-        
-        // Get updated template to return current state
-        ManualTemplate updatedTemplate = templateDao.getTemplate(templateId);
-        
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("templateId", templateId);
-        responseData.put("templateTitle", updatedTemplate.getTemplateTitle());
-        // Legacy: assignedGroups deprecated, return empty for backward compatibility
-        responseData.put("groupIds", new ArrayList<>());
-        responseData.put("groupCount", 0);
-        
-        String message = i18nService.getMessage("template.groups.updated", language);
-        return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }
     
     /**
@@ -584,50 +557,74 @@ public class ContentManager {
             
             log.info("Processing scene {}: {}", metadata.getSceneNumber(), metadata.getSceneTitle());
             
-            // 1. Upload video (REUSE existing code)
-            String videoId = java.util.UUID.randomUUID().toString();
-            com.example.demo.service.FirebaseStorageService.UploadResult uploadResult = 
-                firebaseStorageService.uploadVideoWithThumbnail(videoFile, userId, videoId);
-            
-            // 2. Get video duration using FFmpeg
+            // 1. Get video duration using FFmpeg (MUST BE BEFORE UPLOAD!)
+            log.info("🎬 Extracting duration for scene {} video file: {}", metadata.getSceneNumber(), videoFile.getOriginalFilename());
             long videoDurationSeconds = 0;
             try {
-                // Save video to temp file for duration extraction
+                // Save video to temp file for duration extraction (copy bytes, don't use transferTo)
                 java.io.File tempVideo = java.io.File.createTempFile("duration-", ".mp4");
-                videoFile.transferTo(tempVideo);
+                log.info("📁 Created temp file: {}", tempVideo.getAbsolutePath());
+                
+                // Copy bytes from multipart file to temp file
+                try (java.io.InputStream is = videoFile.getInputStream();
+                     java.io.FileOutputStream fos = new java.io.FileOutputStream(tempVideo)) {
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = is.read(buffer)) != -1) {
+                        fos.write(buffer, 0, bytesRead);
+                    }
+                }
+                log.info("✅ Video file copied to temp location, size: {} bytes", tempVideo.length());
                 
                 // Use FFprobe to get duration
                 ProcessBuilder pb = new ProcessBuilder(
                     "ffprobe", "-v", "error", "-show_entries", "format=duration",
                     "-of", "default=noprint_wrappers=1:nokey=1", tempVideo.getAbsolutePath()
                 );
+                log.info("🔧 Running FFprobe command...");
                 Process proc = pb.start();
                 java.io.BufferedReader reader = new java.io.BufferedReader(
                     new java.io.InputStreamReader(proc.getInputStream())
                 );
                 String durationStr = reader.readLine();
-                proc.waitFor();
+                int exitCode = proc.waitFor();
                 tempVideo.delete();
+                
+                log.info("FFprobe exit code: {}, output: '{}'", exitCode, durationStr);
                 
                 if (durationStr != null && !durationStr.isEmpty()) {
                     videoDurationSeconds = (long) Double.parseDouble(durationStr);
-                    log.info("Video duration for scene {}: {} seconds", metadata.getSceneNumber(), videoDurationSeconds);
+                    log.info("✅ SUCCESS: Video duration for scene {}: {} seconds", metadata.getSceneNumber(), videoDurationSeconds);
+                } else {
+                    log.error("❌ FAILED: FFprobe returned empty duration for scene {}", metadata.getSceneNumber());
                 }
             } catch (Exception e) {
-                log.warn("Failed to extract video duration for scene {}: {}", metadata.getSceneNumber(), e.getMessage());
+                log.error("❌ EXCEPTION: Failed to extract video duration for scene {}: {} - {}", 
+                    metadata.getSceneNumber(), e.getClass().getSimpleName(), e.getMessage());
+                e.printStackTrace();
                 // Continue without duration - will default to 0
             }
             
-            // 3. Create Video object (REUSE existing code)
+            // 2. Upload video to Firebase (AFTER duration extraction)
+            String videoId = java.util.UUID.randomUUID().toString();
+            com.example.demo.service.FirebaseStorageService.UploadResult uploadResult = 
+                firebaseStorageService.uploadVideoWithThumbnail(videoFile, userId, videoId);
+            log.info("✅ Video uploaded to Firebase: {}", uploadResult.videoUrl);
+            
+            // 3. Create Video object
+            log.info("💾 Creating Video object with duration: {} seconds", videoDurationSeconds);
             com.example.demo.model.Video video = new com.example.demo.model.Video();
             video.setId(videoId);
             video.setUserId(userId);
             video.setUrl(uploadResult.videoUrl);
             video.setThumbnailUrl(uploadResult.thumbnailUrl);
             video.setDurationSeconds(videoDurationSeconds);
+            log.info("💾 Saving video to database...");
             videoDao.saveVideo(video);
+            log.info("✅ Video saved with ID: {}, duration: {} seconds", videoId, videoDurationSeconds);
             
             // 4. Analyze as single scene using UnifiedSceneAnalysisService
+            log.info("🎬 Creating Scene object for scene {}", metadata.getSceneNumber());
             com.example.demo.model.Scene aiScene = new com.example.demo.model.Scene();
             aiScene.setSceneSource("manual");
             aiScene.setSceneNumber(metadata.getSceneNumber());
@@ -635,6 +632,7 @@ public class ContentManager {
             aiScene.setSceneDescription(metadata.getSceneDescription());
             aiScene.setVideoId(videoId);
             aiScene.setSceneDurationInSeconds(videoDurationSeconds); // Set duration from video metadata
+            log.info("✅ Scene {} duration set to: {} seconds", metadata.getSceneNumber(), videoDurationSeconds);
             
             // Analyze the video for AI metadata (VL analysis, overlays, etc.)
             try {

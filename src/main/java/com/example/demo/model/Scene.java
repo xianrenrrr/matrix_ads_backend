@@ -3,6 +3,7 @@ package com.example.demo.model;
 import com.example.demo.ai.services.OverlayLegendService.LegendItem;
 import com.example.demo.ai.seg.dto.OverlayPolygonClass;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,7 @@ public class Scene {
     private int sceneNumber;
     private String sceneTitle;
     private String sceneDescription;  // NEW: Scene description for manual templates
+    @JsonDeserialize(using = DurationToLongDeserializer.class)
     private long sceneDurationInSeconds;
     private String scriptLine;
     private boolean presenceOfPerson;

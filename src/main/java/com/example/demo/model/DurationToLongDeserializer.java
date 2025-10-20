@@ -7,41 +7,36 @@ import java.io.IOException;
 import java.time.Duration;
 
 /**
- * Custom deserializer to handle Duration strings (like "PT0S", "PT32S") and convert them to int seconds.
+ * Custom deserializer to handle Duration strings (like "PT0S", "PT32S") and convert them to long seconds.
  * Also handles regular int/long values.
- * Use this for int/Integer fields.
+ * Use this for long/Long fields.
  */
-public class DurationToIntDeserializer extends JsonDeserializer<Integer> {
+public class DurationToLongDeserializer extends JsonDeserializer<Long> {
     
     @Override
-    public Integer deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+    public Long deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
         String value = p.getText();
         
         if (value == null || value.isEmpty()) {
-            return 0;
+            return 0L;
         }
         
         // If it's a Duration string (starts with "PT")
         if (value.startsWith("PT")) {
             try {
                 Duration duration = Duration.parse(value);
-                return (int) duration.getSeconds();
+                return duration.getSeconds();
             } catch (Exception e) {
                 // If parsing fails, return 0
-                return 0;
+                return 0L;
             }
         }
         
-        // Otherwise, try to parse as int
+        // Otherwise, try to parse as long
         try {
-            return Integer.parseInt(value);
+            return Long.parseLong(value);
         } catch (NumberFormatException e) {
-            // Try parsing as long first, then cast to int
-            try {
-                return (int) Long.parseLong(value);
-            } catch (NumberFormatException ex) {
-                return 0;
-            }
+            return 0L;
         }
     }
 }
