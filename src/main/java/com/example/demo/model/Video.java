@@ -10,6 +10,7 @@ public class Video {
     private String description;
     private String url; // URL or path to the video file
     private String thumbnailUrl;
+    private Long durationSeconds; // Video duration in seconds
 
     private String templateId;
     private List<Map<String, Object>> aiGeneratedScenes;
@@ -46,5 +47,7 @@ public class Video {
     public void setUrl(String url) { this.url = url; }
     public String getThumbnailUrl() { return thumbnailUrl; }
     public void setThumbnailUrl(String thumbnailUrl) { this.thumbnailUrl = thumbnailUrl; }
+    public Long getDurationSeconds() { return durationSeconds; }
+    public void setDurationSeconds(Long durationSeconds) { this.durationSeconds = durationSeconds; }
 
 }
