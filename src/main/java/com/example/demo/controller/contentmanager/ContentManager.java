@@ -589,21 +589,52 @@ public class ContentManager {
             com.example.demo.service.FirebaseStorageService.UploadResult uploadResult = 
                 firebaseStorageService.uploadVideoWithThumbnail(videoFile, userId, videoId);
             
-            // 2. Create Video object (REUSE existing code)
+            // 2. Get video duration using FFmpeg
+            long videoDurationSeconds = 0;
+            try {
+                // Save video to temp file for duration extraction
+                java.io.File tempVideo = java.io.File.createTempFile("duration-", ".mp4");
+                videoFile.transferTo(tempVideo);
+                
+                // Use FFprobe to get duration
+                ProcessBuilder pb = new ProcessBuilder(
+                    "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1", tempVideo.getAbsolutePath()
+                );
+                Process proc = pb.start();
+                java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(proc.getInputStream())
+                );
+                String durationStr = reader.readLine();
+                proc.waitFor();
+                tempVideo.delete();
+                
+                if (durationStr != null && !durationStr.isEmpty()) {
+                    videoDurationSeconds = (long) Double.parseDouble(durationStr);
+                    log.info("Video duration for scene {}: {} seconds", metadata.getSceneNumber(), videoDurationSeconds);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to extract video duration for scene {}: {}", metadata.getSceneNumber(), e.getMessage());
+                // Continue without duration - will default to 0
+            }
+            
+            // 3. Create Video object (REUSE existing code)
             com.example.demo.model.Video video = new com.example.demo.model.Video();
             video.setId(videoId);
             video.setUserId(userId);
             video.setUrl(uploadResult.videoUrl);
             video.setThumbnailUrl(uploadResult.thumbnailUrl);
+            video.setDurationSeconds(videoDurationSeconds);
             videoDao.saveVideo(video);
             
-            // 3. Analyze as single scene using UnifiedSceneAnalysisService
+            // 4. Analyze as single scene using UnifiedSceneAnalysisService
             com.example.demo.model.Scene aiScene = new com.example.demo.model.Scene();
             aiScene.setSceneSource("manual");
             aiScene.setSceneNumber(metadata.getSceneNumber());
             aiScene.setSceneTitle(metadata.getSceneTitle());
             aiScene.setSceneDescription(metadata.getSceneDescription());
             aiScene.setVideoId(videoId);
+            aiScene.setSceneDurationInSeconds(videoDurationSeconds); // Set duration from video metadata
             
             // Analyze the video for AI metadata (VL analysis, overlays, etc.)
             try {
