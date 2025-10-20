@@ -82,7 +82,7 @@ public class GroupController {
         group.setMemberCount(0);
         
         // Set default AI settings
-        group.setAiApprovalThreshold(0.85);
+        group.setAiApprovalThreshold(0.70);
         group.setAiAutoApprovalEnabled(true);
         group.setAllowManualOverride(true);
 

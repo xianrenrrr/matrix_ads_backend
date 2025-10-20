@@ -26,8 +26,8 @@ public class Group {
     private int memberCount;                         // Cached count of members
     
     // AI Settings
-    private double aiApprovalThreshold = 0.85;      // Similarity threshold for auto-approval (0-1)
-    private double aiAutoRejectThreshold = 0.50;    // Similarity threshold for auto-rejection (0-1) - submissions below this are auto-rejected and hidden
+    private double aiApprovalThreshold = 0.70;      // Similarity threshold for auto-approval (0-1)
+    private double aiAutoRejectThreshold = 0.60;    // Similarity threshold for auto-rejection (0-1) - submissions below this are auto-rejected and hidden
     private boolean aiAutoApprovalEnabled = true;   // Whether AI auto-approval is enabled
     private boolean allowManualOverride = true;     // Whether managers can override AI decisions
     private Map<String, Double> sceneThresholds;    // Custom thresholds for specific scenes
