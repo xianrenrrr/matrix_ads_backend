@@ -53,27 +53,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Value("${ai.template.useObjectOverlay:true}")
     private boolean useObjectOverlay;
     
-    @Value("${firebase.storage.bucket}")
-    private String bucketName;
-
-    @Value("${AI_YOLO_ENABLED:${ai.overlay.yoloFallback.enabled:true}}")
-    private boolean yoloFallbackEnabled;
-
-    @Value("${AI_YOLO_ENDPOINT:}")
-    private String hfYoloEndpoint;
-
-    @Value("${AI_YOLO_API_KEY:}")
-    private String hfYoloApiKey;
-
-    @Value("${AI_YOLO_MIN_AREA:0.02}")
-    private double hfMinArea;
-
-    @Value("${AI_YOLO_MAX_OBJECTS:4}")
-    private int hfMaxObjects;
-
-    @Value("${guidance.scripts.enforceMaxLen:true}")
-    private boolean enforceScriptMaxLen;
-
     @Value("${ai.overlay.includeLegend:false}")
     private boolean includeLegend;
 
@@ -222,32 +201,8 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         return scene;
     }
     
-    
-    private String extractKeyframe(Scene scene, SceneSegment segment, String videoUrl) {
-        var start = segment.getStartTime();
-        var end = segment.getEndTime();
-        
-        if (start == null || end == null || end.compareTo(start) <= 0) {
-            return null;
-        }
-        
-        try {
-            log.info("Extracting keyframe for scene {}...", scene.getSceneNumber());
-            return keyframeExtractionService.extractKeyframe(videoUrl, start, end);
-        } catch (Exception e) {
-            log.error("Keyframe extraction failed for scene {}: {}", 
-                     scene.getSceneNumber(), e.getMessage());
-            return null;
-        }
-    }
 
-    private int calculateTotalDuration(List<SceneSegment> segments) {
-        return segments.stream()
-            .mapToInt(segment -> (int) segment.getEndTime().minus(segment.getStartTime()).getSeconds())
-            .sum();
-    }
 
-    
     private ManualTemplate createFallbackTemplate(Video video, String language) {
         log.info("Creating fallback template due to processing failure in language: {}", language);
         
@@ -271,36 +226,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         return template;
     }
 
-    // Configurable threshold (defaults to 0.8 if property is absent)
-    private double getRegionsMinConf() {
-        try {
-            String val = System.getProperty("ai.labeling.regions.minConf");
-            if (val == null) {
-                val = System.getenv("AI_LABELING_REGIONS_MINCONF");
-            }
-            if (val != null) {
-                return Double.parseDouble(val);
-            }
-        } catch (Exception ignored) {}
-        return 0.8;
-    }
-
-    private double clamp01(double v) {
-        if (v < 0) return 0; if (v > 1) return 1; return v;
-    }
-
-    private String safeEndpoint(String url) {
-        try {
-            java.net.URI u = java.net.URI.create(url);
-            String host = u.getHost();
-            String scheme = u.getScheme();
-            if (host == null || scheme == null) return "<invalid-endpoint>";
-            return scheme + "://" + host;
-        } catch (Exception e) {
-            return "<invalid-endpoint>";
-        }
-    }
-    
     private void generateAIMetadata(ManualTemplate template, Video video, List<Scene> scenes, 
                                    List<String> sceneLabels, String language, String userDescription) {
         log.info("[METADATA] generateAIMetadata called with {} scenes, language={}, userDescription={}", 
@@ -461,12 +386,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     private String trim40(String s) { return s == null ? null : (s.length() > 40 ? s.substring(0,40) : s); }
     private String trim60(String s) { return s == null ? null : (s.length() > 60 ? s.substring(0,60) : s); }
 
-    // These thread-local helpers avoid coupling to DAO-assigned template IDs during generation
-    private static final ThreadLocal<String> TL_VIDEO_ID = new ThreadLocal<>();
-    private static final ThreadLocal<Integer> TL_SCENE_NUM = new ThreadLocal<>();
-    private String currentVideoIdSafe = TL_VIDEO_ID.get();
-    private Integer currentSceneNumberSafe = TL_SCENE_NUM.get();
-
     private String deriveDeviceOrientationFromFirstScene(List<Scene> scenes, String language) {
         try {
             // Get aspect ratio from keyframe dimensions
@@ -484,45 +403,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     }
 
 
-    private String coerceToScriptString(Object v) {
-        if (v == null) return null;
-        if (v instanceof String s) return s;
-        if (v instanceof Number n) return String.valueOf(n);
-        if (v instanceof java.util.List<?> list) {
-            // Join list items into a single short sentence
-            StringBuilder sb = new StringBuilder();
-            for (Object item : list) {
-                if (item == null) continue;
-                String s = null;
-                if (item instanceof String si) s = si;
-                else if (item instanceof Number ni) s = String.valueOf(ni);
-                else if (item instanceof java.util.Map<?,?> mi) s = extractFirstStringFromMap(mi);
-                if (s != null && !s.isBlank()) {
-                    if (sb.length() > 0) sb.append("，");
-                    sb.append(s.trim());
-                }
-            }
-            return sb.length() == 0 ? null : sb.toString();
-        }
-        if (v instanceof java.util.Map<?,?> m) {
-            String s = extractFirstStringFromMap(m);
-            return s;
-        }
-        return null;
-    }
 
-    private String extractFirstStringFromMap(java.util.Map<?,?> m) {
-        // Common candidate fields
-        String[] fields = {"text", "content", "value", "line", "script", "caption"};
-        for (String f : fields) {
-            Object x = m.get(f);
-            if (x instanceof String xs && !xs.isBlank()) return xs;
-        }
-        // Fallback: first stringy value
-        for (Object x : m.values()) {
-            if (x instanceof String xs && !xs.isBlank()) return xs;
-        }
-        return null;
-    }
 }
 // Change Log: Removed block grid services, simplified to use AI object detection only
