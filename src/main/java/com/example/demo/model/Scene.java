@@ -17,24 +17,17 @@ public class Scene {
     private long sceneDurationInSeconds;
     private String scriptLine;
     private boolean presenceOfPerson;
-    private String preferredGender;
-    private String personPosition;
     private String deviceOrientation;
-    private List<Integer> screenGridOverlay;
-    private List<String> screenGridOverlayLabels;
     private String backgroundInstructions;
     private String specificCameraInstructions;
     private String movementInstructions;
     private String audioNotes;
-    private String otherNotes;
     
     // New AI-generated fields
     private Long startTimeMs;
     private Long endTimeMs;
     private String keyframeUrl;
     private String videoId;  // NEW: For manual templates - ID of the scene's video
-    private Map<String, String> blockImageUrls;
-    private Map<String, String> blockDescriptions;
     
     // Dual scene system fields (add-only, non-breaking)
     private String sceneSource;  // "manual" | "ai" - how the scene was created
@@ -166,44 +159,12 @@ public class Scene {
         this.presenceOfPerson = presenceOfPerson;
     }
 
-    public String getPreferredGender() {
-        return preferredGender;
-    }
-
-    public void setPreferredGender(String preferredGender) {
-        this.preferredGender = preferredGender;
-    }
-
-    public String getPersonPosition() {
-        return personPosition;
-    }
-
-    public void setPersonPosition(String personPosition) {
-        this.personPosition = personPosition;
-    }
-
     public String getDeviceOrientation() {
         return deviceOrientation;
     }
 
     public void setDeviceOrientation(String deviceOrientation) {
         this.deviceOrientation = deviceOrientation;
-    }
-
-    public List<Integer> getScreenGridOverlay() {
-        return screenGridOverlay;
-    }
-
-    public void setScreenGridOverlay(List<Integer> screenGridOverlay) {
-        this.screenGridOverlay = screenGridOverlay;
-    }
-
-    public List<String> getScreenGridOverlayLabels() {
-        return screenGridOverlayLabels;
-    }
-
-    public void setScreenGridOverlayLabels(List<String> screenGridOverlayLabels) {
-        this.screenGridOverlayLabels = screenGridOverlayLabels;
     }
 
     public String getBackgroundInstructions() {
@@ -236,16 +197,6 @@ public class Scene {
 
     public void setAudioNotes(String audioNotes) {
         this.audioNotes = audioNotes;
-    }
-
-
-
-    public String getOtherNotes() {
-        return otherNotes;
-    }
-
-    public void setOtherNotes(String otherNotes) {
-        this.otherNotes = otherNotes;
     }
     
     // Getters and setters for new AI fields - excluded from Firestore
@@ -299,22 +250,6 @@ public class Scene {
     
     public void setVideoId(String videoId) {
         this.videoId = videoId;
-    }
-
-    public Map<String, String> getBlockImageUrls() {
-        return blockImageUrls;
-    }
-
-    public void setBlockImageUrls(Map<String, String> blockImageUrls) {
-        this.blockImageUrls = blockImageUrls;
-    }
-
-    public Map<String, String> getBlockDescriptions() {
-        return blockDescriptions;
-    }
-
-    public void setBlockDescriptions(Map<String, String> blockDescriptions) {
-        this.blockDescriptions = blockDescriptions;
     }
     
     // Getters and setters for dual scene system fields

@@ -56,6 +56,12 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Value("${ai.overlay.includeLegend:false}")
     private boolean includeLegend;
 
+    /**
+     * USED BY: AI Template Creation
+     * 
+     * Overload 1/4: Simplest entry point with default Chinese language
+     * Delegates to overload 4 with: language="zh-CN", userDescription=null, sceneThresholdOverride=null
+     */
     @Override
     public ManualTemplate generateTemplate(Video video) {
         ManualTemplate template = generateTemplate(video, "zh-CN"); // Chinese-first approach
@@ -63,16 +69,50 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         return template;
     }
     
+    /**
+     * USED BY: AI Template Creation
+     * 
+     * Overload 2/4: Allows custom language
+     * Delegates to overload 4 with: userDescription=null, sceneThresholdOverride=null
+     */
     @Override
     public ManualTemplate generateTemplate(Video video, String language) {
         return generateTemplate(video, language, null, null);
     }
     
+    /**
+     * USED BY: AI Template Creation
+     * 
+     * Overload 3/4: Allows custom language + user description
+     * Delegates to overload 4 with: sceneThresholdOverride=null
+     * 
+     * @param userDescription Optional user-provided description to guide AI metadata generation
+     */
     @Override
     public ManualTemplate generateTemplate(Video video, String language, String userDescription) {
         return generateTemplate(video, language, userDescription, null);
     }
     
+    /**
+     * USED BY: AI Template Creation
+     * 
+     * Overload 4/4: Main implementation with all parameters
+     * 
+     * Flow:
+     * 1. Detect scenes from video using scene detection service (FFmpeg or Azure/Alibaba)
+     * 2. For each detected scene:
+     *    - Extract keyframe
+     *    - Detect objects with YOLO (via UnifiedSceneAnalysisService)
+     *    - Label objects with Qwen VL
+     * 3. Generate template metadata and per-scene guidance with Qwen reasoning model
+     * 4. Return complete template with AI-analyzed scenes
+     * 
+     * @param video Video object to analyze
+     * @param language Language for AI analysis (e.g., "zh-CN", "en")
+     * @param userDescription Optional user description to guide AI metadata generation
+     * @param sceneThresholdOverride Optional scene detection sensitivity override (0.0-1.0)
+     * @return ManualTemplate with AI-detected and analyzed scenes
+     */
     @Override
     public ManualTemplate generateTemplate(Video video, String language, String userDescription, Double sceneThresholdOverride) {
         log.info("Starting AI template generation for video ID: {} in language: {} with user description: {}", 
@@ -97,8 +137,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             //   List<SceneSegment> sceneSegments = sceneDetectionService.detectScenes(videoUrl, sceneThresholdOverride);
             //
             // For now, create fallback template with single scene
-            log.warn("Scene detection not implemented - using fallback template");
-            return createFallbackTemplate(video, language);
             
             /* REMOVED FFmpeg scene detection code - TODO: Replace with Azure/Alibaba
             
@@ -159,6 +197,27 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         }
     }
 
+    /**
+     * USED BY: AI Template Creation
+     * 
+     * Process a single detected scene segment with AI analysis
+     * 
+     * Flow:
+     * 1. Create base scene with timing info from SceneSegment
+     * 2. Call UnifiedSceneAnalysisService to analyze the scene:
+     *    - Extract keyframe from video segment
+     *    - Detect objects with YOLO
+     *    - Label objects with Qwen VL (returns Chinese labels + scene analysis)
+     * 3. Apply analysis results to scene (overlays, labels, VL data)
+     * 4. Build legend if configured
+     * 5. Return fully analyzed scene
+     * 
+     * @param segment Scene timing info from scene detection
+     * @param sceneNumber Scene number in template
+     * @param videoUrl Original video URL
+     * @param language Language for AI analysis
+     * @return Scene with AI analysis (overlays, labels, metadata)
+     */
     private Scene processScene(SceneSegment segment, int sceneNumber, String videoUrl, String language) {
         // Create base scene with clean data
         Scene scene = new Scene();
@@ -203,6 +262,10 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     
 
 
+    /**
+     * USED BY: AI Template Creation (fallback only)
+     * Creates minimal fallback template when AI processing fails
+     */
     private ManualTemplate createFallbackTemplate(Video video, String language) {
         log.info("Creating fallback template due to processing failure in language: {}", language);
         
@@ -226,6 +289,29 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         return template;
     }
 
+    /**
+     * USED BY: AI Template Creation
+     * 
+     * Generates template-level metadata and per-scene guidance using Qwen reasoning model
+     * 
+     * NOTE: Manual Template Creation uses similar logic in ContentManager.generateManualTemplateMetadata()
+     * which directly calls objectLabelService.generateTemplateGuidance() without going through this service.
+     * 
+     * Flow:
+     * 1. Build payload with template info + scene data (keyframes, detected objects, VL analysis)
+     * 2. Call Qwen reasoning model via objectLabelService.generateTemplateGuidance()
+     * 3. Apply returned metadata to template:
+     *    - Template level: videoPurpose, tone, lightingRequirements, backgroundMusic
+     *    - Scene level: presenceOfPerson, movementInstructions, backgroundInstructions, etc.
+     * 4. Derive device orientation and video format from first scene's keyframe dimensions
+     * 
+     * @param template Template to populate with metadata
+     * @param video Original video object
+     * @param scenes List of analyzed scenes
+     * @param sceneLabels Collected scene labels (legacy, may be unused)
+     * @param language Language for AI generation
+     * @param userDescription Optional user description to guide AI
+     */
     private void generateAIMetadata(ManualTemplate template, Video video, List<Scene> scenes, 
                                    List<String> sceneLabels, String language, String userDescription) {
         log.info("[METADATA] generateAIMetadata called with {} scenes, language={}, userDescription={}", 
@@ -383,9 +469,18 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         }
     }
 
+    /**
+     * USED BY: Both AI Template Creation AND Manual Template Creation
+     * Utility methods for trimming AI-generated text to field length limits
+     */
     private String trim40(String s) { return s == null ? null : (s.length() > 40 ? s.substring(0,40) : s); }
     private String trim60(String s) { return s == null ? null : (s.length() > 60 ? s.substring(0,60) : s); }
 
+    /**
+     * USED BY: Both AI Template Creation AND Manual Template Creation
+     * Derives device orientation (aspect ratio) from first scene's keyframe dimensions
+     * Returns "9:16" for portrait or "16:9" for landscape
+     */
     private String deriveDeviceOrientationFromFirstScene(List<Scene> scenes, String language) {
         try {
             // Get aspect ratio from keyframe dimensions
