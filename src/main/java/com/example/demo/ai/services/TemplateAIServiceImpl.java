@@ -222,32 +222,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         return scene;
     }
     
-    /**
-     * @deprecated Replaced by UnifiedSceneAnalysisService
-     * This method is no longer used. Scene analysis is now handled by UnifiedSceneAnalysisService.
-     */
-    @Deprecated
-    
-    private com.example.demo.model.Scene.ObjectOverlay convertToSceneBox(OverlayBox box) {
-        com.example.demo.model.Scene.ObjectOverlay model = new com.example.demo.model.Scene.ObjectOverlay();
-        String zh = box.labelZh();
-        String lbl = box.label();
-        if (zh != null && !zh.isBlank()) {
-            model.setLabelZh(zh);
-            model.setLabelLocalized(zh);
-        }
-        if (lbl == null || lbl.isBlank()) lbl = zh; // fall back to zh to avoid empty label
-        model.setLabel(lbl);
-        if (model.getLabelLocalized() == null || model.getLabelLocalized().isBlank()) {
-            model.setLabelLocalized(lbl);
-        }
-        model.setConfidence((float) box.confidence());
-        model.setX((float) box.x());
-        model.setY((float) box.y());
-        model.setWidth((float) box.w());
-        model.setHeight((float) box.h());
-        return model;
-    }
     
     private String extractKeyframe(Scene scene, SceneSegment segment, String videoUrl) {
         var start = segment.getStartTime();
@@ -281,54 +255,17 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         template.setVideoId(video.getId());
         template.setUserId(video.getUserId());
         
-        if ("zh".equals(language) || "zh-CN".equals(language)) {
-            // Chinese fallback template
-            template.setTemplateTitle(video.getTitle() + " - 基础模板");
-            template.setVideoPurpose("基础视频内容展示");
-            template.setTone("专业");
-            template.setLightingRequirements("需要良好的照明");
-            template.setBackgroundMusic("建议使用轻柔的背景音乐");
-        } else {
-            // English fallback template
-            template.setTemplateTitle(video.getTitle() + " - Basic Template");
-            template.setVideoPurpose("Basic video content showcase");
-            template.setTone("Professional");
-            template.setLightingRequirements("Good lighting required");
-            template.setBackgroundMusic("Light background music recommended");
-        }
-        
+        // Minimal fallback - leave fields empty so user knows AI failed and can manually edit
+        String titleSuffix = "zh".equals(language) || "zh-CN".equals(language) ? " - 基础模板" : " - Basic Template";
+        template.setTemplateTitle(video.getTitle() + titleSuffix);
         template.setVideoFormat("1080p 16:9");
-        template.setTotalVideoLength(30); // Default 30 seconds
+        template.setTotalVideoLength(30);
 
-        // Create a single default scene with language support
+        // Create minimal scene - user will need to fill in details
         Scene defaultScene = new Scene();
         defaultScene.setSceneNumber(1);
         defaultScene.setSceneDurationInSeconds(30);
-        defaultScene.setPresenceOfPerson(true);
-        
-        if ("zh".equals(language) || "zh-CN".equals(language)) {
-            // Chinese scene metadata
-            defaultScene.setSceneTitle("主场景");
-            defaultScene.setScriptLine("请按照模板指南录制您的内容");
-            defaultScene.setPreferredGender("无偏好");
-            defaultScene.setPersonPosition("居中");
-            defaultScene.setDeviceOrientation("手机（竖屏 9:16）");
-            defaultScene.setMovementInstructions("静止");
-            defaultScene.setBackgroundInstructions("使用干净、专业的背景");
-            defaultScene.setSpecificCameraInstructions("从胸部以上拍摄，直视摄像头");
-            defaultScene.setAudioNotes("说话清楚，语速适中");
-        } else {
-            // English scene metadata
-            defaultScene.setSceneTitle("Main Scene");
-            defaultScene.setScriptLine("Please record your content following the template guidelines");
-            defaultScene.setPreferredGender("No Preference");
-            defaultScene.setPersonPosition("Center");
-            defaultScene.setDeviceOrientation("Phone (Portrait 9:16)");
-            defaultScene.setMovementInstructions("Static");
-            defaultScene.setBackgroundInstructions("Use a clean, professional background");
-            defaultScene.setSpecificCameraInstructions("Frame yourself from chest up, looking directly at camera");
-            defaultScene.setAudioNotes("Speak clearly and at moderate pace");
-        }
+        // Leave all other fields empty - user will manually edit
 
         template.setScenes(List.of(defaultScene));
         return template;
@@ -361,115 +298,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             return scheme + "://" + host;
         } catch (Exception e) {
             return "<invalid-endpoint>";
-        }
-    }
-
-    private boolean applyHuggingFaceYoloFallback(Scene scene, String keyframeUrl, String language) {
-        if (!yoloFallbackEnabled || hfYoloEndpoint == null || hfYoloEndpoint.isBlank()) return false;
-        try {
-            log.info("[HF-YOLO] fallback enabled; endpoint host={}", safeEndpoint(hfYoloEndpoint));
-            // Download keyframe to compute image dimensions and for HF binary post
-            BufferedImage img = ImageIO.read(new URL(keyframeUrl));
-            if (img == null) return false;
-            int width = img.getWidth();
-            int height = img.getHeight();
-
-            // Encode as JPEG bytes
-            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-            ImageIO.write(img, "jpg", baos);
-            byte[] imageBytes = baos.toByteArray();
-
-            // Call HuggingFace Inference API
-            org.springframework.web.client.RestTemplate rt = new org.springframework.web.client.RestTemplate();
-            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-            headers.set("Accept", "application/json");
-            headers.set("Content-Type", "image/jpeg");
-            if (hfYoloApiKey != null && !hfYoloApiKey.isBlank()) headers.set("Authorization", "Bearer " + hfYoloApiKey);
-            org.springframework.http.HttpEntity<byte[]> req = new org.springframework.http.HttpEntity<>(imageBytes, headers);
-            org.springframework.http.ResponseEntity<String> resp = rt.postForEntity(hfYoloEndpoint, req, String.class);
-            log.info("[HF-YOLO] status={} bodyLen={}", resp.getStatusCodeValue(), resp.getBody() == null ? 0 : resp.getBody().length());
-            if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null || resp.getBody().isBlank()) return false;
-
-            // Parse HF response
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            java.util.List<java.util.Map<String, Object>> dets;
-            try {
-                dets = mapper.readValue(resp.getBody(), new com.fasterxml.jackson.core.type.TypeReference<java.util.List<java.util.Map<String, Object>>>(){});
-            } catch (Exception e) {
-                log.warn("[HF-YOLO] parse error: {}", e.toString());
-                return false;
-            }
-            if (dets.isEmpty()) { log.info("[HF-YOLO] no detections"); return false; }
-
-            // Convert to normalized boxes and post-process
-            java.util.List<com.example.demo.model.Scene.ObjectOverlay> boxes = new java.util.ArrayList<>();
-            for (java.util.Map<String, Object> d : dets) {
-                double score = ((Number) d.getOrDefault("score", 0.0)).doubleValue();
-                @SuppressWarnings("unchecked") java.util.Map<String, Object> box = (java.util.Map<String, Object>) d.get("box");
-                if (box == null) continue;
-                double xmin = ((Number) box.getOrDefault("xmin", 0)).doubleValue();
-                double ymin = ((Number) box.getOrDefault("ymin", 0)).doubleValue();
-                double xmax = ((Number) box.getOrDefault("xmax", 0)).doubleValue();
-                double ymax = ((Number) box.getOrDefault("ymax", 0)).doubleValue();
-                double x = xmin / width;
-                double y = ymin / height;
-                double w = Math.max(0, xmax - xmin) / width;
-                double h = Math.max(0, ymax - ymin) / height;
-                double area = w * h;
-                if (area < hfMinArea) continue;
-                com.example.demo.model.Scene.ObjectOverlay m = new com.example.demo.model.Scene.ObjectOverlay();
-                m.setLabel((String) d.getOrDefault("label", ""));
-                m.setConfidence((float) score);
-                m.setX((float) x); m.setY((float) y); m.setWidth((float) w); m.setHeight((float) h);
-                boxes.add(m);
-            }
-            if (boxes.isEmpty()) { log.info("[HF-YOLO] no boxes after filter"); return false; }
-
-            // Keep top-K by score*area
-            boxes.sort((a,b) -> Double.compare(
-                ((double) b.getConfidence()) * b.getWidth() * b.getHeight(),
-                ((double) a.getConfidence()) * a.getWidth() * a.getHeight()));
-            if (boxes.size() > hfMaxObjects) boxes = boxes.subList(0, hfMaxObjects);
-
-            // Build regions p1..pn and label via Qwen
-            java.util.List<com.example.demo.ai.label.ObjectLabelService.RegionBox> regions = new java.util.ArrayList<>();
-            for (int i = 0; i < boxes.size(); i++) {
-                var b = boxes.get(i);
-                regions.add(new com.example.demo.ai.label.ObjectLabelService.RegionBox("p" + (i+1), b.getX(), b.getY(), b.getWidth(), b.getHeight()));
-            }
-            java.util.Map<String, com.example.demo.ai.label.ObjectLabelService.LabelResult> regionLabels = java.util.Collections.emptyMap();
-            try {
-                regionLabels = objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
-            } catch (Exception ignore) {}
-
-            // Apply labels
-            for (int i = 0; i < boxes.size(); i++) {
-                var b = boxes.get(i);
-                String sid = "p" + (i+1);
-                String zh = null; double conf = 0.0;
-                if (regionLabels != null && regionLabels.containsKey(sid)) {
-                    var lr = regionLabels.get(sid);
-                    if (lr != null && lr.labelZh != null && !lr.labelZh.isBlank() && lr.conf >= getRegionsMinConf()) {
-                        zh = lr.labelZh; conf = lr.conf;
-                    }
-                }
-                if (zh == null) zh = "未知";
-                b.setLabelZh(zh);
-                b.setLabelLocalized(zh);
-                if (b.getLabel() == null || b.getLabel().isBlank()) b.setLabel(zh);
-            }
-
-            scene.setOverlayObjects(boxes);
-            scene.setOverlayType("objects");
-            if (includeLegend && overlayLegendService != null) {
-                var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
-                scene.setLegend(legend);
-            }
-            log.info("[HF-YOLO] applied {} boxes", boxes.size());
-            return true;
-        } catch (Exception e) {
-            log.warn("[HF-YOLO] error: {}", e.toString());
-            return false;
         }
     }
     
@@ -591,11 +419,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 for (Scene s : scenes) {
                     Map<String, Object> one = byNum.get(s.getSceneNumber());
                     if (one == null) continue;
-                    // Parse script line more robustly (string/list/map and fallback keys)
-                    String scriptLine = parseScriptLineFromGuidance(one);
-                    if (scriptLine != null && !scriptLine.isBlank()) {
-                        s.setScriptLine(scriptLine);
-                    }
+                    // NOTE: scriptLine (提词器) is now extracted via ASR/OCR, not from AI
                     Object person = one.get("presenceOfPerson"); if (person instanceof Boolean b) s.setPresenceOfPerson(b);
                     Object move = one.get("movementInstructions"); if (move instanceof String v) s.setMovementInstructions(trim60(v));
                     Object bg = one.get("backgroundInstructions"); if (bg instanceof String v) s.setBackgroundInstructions(trim60(v));
@@ -637,36 +461,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     private String trim40(String s) { return s == null ? null : (s.length() > 40 ? s.substring(0,40) : s); }
     private String trim60(String s) { return s == null ? null : (s.length() > 60 ? s.substring(0,60) : s); }
 
-    private String sanitizeAndClampScript(String s) {
-        if (s == null) return null;
-        String original = s;
-        // Strip code fences and markdown artifacts
-        s = s.replaceAll("(?s)```json\\s*(.*?)\\s*```", "$1");
-        s = s.replaceAll("(?s)```\\s*(.*?)\\s*```", "$1");
-        // Collapse whitespace/newlines
-        s = s.replaceAll("\n|\r", " ").replaceAll("\\s+", " ").trim();
-        // Normalize common ASCII punctuation to Chinese style for zh content
-        s = s.replace(',', '，')
-             .replace(':', '：')
-             .replace(';', '；');
-        // Convert terminal punctuation to Chinese variants if applicable
-        if (s.endsWith(".")) s = s.substring(0, s.length()-1) + "。";
-        if (s.endsWith("!")) s = s.substring(0, s.length()-1) + "！";
-        if (s.endsWith("?")) s = s.substring(0, s.length()-1) + "？";
-        // Ensure ends with a sentence terminator (avoid dangling comma)
-        if (!s.isEmpty() && !s.matches(".*[。！？！？]$")) {
-            s = s + "。";
-        }
-        // Optionally clamp to 40 chars
-        if (enforceScriptMaxLen && s.length() > 40) {
-            String clamped = s.substring(0, 40);
-            log.info("[GUIDANCE] scriptLine clamped videoId={} scene={} oldLen={} newLen=40", 
-                (Object) currentVideoIdSafe, (Object) currentSceneNumberSafe, original.length());
-            return clamped;
-        }
-        return s;
-    }
-
     // These thread-local helpers avoid coupling to DAO-assigned template IDs during generation
     private static final ThreadLocal<String> TL_VIDEO_ID = new ThreadLocal<>();
     private static final ThreadLocal<Integer> TL_SCENE_NUM = new ThreadLocal<>();
@@ -689,21 +483,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         return null;
     }
 
-    // --- Helpers for robust script parsing ---
-    private String parseScriptLineFromGuidance(Map<String, Object> one) {
-        // Primary key
-        Object script = one.get("scriptLine");
-        String parsed = coerceToScriptString(script);
-        if (parsed != null && !parsed.isBlank()) return sanitizeAndClampScript(parsed);
-        // Fallback keys commonly returned by LLMs
-        String[] keys = {"script", "subtitle", "dialogue", "caption", "line"};
-        for (String k : keys) {
-            Object v = one.get(k);
-            parsed = coerceToScriptString(v);
-            if (parsed != null && !parsed.isBlank()) return sanitizeAndClampScript(parsed);
-        }
-        return null;
-    }
 
     private String coerceToScriptString(Object v) {
         if (v == null) return null;

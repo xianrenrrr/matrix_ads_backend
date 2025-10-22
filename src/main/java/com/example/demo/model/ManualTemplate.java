@@ -26,8 +26,6 @@ public class ManualTemplate {
     private String folderId;  // Folder ID for organization (null = root folder)
     
     // Additional database fields to prevent Firestore warnings
-    @Deprecated  // Use TemplateAssignment instead for time-limited assignments
-    private List<String> assignedGroups;
     private List<String> submittedVideos;
 
     public ManualTemplate() {
@@ -134,17 +132,7 @@ public class ManualTemplate {
     }
     
     // Getters and setters for additional database fields
-    public List<String> getAssignedGroups() {
-        if (assignedGroups == null) {
-            assignedGroups = new ArrayList<>();
-        }
-        return assignedGroups;
-    }
-    
-    public void setAssignedGroups(List<String> assignedGroups) {
-        this.assignedGroups = assignedGroups;
-    }
-    
+
     public List<String> getSubmittedVideos() {
         if (submittedVideos == null) {
             submittedVideos = new ArrayList<>();

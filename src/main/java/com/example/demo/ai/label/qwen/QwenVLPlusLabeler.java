@@ -61,8 +61,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             StringBuilder sb = new StringBuilder();
             sb.append("你是视频画面理解助手。请基于整段视频信息，生成中文模板“基本信息”和每个场景指导，严格使用JSON输出，不要任何解释文字。\n")
               .append("如果输入中存在 template.userDescription，请参考该描述进行撰写。\n")
-              .append("重要：scenes[*].scriptLine = 解说台词（旁白/解说者对观众说的话），不要写拍摄或设备操作说明。\n")
-              .append("风格：口语化、自然、可直接朗读；第二人称或旁白视角；≤40字，使用中文标点；不要表情、英文、参数或代码。\n")
+
               .append("输入（JSON）：\n")
               .append(payloadJson).append("\n")
               .append("输出格式（仅 JSON）：\n")
@@ -76,7 +75,6 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
               .append("  \"scenes\": [\n")
               .append("    {\n")
               .append("      \"sceneNumber\": 1,\n")
-              .append("      \"scriptLine\": \"解说台词（≤40字，口语化）\",\n")
               .append("      \"presenceOfPerson\": false,\n")
               .append("      \"movementInstructions\": \"...\",\n")
               .append("      \"backgroundInstructions\": \"...\",\n")

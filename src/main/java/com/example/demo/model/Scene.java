@@ -96,17 +96,7 @@ public class Scene {
         
         public float getHeight() { return height; }
         public void setHeight(float height) { this.height = height; }
-        
-        // Keep backward compatibility getters for now
-        @Deprecated
-        public float getW() { return width; }
-        @Deprecated
-        public void setW(float w) { this.width = w; }
-        
-        @Deprecated
-        public float getH() { return height; }
-        @Deprecated
-        public void setH(float h) { this.height = h; }
+
     }
 
     public Scene() {
