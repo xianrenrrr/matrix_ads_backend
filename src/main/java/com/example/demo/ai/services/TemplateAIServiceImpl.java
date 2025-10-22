@@ -1,7 +1,7 @@
 package com.example.demo.ai.services;
 
-import com.example.demo.ai.providers.vision.FFmpegSceneDetectionService;
-// VideoSummaryService removed - not used
+// TODO: Replace FFmpeg scene detection with Azure Video Indexer or Alibaba Cloud Video AI
+// See docs/AI_SYSTEM_ARCHITECTURE.md for migration plan
 import java.net.URL;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -27,8 +27,9 @@ import java.util.Map;
 public class TemplateAIServiceImpl implements TemplateAIService {
     private static final Logger log = LoggerFactory.getLogger(TemplateAIServiceImpl.class);
 
-    @Autowired
-    private FFmpegSceneDetectionService sceneDetectionService;
+    // TODO: Replace with Azure Video Indexer or Alibaba Cloud Video AI scene detection
+    // @Autowired
+    // private SceneDetectionService sceneDetectionService;
     
     @Autowired
     private SegmentationService segmentationService;
@@ -110,7 +111,18 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             
             String videoUrl = video.getUrl();
             
-            // Use FFmpeg for scene detection instead of Google Video Intelligence
+            // TODO: Implement Azure Video Indexer or Alibaba Cloud Video AI scene detection
+            // Current FFmpeg implementation has been removed
+            // See docs/AI_SYSTEM_ARCHITECTURE.md for migration plan
+            // Expected API:
+            //   List<SceneSegment> sceneSegments = sceneDetectionService.detectScenes(videoUrl, sceneThresholdOverride);
+            //
+            // For now, create fallback template with single scene
+            log.warn("Scene detection not implemented - using fallback template");
+            return createFallbackTemplate(video, language);
+            
+            /* REMOVED FFmpeg scene detection code - TODO: Replace with Azure/Alibaba
+            
             List<SceneSegment> sceneSegments = sceneDetectionService.detectScenes(videoUrl, sceneThresholdOverride);
             
             if (sceneSegments.isEmpty()) {
@@ -160,6 +172,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             log.info("AI template generation completed for video ID: {} with {} scenes", 
                              video.getId(), scenes.size());
             return template;
+            **/
 
         } catch (Exception e) {
             log.error("Error in AI template generation for video ID {}: {}", video.getId(), e.getMessage(), e);

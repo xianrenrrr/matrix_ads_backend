@@ -137,4 +137,157 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             if (listFile != null) try { listFile.delete(); } catch (Exception ignored) {}
         }
     }
+    
+    @Override
+    public String compileVideoWithBGM(String templateId, String userId, String compiledBy, List<String> bgmUrls, double bgmVolume) {
+        try {
+            // First compile video without BGM
+            String videoUrl = compileVideo(templateId, userId, compiledBy);
+            
+            // If no BGM specified, return video as-is
+            if (bgmUrls == null || bgmUrls.isEmpty()) {
+                return videoUrl;
+            }
+            
+            // Download compiled video
+            com.example.demo.ai.shared.GcsFileResolver.ResolvedFile videoFile = gcsFileResolver.resolve(videoUrl);
+            
+            // Download BGM files
+            List<java.io.File> bgmFiles = new ArrayList<>();
+            List<com.example.demo.ai.shared.GcsFileResolver.ResolvedFile> bgmHandles = new ArrayList<>();
+            
+            try {
+                for (String bgmUrl : bgmUrls) {
+                    com.example.demo.ai.shared.GcsFileResolver.ResolvedFile bgmHandle = gcsFileResolver.resolve(bgmUrl);
+                    bgmHandles.add(bgmHandle);
+                    bgmFiles.add(bgmHandle.getFile());
+                }
+                
+                // Get video duration
+                double videoDuration = getVideoDuration(videoFile.getFile());
+                
+                // Create BGM concat file (loop if needed)
+                java.io.File bgmConcatFile = createBGMConcatFile(bgmFiles, videoDuration);
+                
+                // Mix video with BGM
+                java.io.File outputFile = java.io.File.createTempFile("compiled-bgm-", ".mp4");
+                
+                try {
+                    mixVideoWithBGM(videoFile.getFile(), bgmConcatFile, outputFile, bgmVolume);
+                    
+                    // Upload final video
+                    String compositeVideoId = userId + "_" + templateId;
+                    String destObject = String.format("videos/%s/%s/compiled_bgm.mp4", userId, compositeVideoId);
+                    
+                    com.google.cloud.storage.BlobInfo blobInfo = com.google.cloud.storage.BlobInfo
+                        .newBuilder(firebaseStorageService.getBucketName(), destObject)
+                        .setContentType("video/mp4")
+                        .build();
+                    
+                    firebaseStorageService.getStorage().create(blobInfo, java.nio.file.Files.readAllBytes(outputFile.toPath()));
+                    
+                    return String.format("https://storage.googleapis.com/%s/%s", 
+                        firebaseStorageService.getBucketName(), destObject);
+                        
+                } finally {
+                    outputFile.delete();
+                    bgmConcatFile.delete();
+                }
+                
+            } finally {
+                videoFile.close();
+                for (com.example.demo.ai.shared.GcsFileResolver.ResolvedFile handle : bgmHandles) {
+                    try { handle.close(); } catch (Exception ignored) {}
+                }
+            }
+            
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to compile video with BGM: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Get video duration in seconds
+     */
+    private double getVideoDuration(java.io.File videoFile) throws Exception {
+        ProcessBuilder pb = new ProcessBuilder(
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", videoFile.getAbsolutePath()
+        );
+        Process proc = pb.start();
+        java.io.BufferedReader reader = new java.io.BufferedReader(
+            new java.io.InputStreamReader(proc.getInputStream())
+        );
+        String durationStr = reader.readLine();
+        proc.waitFor();
+        return Double.parseDouble(durationStr);
+    }
+    
+    /**
+     * Create concatenated BGM file that loops to match video duration
+     */
+    private java.io.File createBGMConcatFile(List<java.io.File> bgmFiles, double videoDuration) throws Exception {
+        // Calculate total BGM duration
+        double totalBGMDuration = 0;
+        for (java.io.File bgmFile : bgmFiles) {
+            totalBGMDuration += getVideoDuration(bgmFile);
+        }
+        
+        // Create concat list with looping
+        java.io.File concatList = java.io.File.createTempFile("bgm-concat-", ".txt");
+        try (java.io.PrintWriter pw = new java.io.PrintWriter(concatList, java.nio.charset.StandardCharsets.UTF_8)) {
+            double currentDuration = 0;
+            while (currentDuration < videoDuration) {
+                for (java.io.File bgmFile : bgmFiles) {
+                    pw.println("file '" + bgmFile.getAbsolutePath().replace("'", "'\\''") + "'");
+                    currentDuration += getVideoDuration(bgmFile);
+                    if (currentDuration >= videoDuration) break;
+                }
+            }
+        }
+        
+        // Concatenate BGM files
+        java.io.File concatenatedBGM = java.io.File.createTempFile("bgm-full-", ".mp3");
+        ProcessBuilder pb = new ProcessBuilder(
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concatList.getAbsolutePath(),
+            "-t", String.valueOf(videoDuration), // Trim to video duration
+            "-c", "copy", concatenatedBGM.getAbsolutePath()
+        );
+        Process proc = pb.start();
+        int exitCode = proc.waitFor();
+        concatList.delete();
+        
+        if (exitCode != 0) {
+            throw new RuntimeException("Failed to concatenate BGM files");
+        }
+        
+        return concatenatedBGM;
+    }
+    
+    /**
+     * Mix video with background music
+     */
+    private void mixVideoWithBGM(java.io.File videoFile, java.io.File bgmFile, java.io.File outputFile, double bgmVolume) throws Exception {
+        // Use FFmpeg to mix video with BGM
+        // -filter_complex "[1:a]volume=<volume>[a1];[0:a][a1]amix=inputs=2:duration=shortest[aout]"
+        ProcessBuilder pb = new ProcessBuilder(
+            "ffmpeg", "-y",
+            "-i", videoFile.getAbsolutePath(),
+            "-i", bgmFile.getAbsolutePath(),
+            "-filter_complex", String.format("[1:a]volume=%.2f[a1];[0:a][a1]amix=inputs=2:duration=shortest[aout]", bgmVolume),
+            "-map", "0:v",
+            "-map", "[aout]",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            outputFile.getAbsolutePath()
+        );
+        
+        Process proc = pb.start();
+        int exitCode = proc.waitFor();
+        
+        if (exitCode != 0) {
+            throw new RuntimeException("Failed to mix video with BGM");
+        }
+    }
 }

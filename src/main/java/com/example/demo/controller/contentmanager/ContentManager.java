@@ -524,12 +524,14 @@ public class ContentManager {
         @RequestParam(value = "templateDescription", required = false) String templateDescription,
         @RequestParam(value = "folderId", required = false) String folderId,
         @RequestParam("scenesMetadata") String scenesMetadataJson,
+        @RequestParam(value = "isASR", required = false, defaultValue = "true") Boolean isASR,
         @RequestParam Map<String, org.springframework.web.multipart.MultipartFile> videoFiles,
         @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage
     ) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
         log.info("Creating manual template with AI analysis for user: {}", userId);
+        log.info("Subtitle extraction method: {}", isASR ? "ASR (Speech-to-Text)" : "OCR (Text Recognition)");
         
         // Parse scenes metadata
         com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
