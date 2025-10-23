@@ -665,7 +665,6 @@ public class ContentManager {
             // Fallback to grid if no overlay type set
             if (aiScene.getOverlayType() == null) {
                 aiScene.setOverlayType("grid");
-                aiScene.setScreenGridOverlay(java.util.List.of(5));
             }
             
             aiAnalyzedScenes.add(aiScene);

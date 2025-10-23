@@ -248,7 +248,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         // Fallback to grid if no overlays
         if (scene.getOverlayType() == null) {
             scene.setOverlayType("grid");
-            scene.setScreenGridOverlay(java.util.List.of(5));
         }
         
         // Build legend if needed

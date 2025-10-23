@@ -92,11 +92,6 @@ public class TemplateCascadeDeletionService {
                         if (s.getKeyframeUrl() != null && !s.getKeyframeUrl().isBlank()) {
                             storageService.deleteObjectByUrl(s.getKeyframeUrl());
                         }
-                        if (s.getBlockImageUrls() != null) {
-                            for (String url : s.getBlockImageUrls().values()) {
-                                storageService.deleteObjectByUrl(url);
-                            }
-                        }
                     }
                 }
             } catch (Exception e) {
