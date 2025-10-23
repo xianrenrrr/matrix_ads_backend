@@ -1,8 +1,15 @@
 package com.example.demo.ai.subtitle;
 
-import com.alibaba.dashscope.audio.asr.transcription.*;
+import com.alibaba.dashscope.audio.asr.transcription.Transcription;
+import com.alibaba.dashscope.audio.asr.transcription.TranscriptionParam;
+import com.alibaba.dashscope.audio.asr.transcription.TranscriptionResult;
+import com.alibaba.dashscope.audio.asr.transcription.TranscriptionQueryParam;
 import com.alibaba.dashscope.exception.NoApiKeyException;
+import com.alibaba.dashscope.exception.InputRequiredException;
+import com.alibaba.dashscope.common.ResultCallback;
 import com.alibaba.dashscope.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,11 +17,15 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * ASR (Automatic Speech Recognition) based subtitle extraction using Alibaba Cloud Qwen
@@ -33,6 +44,10 @@ public class ASRSubtitleExtractor {
     
     @Value("${AI_QWEN_API_KEY:}")
     private String apiKey;
+    
+    private static final String MODEL = "sensevoice-v1";
+    private static final int MAX_WAIT_SECONDS = 300; // 5 minutes max wait
+    private static final ObjectMapper objectMapper = new ObjectMapper();
     
     /**
      * Extract subtitles using ASR
@@ -77,9 +92,13 @@ public class ASRSubtitleExtractor {
         // Download video if it's a URL
         File videoFile;
         if (videoUrl.startsWith("http")) {
+            log.info("Downloading video from URL: {}", videoUrl);
             Path tempVideo = Files.createTempFile("video_", ".mp4");
-            // TODO: Download video from URL
+            try (InputStream in = new URL(videoUrl).openStream()) {
+                Files.copy(in, tempVideo, StandardCopyOption.REPLACE_EXISTING);
+            }
             videoFile = tempVideo.toFile();
+            log.info("Video downloaded to: {}", tempVideo);
         } else {
             videoFile = new File(videoUrl);
         }
@@ -117,201 +136,158 @@ public class ASRSubtitleExtractor {
         log.info("Calling Qwen ASR API for file: {}", audioFile.getName());
         
         if (apiKey == null || apiKey.isEmpty()) {
-            throw new NoApiKeyException("AI_QWEN_API_KEY environment variable not set");
+            throw new IllegalStateException("AI_QWEN_API_KEY is not configured");
         }
         
-        // Create transcription request
+        // Step 1: Submit transcription task
+        String taskId = submitTranscriptionTask(audioFile, language);
+        log.info("Transcription task submitted. Task ID: {}", taskId);
+        
+        // Step 2: Poll for task completion
+        String transcriptionUrl = waitForTaskCompletion(taskId);
+        log.info("Transcription completed. Result URL: {}", transcriptionUrl);
+        
+        // Step 3: Download and parse transcription result
+        List<SubtitleSegment> segments = parseTranscriptionResult(transcriptionUrl);
+        log.info("Parsed {} subtitle segments", segments.size());
+        
+        return segments;
+    }
+    
+    /**
+     * Submit transcription task to Alibaba Cloud
+     */
+    private String submitTranscriptionTask(File audioFile, String language) throws Exception {
+        try {
+            Transcription transcription = new Transcription();
+            
+            TranscriptionParam param = TranscriptionParam.builder()
+                .model(MODEL)
+                .fileUrls(List.of(audioFile.toURI().toString()))
+                .apiKey(apiKey)
+                .build();
+            
+            TranscriptionResult result = transcription.asyncCall(param);
+            
+            if (result.getOutput() == null || result.getOutput().getTaskId() == null) {
+                throw new RuntimeException("Failed to submit transcription task: " + result);
+            }
+            
+            return result.getOutput().getTaskId();
+            
+        } catch (NoApiKeyException e) {
+            throw new IllegalStateException("API key is required for ASR", e);
+        } catch (InputRequiredException e) {
+            throw new IllegalArgumentException("Invalid input for ASR", e);
+        }
+    }
+    
+    /**
+     * Wait for transcription task to complete
+     * Polls the task status until it's SUCCEEDED or FAILED
+     */
+    private String waitForTaskCompletion(String taskId) throws Exception {
         Transcription transcription = new Transcription();
         
-        // Build transcription parameters
-        TranscriptionParam param = TranscriptionParam.builder()
-            .model("paraformer-v2")  // Qwen ASR model
-            .fileUrls(List.of(audioFile.toURI().toString()))
-            .language(mapLanguageCode(language))  // "zh" or "en"
-            .build();
+        long startTime = System.currentTimeMillis();
+        long maxWaitMs = MAX_WAIT_SECONDS * 1000L;
         
-        // Submit transcription task
-        log.info("Submitting ASR transcription task...");
-        TranscriptionResult result = transcription.asyncCall(param);
-        
-        // Get task ID
-        String taskId = result.getTaskId();
-        log.info("ASR task submitted. Task ID: {}", taskId);
-        
-        // Poll for completion
-        TranscriptionQueryParam queryParam = TranscriptionQueryParam.builder()
-            .taskId(taskId)
-            .build();
-        
-        TranscriptionQueryResult queryResult = null;
-        int maxAttempts = 60;  // Max 5 minutes (60 * 5 seconds)
-        int attempt = 0;
-        
-        while (attempt < maxAttempts) {
-            Thread.sleep(5000);  // Wait 5 seconds between polls
-            queryResult = transcription.wait(queryParam);
+        while (true) {
+            // Check timeout
+            if (System.currentTimeMillis() - startTime > maxWaitMs) {
+                throw new RuntimeException("Transcription task timed out after " + MAX_WAIT_SECONDS + " seconds");
+            }
             
-            String status = queryResult.getTaskStatus();
-            log.info("ASR task status: {} (attempt {}/{})", status, attempt + 1, maxAttempts);
+            // Query task status
+            TranscriptionQueryParam queryParam = TranscriptionQueryParam.builder()
+                .taskId(taskId)
+                .apiKey(apiKey)
+                .build();
+            
+            TranscriptionResult result = transcription.wait(queryParam);
+            
+            if (result.getOutput() == null) {
+                throw new RuntimeException("Failed to query transcription task: " + result);
+            }
+            
+            String status = result.getOutput().getTaskStatus();
+            log.info("Task {} status: {}", taskId, status);
             
             if ("SUCCEEDED".equals(status)) {
-                break;
+                // Task completed successfully
+                if (result.getOutput().getResults() == null || result.getOutput().getResults().isEmpty()) {
+                    throw new RuntimeException("No transcription results found");
+                }
+                
+                String transcriptionUrl = result.getOutput().getResults().get(0).getTranscriptionUrl();
+                if (transcriptionUrl == null || transcriptionUrl.isEmpty()) {
+                    throw new RuntimeException("Transcription URL is empty");
+                }
+                
+                return transcriptionUrl;
+                
             } else if ("FAILED".equals(status)) {
-                throw new RuntimeException("ASR task failed: " + queryResult.getMessage());
+                throw new RuntimeException("Transcription task failed: " + result);
+                
+            } else if ("RUNNING".equals(status) || "PENDING".equals(status)) {
+                // Task still in progress, wait and retry
+                Thread.sleep(2000); // Wait 2 seconds before next poll
+                
+            } else {
+                throw new RuntimeException("Unknown task status: " + status);
             }
-            
-            attempt++;
         }
-        
-        if (queryResult == null || !"SUCCEEDED".equals(queryResult.getTaskStatus())) {
-            throw new RuntimeException("ASR task timeout after " + maxAttempts + " attempts");
-        }
-        
-        // Parse results
-        log.info("ASR task completed successfully. Parsing results...");
-        return parseASRResults(queryResult);
     }
     
     /**
-     * Parse ASR results into SubtitleSegment list
+     * Download and parse transcription result from URL
+     * Converts Qwen ASR format to SubtitleSegment list
      */
-    private List<SubtitleSegment> parseASRResults(TranscriptionQueryResult result) {
+    private List<SubtitleSegment> parseTranscriptionResult(String transcriptionUrl) throws Exception {
+        log.info("Downloading transcription result from: {}", transcriptionUrl);
+        
+        // Download JSON result
+        String jsonContent;
+        try (InputStream in = new URL(transcriptionUrl).openStream()) {
+            jsonContent = new String(in.readAllBytes(), "UTF-8");
+        }
+        
+        log.debug("Transcription JSON: {}", jsonContent);
+        
+        // Parse JSON
+        JsonNode root = objectMapper.readTree(jsonContent);
         List<SubtitleSegment> segments = new ArrayList<>();
         
-        try {
-            // Get transcription results
-            List<TranscriptionTaskResult> taskResults = result.getResults();
-            
-            if (taskResults == null || taskResults.isEmpty()) {
-                log.warn("No transcription results found");
-                return segments;
-            }
-            
-            // Process each result
-            for (TranscriptionTaskResult taskResult : taskResults) {
-                String transcriptionUrl = taskResult.getTranscriptionUrl();
-                log.info("Downloading transcription from: {}", transcriptionUrl);
-                
-                // Download and parse transcription JSON
-                String jsonContent = downloadTranscriptionJson(transcriptionUrl);
-                segments.addAll(parseTranscriptionJson(jsonContent));
-            }
-            
-            log.info("Parsed {} subtitle segments", segments.size());
-            
-        } catch (Exception e) {
-            log.error("Failed to parse ASR results", e);
+        // Navigate to transcripts array
+        JsonNode transcripts = root.path("transcripts");
+        if (!transcripts.isArray() || transcripts.isEmpty()) {
+            log.warn("No transcripts found in result");
+            return segments;
         }
         
+        // Get first transcript (channel 0)
+        JsonNode transcript = transcripts.get(0);
+        JsonNode sentences = transcript.path("sentences");
+        
+        if (!sentences.isArray()) {
+            log.warn("No sentences found in transcript");
+            return segments;
+        }
+        
+        // Convert each sentence to SubtitleSegment
+        for (JsonNode sentence : sentences) {
+            long beginTime = sentence.path("begin_time").asLong();
+            long endTime = sentence.path("end_time").asLong();
+            String text = sentence.path("text").asText();
+            
+            if (text != null && !text.isEmpty()) {
+                SubtitleSegment segment = new SubtitleSegment(beginTime, endTime, text, 1.0);
+                segments.add(segment);
+                log.debug("Parsed segment: {}", segment);
+            }
+        }
+        
+        log.info("Successfully parsed {} subtitle segments", segments.size());
         return segments;
-    }
-    
-    /**
-     * Download transcription JSON from URL
-     */
-    private String downloadTranscriptionJson(String url) throws IOException {
-        java.net.URL transcriptionUrl = new java.net.URL(url);
-        java.io.BufferedReader reader = new java.io.BufferedReader(
-            new java.io.InputStreamReader(transcriptionUrl.openStream(), java.nio.charset.StandardCharsets.UTF_8)
-        );
-        
-        StringBuilder content = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            content.append(line);
-        }
-        reader.close();
-        
-        return content.toString();
-    }
-    
-    /**
-     * Parse transcription JSON into SubtitleSegment list
-     * 
-     * Expected format:
-     * {
-     *   "transcripts": [{
-     *     "channel_id": 0,
-     *     "sentences": [{
-     *       "begin_time": 100,
-     *       "end_time": 3820,
-     *       "text": "Hello world, 这里是阿里巴巴语音实验室。",
-     *       "words": [...]
-     *     }]
-     *   }]
-     * }
-     */
-    private List<SubtitleSegment> parseTranscriptionJson(String jsonContent) {
-        List<SubtitleSegment> segments = new ArrayList<>();
-        
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(jsonContent);
-            
-            // Get transcripts array
-            com.fasterxml.jackson.databind.JsonNode transcripts = root.get("transcripts");
-            if (transcripts == null || !transcripts.isArray()) {
-                log.warn("No transcripts array found in JSON");
-                return segments;
-            }
-            
-            // Process each transcript (usually just one for single audio file)
-            for (com.fasterxml.jackson.databind.JsonNode transcript : transcripts) {
-                com.fasterxml.jackson.databind.JsonNode sentences = transcript.get("sentences");
-                
-                if (sentences == null || !sentences.isArray()) {
-                    continue;
-                }
-                
-                // Process each sentence
-                for (com.fasterxml.jackson.databind.JsonNode sentence : sentences) {
-                    long beginTime = sentence.get("begin_time").asLong();
-                    long endTime = sentence.get("end_time").asLong();
-                    String text = sentence.get("text").asText();
-                    
-                    // Create SubtitleSegment
-                    SubtitleSegment segment = new SubtitleSegment();
-                    segment.setStartTimeMs(beginTime);
-                    segment.setEndTimeMs(endTime);
-                    segment.setText(text);
-                    segment.setConfidence(1.0);  // Qwen ASR doesn't provide confidence
-                    
-                    segments.add(segment);
-                    
-                    log.debug("Parsed segment: {}ms-{}ms: {}", beginTime, endTime, text);
-                }
-            }
-            
-        } catch (Exception e) {
-            log.error("Failed to parse transcription JSON", e);
-        }
-        
-        return segments;
-    }
-    
-    /**
-     * Map language code to Alibaba Cloud format
-     */
-    private String mapLanguageCode(String language) {
-        if (language == null) {
-            return "zh";  // Default to Chinese
-        }
-        
-        // Map common formats to Alibaba Cloud format
-        switch (language.toLowerCase()) {
-            case "zh":
-            case "zh-cn":
-            case "zh-hans":
-            case "chinese":
-                return "zh";
-            case "en":
-            case "en-us":
-            case "en-gb":
-            case "english":
-                return "en";
-            default:
-                log.warn("Unknown language code: {}, defaulting to zh", language);
-                return "zh";
-        }
     }
 }

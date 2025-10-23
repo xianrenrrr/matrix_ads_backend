@@ -1,7 +1,7 @@
 package com.example.demo.controller.contentmanager;
 
+import com.example.demo.api.ApiResponse;
 import com.example.demo.dao.BackgroundMusicDao;
-import com.example.demo.model.ApiResponse;
 import com.example.demo.model.BackgroundMusic;
 import com.example.demo.service.FirebaseStorageService;
 import org.slf4j.Logger;
