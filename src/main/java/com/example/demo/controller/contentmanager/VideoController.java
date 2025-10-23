@@ -160,7 +160,6 @@ public class VideoController {
                                              @RequestParam(value = "groupIds", required = false) String groupIdsStr,
                                              @RequestParam(value = "folderId", required = false) String folderId,
                                              @RequestParam(value = "sceneThreshold", required = false) Double sceneThreshold,
-                                             @RequestParam(value = "isASR", required = false, defaultValue = "true") Boolean isASR,
                                              @RequestHeader(value = "Accept-Language", required = false, defaultValue = "en") String acceptLanguage) throws Exception {
         System.out.println("=== VIDEO UPLOAD REQUEST ===");
         System.out.println("Accept-Language header: " + acceptLanguage);
@@ -171,7 +170,7 @@ public class VideoController {
         System.out.println("Group IDs: " + groupIdsStr);
         System.out.println("Folder ID: " + folderId);
         System.out.println("Scene Threshold: " + (sceneThreshold != null ? sceneThreshold : "default"));
-        System.out.println("Subtitle Extraction: " + (isASR ? "ASR (Speech-to-Text)" : "OCR (Text Recognition)"));
+        System.out.println("Subtitle Extraction: ASR (Speech-to-Text) only");
         System.out.println("=============================");
         
         // Upload to Firebase Storage and extract thumbnail
