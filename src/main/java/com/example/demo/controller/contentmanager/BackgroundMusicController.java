@@ -41,12 +41,12 @@ public class BackgroundMusicController {
             
             // Validate file
             if (file.isEmpty()) {
-                return ResponseEntity.badRequest().body(ApiResponse.error("File is empty"));
+                return ResponseEntity.badRequest().body(ApiResponse.fail("File is empty"));
             }
             
             String contentType = file.getContentType();
             if (contentType == null || !contentType.startsWith("audio/")) {
-                return ResponseEntity.badRequest().body(ApiResponse.error("File must be an audio file"));
+                return ResponseEntity.badRequest().body(ApiResponse.fail("File must be an audio file"));
             }
             
             // Generate BGM ID
@@ -76,7 +76,7 @@ public class BackgroundMusicController {
         } catch (Exception e) {
             log.error("Error uploading BGM", e);
             return ResponseEntity.internalServerError()
-                .body(ApiResponse.error("Failed to upload BGM: " + e.getMessage()));
+                .body(ApiResponse.fail("Failed to upload BGM: " + e.getMessage()));
         }
     }
     
@@ -91,7 +91,7 @@ public class BackgroundMusicController {
         } catch (Exception e) {
             log.error("Error retrieving BGM list", e);
             return ResponseEntity.internalServerError()
-                .body(ApiResponse.error("Failed to retrieve BGM list"));
+                .body(ApiResponse.fail("Failed to retrieve BGM list"));
         }
     }
     
@@ -106,7 +106,7 @@ public class BackgroundMusicController {
         } catch (Exception e) {
             log.error("Error deleting BGM", e);
             return ResponseEntity.internalServerError()
-                .body(ApiResponse.error("Failed to delete BGM"));
+                .body(ApiResponse.fail("Failed to delete BGM"));
         }
     }
     
@@ -156,22 +156,13 @@ public class BackgroundMusicController {
     private String uploadAudioToGCS(MultipartFile file, String userId, String bgmId) throws Exception {
         String objectName = String.format("bgm/%s/%s/%s", userId, bgmId, file.getOriginalFilename());
         
-        com.google.cloud.storage.Storage storage = firebaseStorageService.getStorage();
-        String bucketName = firebaseStorageService.getBucketName();
-        
-        com.google.cloud.storage.BlobInfo blobInfo = com.google.cloud.storage.BlobInfo.newBuilder(bucketName, objectName)
-            .setContentType(file.getContentType())
-            .build();
-        
-        try (java.io.InputStream is = file.getInputStream();
-             com.google.cloud.storage.Storage.BlobWriteChannel writer = storage.writer(blobInfo)) {
-            byte[] buffer = new byte[1024];
-            int limit;
-            while ((limit = is.read(buffer)) >= 0) {
-                writer.write(java.nio.ByteBuffer.wrap(buffer, 0, limit));
-            }
+        // Use the uploadFile method from FirebaseStorageService
+        java.io.File tempFile = java.io.File.createTempFile("bgm-upload-", file.getOriginalFilename());
+        try {
+            file.transferTo(tempFile);
+            return firebaseStorageService.uploadFile(tempFile, objectName, file.getContentType());
+        } finally {
+            tempFile.delete();
         }
-        
-        return String.format("https://storage.googleapis.com/%s/%s", bucketName, objectName);
     }
 }

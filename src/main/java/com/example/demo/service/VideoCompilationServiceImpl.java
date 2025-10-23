@@ -160,11 +160,11 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                 for (String bgmUrl : bgmUrls) {
                     com.example.demo.ai.shared.GcsFileResolver.ResolvedFile bgmHandle = gcsFileResolver.resolve(bgmUrl);
                     bgmHandles.add(bgmHandle);
-                    bgmFiles.add(bgmHandle.getFile());
+                    bgmFiles.add(bgmHandle.getPath().toFile());
                 }
                 
                 // Get video duration
-                double videoDuration = getVideoDuration(videoFile.getFile());
+                double videoDuration = getVideoDuration(videoFile.getPath().toFile());
                 
                 // Create BGM concat file (loop if needed)
                 java.io.File bgmConcatFile = createBGMConcatFile(bgmFiles, videoDuration);
@@ -173,21 +173,13 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                 java.io.File outputFile = java.io.File.createTempFile("compiled-bgm-", ".mp4");
                 
                 try {
-                    mixVideoWithBGM(videoFile.getFile(), bgmConcatFile, outputFile, bgmVolume);
+                    mixVideoWithBGM(videoFile.getPath().toFile(), bgmConcatFile, outputFile, bgmVolume);
                     
                     // Upload final video
                     String compositeVideoId = userId + "_" + templateId;
                     String destObject = String.format("videos/%s/%s/compiled_bgm.mp4", userId, compositeVideoId);
                     
-                    com.google.cloud.storage.BlobInfo blobInfo = com.google.cloud.storage.BlobInfo
-                        .newBuilder(firebaseStorageService.getBucketName(), destObject)
-                        .setContentType("video/mp4")
-                        .build();
-                    
-                    firebaseStorageService.getStorage().create(blobInfo, java.nio.file.Files.readAllBytes(outputFile.toPath()));
-                    
-                    return String.format("https://storage.googleapis.com/%s/%s", 
-                        firebaseStorageService.getBucketName(), destObject);
+                    return firebaseStorageService.uploadFile(outputFile, destObject, "video/mp4");
                         
                 } finally {
                     outputFile.delete();

@@ -4,12 +4,9 @@ import com.alibaba.dashscope.audio.asr.transcription.Transcription;
 import com.alibaba.dashscope.audio.asr.transcription.TranscriptionParam;
 import com.alibaba.dashscope.audio.asr.transcription.TranscriptionResult;
 import com.alibaba.dashscope.audio.asr.transcription.TranscriptionQueryParam;
-import com.alibaba.dashscope.exception.NoApiKeyException;
-import com.alibaba.dashscope.exception.InputRequiredException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -159,29 +156,22 @@ public class ASRSubtitleExtractor {
      * Submit transcription task to Alibaba Cloud
      */
     private String submitTranscriptionTask(File audioFile, String language) throws Exception {
-        try {
-            Transcription transcription = new Transcription();
-            
-            TranscriptionParam param = TranscriptionParam.builder()
-                .model(MODEL)
-                .fileUrls(List.of(audioFile.toURI().toString()))
-                .apiKey(apiKey)
-                .build();
-            
-            TranscriptionResult result = transcription.asyncCall(param);
-            
-            JsonObject output = result.getOutput();
-            if (output == null || !output.has("task_id")) {
-                throw new RuntimeException("Failed to submit transcription task: " + result);
-            }
-            
-            return output.get("task_id").getAsString();
-            
-        } catch (NoApiKeyException e) {
-            throw new IllegalStateException("API key is required for ASR", e);
-        } catch (InputRequiredException e) {
-            throw new IllegalArgumentException("Invalid input for ASR", e);
+        Transcription transcription = new Transcription();
+        
+        TranscriptionParam param = TranscriptionParam.builder()
+            .model(MODEL)
+            .fileUrls(List.of(audioFile.toURI().toString()))
+            .apiKey(apiKey)
+            .build();
+        
+        TranscriptionResult result = transcription.asyncCall(param);
+        
+        JsonObject output = result.getOutput();
+        if (output == null || !output.has("task_id")) {
+            throw new RuntimeException("Failed to submit transcription task: " + result);
         }
+        
+        return output.get("task_id").getAsString();
     }
     
     /**

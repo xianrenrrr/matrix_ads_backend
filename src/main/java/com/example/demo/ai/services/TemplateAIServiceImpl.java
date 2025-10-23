@@ -190,6 +190,10 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                              video.getId(), scenes.size());
             return template;
             **/
+            
+            // Temporary: Return fallback template until scene detection is implemented
+            log.warn("Scene detection not yet implemented, returning fallback template");
+            return createFallbackTemplate(video, language);
 
         } catch (Exception e) {
             log.error("Error in AI template generation for video ID {}: {}", video.getId(), e.getMessage(), e);
