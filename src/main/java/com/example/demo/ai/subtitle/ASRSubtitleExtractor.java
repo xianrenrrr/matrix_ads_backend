@@ -6,10 +6,11 @@ import com.alibaba.dashscope.audio.asr.transcription.TranscriptionResult;
 import com.alibaba.dashscope.audio.asr.transcription.TranscriptionQueryParam;
 import com.alibaba.dashscope.exception.NoApiKeyException;
 import com.alibaba.dashscope.exception.InputRequiredException;
-import com.alibaba.dashscope.common.ResultCallback;
-import com.alibaba.dashscope.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -169,11 +170,12 @@ public class ASRSubtitleExtractor {
             
             TranscriptionResult result = transcription.asyncCall(param);
             
-            if (result.getOutput() == null || result.getOutput().getTaskId() == null) {
+            JsonObject output = result.getOutput();
+            if (output == null || !output.has("task_id")) {
                 throw new RuntimeException("Failed to submit transcription task: " + result);
             }
             
-            return result.getOutput().getTaskId();
+            return output.get("task_id").getAsString();
             
         } catch (NoApiKeyException e) {
             throw new IllegalStateException("API key is required for ASR", e);
@@ -206,20 +208,31 @@ public class ASRSubtitleExtractor {
             
             TranscriptionResult result = transcription.wait(queryParam);
             
-            if (result.getOutput() == null) {
+            JsonObject output = result.getOutput();
+            if (output == null) {
                 throw new RuntimeException("Failed to query transcription task: " + result);
             }
             
-            String status = result.getOutput().getTaskStatus();
+            String status = output.has("task_status") ? output.get("task_status").getAsString() : "UNKNOWN";
             log.info("Task {} status: {}", taskId, status);
             
             if ("SUCCEEDED".equals(status)) {
                 // Task completed successfully
-                if (result.getOutput().getResults() == null || result.getOutput().getResults().isEmpty()) {
+                if (!output.has("results")) {
                     throw new RuntimeException("No transcription results found");
                 }
                 
-                String transcriptionUrl = result.getOutput().getResults().get(0).getTranscriptionUrl();
+                JsonArray results = output.getAsJsonArray("results");
+                if (results == null || results.isEmpty()) {
+                    throw new RuntimeException("Results array is empty");
+                }
+                
+                JsonObject firstResult = results.get(0).getAsJsonObject();
+                if (!firstResult.has("transcription_url")) {
+                    throw new RuntimeException("Transcription URL not found in result");
+                }
+                
+                String transcriptionUrl = firstResult.get("transcription_url").getAsString();
                 if (transcriptionUrl == null || transcriptionUrl.isEmpty()) {
                     throw new RuntimeException("Transcription URL is empty");
                 }
