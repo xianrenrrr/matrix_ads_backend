@@ -70,7 +70,14 @@
     <groupId>com.alibaba</groupId>
     <artifactId>dashscope-sdk-java</artifactId>
     <version>2.21.13</version>
-</dependency>
+  </dependency>
+  
+  <!-- Alibaba Cloud Video Recognition SDK (Tea SDK) for shot detection -->
+  <dependency>
+    <groupId>com.aliyun</groupId>
+    <artifactId>videorecog20200320</artifactId>
+    <version>1.0.11</version>
+  </dependency>
   <dependency>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-test</artifactId>

@@ -27,19 +27,14 @@ import java.util.Map;
 public class TemplateAIServiceImpl implements TemplateAIService {
     private static final Logger log = LoggerFactory.getLogger(TemplateAIServiceImpl.class);
 
-    // TODO: Replace with Azure Video Indexer or Alibaba Cloud Video AI scene detection
-    // @Autowired
-    // private SceneDetectionService sceneDetectionService;
+    @Autowired(required = false)
+    private AlibabaVideoShotDetectionService shotDetectionService;
     
     @Autowired
     private SegmentationService segmentationService;
     
     @Autowired
     private ObjectLabelService objectLabelService;
-    
-    
-    @Autowired
-    private OverlayLegendService overlayLegendService;
     
     @Autowired
     private KeyframeExtractionService keyframeExtractionService;
@@ -53,8 +48,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Value("${ai.template.useObjectOverlay:true}")
     private boolean useObjectOverlay;
     
-    @Value("${ai.overlay.includeLegend:false}")
-    private boolean includeLegend;
+
 
     /**
      * USED BY: AI Template Creation
@@ -125,22 +119,18 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         }
 
         try {
-            // Step 1: Detect scenes using FFmpeg (Chinese-first workflow)
-            log.info("Step 1: Detecting scenes with FFmpeg...");
+            // Step 1: Detect scenes using Alibaba Cloud Video Shot Detection
+            log.info("Step 1: Detecting scenes with Alibaba Cloud...");
             
             String videoUrl = video.getUrl();
             
-            // TODO: Implement Azure Video Indexer or Alibaba Cloud Video AI scene detection
-            // Current FFmpeg implementation has been removed
-            // See docs/AI_SYSTEM_ARCHITECTURE.md for migration plan
-            // Expected API:
-            //   List<SceneSegment> sceneSegments = sceneDetectionService.detectScenes(videoUrl, sceneThresholdOverride);
-            //
-            // For now, create fallback template with single scene
+            // Check if shot detection service is available (requires SDK)
+            if (shotDetectionService == null) {
+                log.warn("Shot detection service not available (SDK not configured), returning fallback template");
+                return createFallbackTemplate(video, language);
+            }
             
-            /* REMOVED FFmpeg scene detection code - TODO: Replace with Azure/Alibaba
-            
-            List<SceneSegment> sceneSegments = sceneDetectionService.detectScenes(videoUrl, sceneThresholdOverride);
+            List<SceneSegment> sceneSegments = shotDetectionService.detectScenes(videoUrl);
             
             if (sceneSegments.isEmpty()) {
                 log.info("No scenes detected, creating fallback template");
@@ -189,11 +179,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             log.info("AI template generation completed for video ID: {} with {} scenes", 
                              video.getId(), scenes.size());
             return template;
-            **/
-            
-            // Temporary: Return fallback template until scene detection is implemented
-            log.warn("Scene detection not yet implemented, returning fallback template");
-            return createFallbackTemplate(video, language);
 
         } catch (Exception e) {
             log.error("Error in AI template generation for video ID {}: {}", video.getId(), e.getMessage(), e);
@@ -213,7 +198,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
      *    - Detect objects with YOLO
      *    - Label objects with Qwen VL (returns Chinese labels + scene analysis)
      * 3. Apply analysis results to scene (overlays, labels, VL data)
-     * 4. Build legend if configured
      * 5. Return fully analyzed scene
      * 
      * @param segment Scene timing info from scene detection
@@ -253,43 +237,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         if (scene.getOverlayType() == null) {
             scene.setOverlayType("grid");
         }
-        
-        // Build legend if needed
-        if (includeLegend && !"grid".equals(scene.getOverlayType()) && overlayLegendService != null) {
-            var legend = overlayLegendService.buildLegend(scene, language != null ? language : "zh-CN");
-            scene.setLegend(legend);
-        }
+    
         
         return scene;
-    }
-    
-
-
-    /**
-     * USED BY: AI Template Creation (fallback only)
-     * Creates minimal fallback template when AI processing fails
-     */
-    private ManualTemplate createFallbackTemplate(Video video, String language) {
-        log.info("Creating fallback template due to processing failure in language: {}", language);
-        
-        ManualTemplate template = new ManualTemplate();
-        template.setVideoId(video.getId());
-        template.setUserId(video.getUserId());
-        
-        // Minimal fallback - leave fields empty so user knows AI failed and can manually edit
-        String titleSuffix = "zh".equals(language) || "zh-CN".equals(language) ? " - 基础模板" : " - Basic Template";
-        template.setTemplateTitle(video.getTitle() + titleSuffix);
-        template.setVideoFormat("1080p 16:9");
-        template.setTotalVideoLength(30);
-
-        // Create minimal scene - user will need to fill in details
-        Scene defaultScene = new Scene();
-        defaultScene.setSceneNumber(1);
-        defaultScene.setSceneDurationInSeconds(30);
-        // Leave all other fields empty - user will manually edit
-
-        template.setScenes(List.of(defaultScene));
-        return template;
     }
 
     /**
@@ -498,6 +448,62 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             }
         } catch (Exception ignored) {}
         return null;
+    }
+    
+    /**
+     * Calculate total duration from scene segments
+     */
+    private long calculateTotalDuration(List<SceneSegment> segments) {
+        if (segments == null || segments.isEmpty()) {
+            return 0;
+        }
+        
+        // Find the maximum end time
+        long maxEndMs = 0;
+        for (SceneSegment segment : segments) {
+            if (segment.getEndTimeMs() != null && segment.getEndTimeMs() > maxEndMs) {
+                maxEndMs = segment.getEndTimeMs();
+            }
+        }
+        
+        // Convert to seconds
+        return maxEndMs / 1000;
+    }
+    
+    /**
+     * Create a fallback template with a single scene when shot detection fails
+     */
+    private ManualTemplate createFallbackTemplate(Video video, String language) {
+        log.info("Creating fallback template for video: {}", video.getId());
+        
+        ManualTemplate template = new ManualTemplate();
+        template.setVideoId(video.getId());
+        template.setUserId(video.getUserId());
+        
+        String today = java.time.LocalDate.now().toString();
+        template.setTemplateTitle((video.getTitle() != null && !video.getTitle().isBlank())
+            ? (video.getTitle() + " - AI 模版 " + today)
+            : ("AI 模版 " + today));
+        
+        // Create a single scene covering the whole video
+        Scene scene = new Scene();
+        scene.setSceneNumber(1);
+        scene.setSceneTitle("zh-CN".equals(language) ? "完整视频" : "Full Video");
+        scene.setSceneDurationInSeconds(30); // Default duration
+        scene.setScriptLine("");
+        scene.setPresenceOfPerson(false);
+        scene.setDeviceOrientation("portrait");
+        scene.setBackgroundInstructions("");
+        scene.setSpecificCameraInstructions("");
+        scene.setMovementInstructions("");
+        scene.setAudioNotes("");
+        scene.setSceneSource("ai");
+        scene.setOverlayType("grid");
+        
+        template.setScenes(List.of(scene));
+        template.setTotalVideoLength(30);
+        
+        return template;
     }
 
 

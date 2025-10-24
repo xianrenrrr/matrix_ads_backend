@@ -1,6 +1,5 @@
 package com.example.demo.model;
 
-import com.example.demo.ai.services.OverlayLegendService.LegendItem;
 import com.example.demo.ai.seg.dto.OverlayPolygonClass;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
@@ -34,8 +33,6 @@ public class Scene {
     private String overlayType;  // "grid" | "objects" | "polygons" - how to render guidance
     private List<ObjectOverlay> overlayObjects;  // only when overlayType="objects"
     private List<OverlayPolygonClass> overlayPolygons; // only when overlayType="polygons"
- // Color legend for overlays (same order as overlays) // Source aspect ratio, e.g., "9:16" or "16:9"
-    private List<LegendItem> legend;  // color-coded legend for overlays
     private String sourceAspect;  // e.g., "9:16" for mini-app pixel mapping
     private String shortLabelZh;  // Chinese short label for the dominant object
     private String sceneDescriptionZh;  // Chinese scene description
@@ -275,14 +272,6 @@ public class Scene {
     
     public void setOverlayObjects(List<ObjectOverlay> overlayObjects) {
         this.overlayObjects = overlayObjects;
-    }
-    
-    public List<LegendItem> getLegend() {
-        return legend;
-    }
-    
-    public void setLegend(List<LegendItem> legend) {
-        this.legend = legend;
     }
     
     public String getSourceAspect() {
