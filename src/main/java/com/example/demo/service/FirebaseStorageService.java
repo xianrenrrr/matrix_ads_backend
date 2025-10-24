@@ -106,10 +106,18 @@ public class FirebaseStorageService {
             // Extract object name from Firebase Storage URL
             // URL format: https://storage.googleapis.com/bucket-name/path/to/object
             if (!firebaseUrl.contains("storage.googleapis.com")) {
+                System.out.println("Not a Firebase Storage URL, returning as-is");
                 return firebaseUrl; // Return as-is if not a Firebase Storage URL
             }
             
-            String objectName = firebaseUrl.substring(firebaseUrl.indexOf(bucketName) + bucketName.length() + 1);
+            // Remove query parameters if present (e.g., existing signed URL params)
+            String cleanUrl = firebaseUrl.split("\\?")[0];
+            
+            // Extract object name
+            String objectName = cleanUrl.substring(cleanUrl.indexOf(bucketName) + bucketName.length() + 1);
+            
+            System.out.println("Generating signed URL for object: " + objectName);
+            System.out.println("Duration: " + duration + " " + unit);
             
             // Generate signed URL with specified expiration
             URL signedUrl = storage.signUrl(
@@ -117,11 +125,14 @@ public class FirebaseStorageService {
                 duration, unit
             );
             
-            System.out.println("Generated signed URL for: " + objectName + " (expires in " + duration + " " + unit + ")");
+            String signedUrlString = signedUrl.toString();
+            System.out.println("Successfully generated signed URL (length: " + signedUrlString.length() + " chars)");
             
-            return signedUrl.toString();
+            return signedUrlString;
         } catch (Exception e) {
             System.err.println("Error generating signed URL: " + e.getMessage());
+            e.printStackTrace();
+            System.err.println("Falling back to original URL");
             return firebaseUrl;
         } // Fallback to original URL
     }

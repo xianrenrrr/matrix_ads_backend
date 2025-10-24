@@ -67,12 +67,18 @@ public class AlibabaVideoShotDetectionService {
             // Convert Firebase Storage URL to 7-day signed URL for Alibaba Cloud access
             String accessibleUrl = prepareVideoUrl(videoUrl);
             
+            log.info("=== SENDING TO ALIBABA CLOUD ===");
+            log.info("URL being sent to Alibaba: {}", accessibleUrl);
+            log.info("URL length: {} characters", accessibleUrl != null ? accessibleUrl.length() : 0);
+            
             // Create client
             com.aliyun.videorecog20200320.Client client = createClient();
             
             // Step 1: Submit async job (API is async by default)
             DetectVideoShotRequest request = new DetectVideoShotRequest();
             request.setVideoUrl(accessibleUrl);
+            
+            log.info("Submitting video shot detection request to Alibaba Cloud...");
             
             RuntimeOptions runtime = new RuntimeOptions();
             DetectVideoShotResponse response = client.detectVideoShotWithOptions(request, runtime);
@@ -190,22 +196,40 @@ public class AlibabaVideoShotDetectionService {
      */
     private String prepareVideoUrl(String videoUrl) {
         if (videoUrl == null || videoUrl.isEmpty()) {
+            log.warn("Video URL is null or empty");
             return videoUrl;
         }
         
+        log.info("Original video URL: {}", videoUrl);
+        
         // Check if it's a Firebase Storage URL
-        if (videoUrl.contains("storage.googleapis.com") && firebaseStorageService != null) {
+        if (videoUrl.contains("storage.googleapis.com")) {
+            if (firebaseStorageService == null) {
+                log.error("Firebase Storage URL detected but FirebaseStorageService is not available!");
+                log.error("This will cause Alibaba Cloud to fail accessing the private video.");
+                return videoUrl;
+            }
+            
             log.info("Converting Firebase Storage URL to 7-day signed URL for Alibaba Cloud access");
             
-            // Generate 7-day signed URL (enough time for Alibaba Cloud to process the video)
-            String signedUrl = firebaseStorageService.generateSignedUrl(videoUrl, 7, TimeUnit.DAYS);
-            
-            log.info("Generated 7-day signed URL (expires in 7 days)");
-            return signedUrl;
+            try {
+                // Generate 7-day signed URL (enough time for Alibaba Cloud to process the video)
+                String signedUrl = firebaseStorageService.generateSignedUrl(videoUrl, 7, TimeUnit.DAYS);
+                
+                log.info("Successfully generated 7-day signed URL");
+                log.info("Signed URL length: {} characters", signedUrl.length());
+                log.info("Signed URL (first 100 chars): {}", signedUrl.substring(0, Math.min(100, signedUrl.length())));
+                
+                return signedUrl;
+            } catch (Exception e) {
+                log.error("Failed to generate signed URL: {}", e.getMessage(), e);
+                log.error("Falling back to original URL (will likely fail if file is private)");
+                return videoUrl;
+            }
         }
         
-        // Not a Firebase URL or service not available, return as-is
-        log.info("Using original URL (not a Firebase Storage URL or service unavailable)");
+        // Not a Firebase URL, return as-is
+        log.info("Not a Firebase Storage URL, using original URL");
         return videoUrl;
     }
     
