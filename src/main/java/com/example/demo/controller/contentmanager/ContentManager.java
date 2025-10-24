@@ -216,61 +216,6 @@ public class ContentManager {
         return ResponseEntity.ok(ApiResponse.ok(message, result));
     }
 
-    @PostMapping
-    public ResponseEntity<ApiResponse<Map<String, Object>>> createTemplate(@RequestBody com.example.demo.model.CreateTemplateRequest request,
-                                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
-        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        String userId = request.getUserId();
-        ManualTemplate manualTemplate = request.getManualTemplate();
-        
-        manualTemplate.setUserId(userId);
-        
-        // Set thumbnail from first scene's keyframe
-        if (manualTemplate.getScenes() != null && !manualTemplate.getScenes().isEmpty()) {
-            Scene firstScene = manualTemplate.getScenes().get(0);
-            if (firstScene.getKeyframeUrl() != null && !firstScene.getKeyframeUrl().isEmpty()) {
-                manualTemplate.setThumbnailUrl(firstScene.getKeyframeUrl());
-            }
-        }
-        
-        // Mark all scenes as manual with grid overlay and validate minimum duration
-        if (manualTemplate.getScenes() != null && !manualTemplate.getScenes().isEmpty()) {
-            for (com.example.demo.model.Scene scene : manualTemplate.getScenes()) {
-                scene.setSceneSource("manual");
-                scene.setOverlayType("grid");
-                
-                // Validate minimum 2-second scene duration for mini app compatibility
-                Long startMs = scene.getStartTimeMs();
-                Long endMs = scene.getEndTimeMs();
-                if (startMs != null && endMs != null) {
-                    long durationMs = endMs - startMs;
-                    if (durationMs < 2000) {
-                        throw new IllegalArgumentException(
-                            "Scene " + scene.getSceneNumber() + " (" + scene.getSceneTitle() + 
-                            ") is too short (" + durationMs + "ms). Minimum duration is 2 seconds (2000ms)."
-                        );
-                    }
-                }
-            }
-        }
-        
-        // Create the template (groups are now assigned via push button with TemplateAssignment)
-        String templateId = templateDao.createTemplate(manualTemplate);
-        userDao.addCreatedTemplate(userId, templateId);
-        
-        // Prepare response
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("template", manualTemplate);
-        responseData.put("templateId", templateId);
-        // Legacy: assignedGroups deprecated, return empty for backward compatibility
-        responseData.put("assignedGroups", new ArrayList<>());
-        
-        String message = i18nService.getMessage("template.created", language);
-        
-        return new ResponseEntity<>(ApiResponse.ok(message, responseData), HttpStatus.CREATED);
-    }
-    
-
     @GetMapping("/user/{userId}")
     public ResponseEntity<ApiResponse<List<com.example.demo.model.TemplateSummary>>> getTemplatesByUserId(@PathVariable String userId,
                                                                                       @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
@@ -284,31 +229,6 @@ public class ContentManager {
         
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, summaries));
-    }
-
-    /**
-     * Get assigned groups for a template
-     * GET /content-manager/templates/{templateId}/groups
-     * NOTE: This must come BEFORE @GetMapping("/{templateId}") to avoid path matching conflicts
-     */
-    @GetMapping("/{templateId}/groups")
-    public ResponseEntity<ApiResponse<List<String>>> getTemplateGroups(
-            @PathVariable String templateId,
-            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
-        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        
-        // Check if template exists
-        ManualTemplate template = templateDao.getTemplate(templateId);
-        if (template == null) {
-            throw new NoSuchElementException("Template not found with ID: " + templateId);
-        }
-        
-        // Legacy: assignedGroups field deprecated, now using TemplateAssignment
-        // Return empty list for backward compatibility
-        List<String> assignedGroups = new ArrayList<>();
-        
-        String message = i18nService.getMessage("operation.success", language);
-        return ResponseEntity.ok(ApiResponse.ok(message, assignedGroups));
     }
 
     @GetMapping("/{templateId}")
