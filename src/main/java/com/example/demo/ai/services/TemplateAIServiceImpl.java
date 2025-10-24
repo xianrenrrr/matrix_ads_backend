@@ -453,7 +453,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     /**
      * Calculate total duration from scene segments
      */
-    private long calculateTotalDuration(List<SceneSegment> segments) {
+    private int calculateTotalDuration(List<SceneSegment> segments) {
         if (segments == null || segments.isEmpty()) {
             return 0;
         }
@@ -466,8 +466,8 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             }
         }
         
-        // Convert to seconds
-        return maxEndMs / 1000;
+        // Convert to seconds and cast to int
+        return (int) (maxEndMs / 1000);
     }
     
     /**

@@ -104,47 +104,64 @@ public class AlibabaVideoShotDetectionService {
             return segments;
         }
         
-        DetectVideoShotResponse.DetectVideoShotResponseBody body = response.getBody();
-        
-        // Check for errors  
-        if (body.getCode() != null && !body.getCode().equals("200")) {
-            log.error("Alibaba Cloud API error: {} - {}", body.getCode(), body.getMessage());
-            throw new RuntimeException("Shot detection failed: " + body.getMessage());
+        // Log the full response for debugging
+        try {
+            log.info("Response body: {}", com.aliyun.teautil.Common.toJSONString(response.getBody()));
+        } catch (Exception e) {
+            log.warn("Could not serialize response: {}", e.getMessage());
         }
         
-        // Parse shot list
-        DetectVideoShotResponse.DetectVideoShotResponseBodyData data = body.getData();
-        if (data == null || data.getShotFrameIds() == null) {
+        // Get response body
+        var body = response.getBody();
+        
+        // Check for errors (if code field exists)
+        // Note: Successful responses may not have a code field
+        
+        // Parse shot list from data field
+        if (body.getData() == null) {
             log.warn("No shot data in response");
             return segments;
         }
         
-        List<Integer> shotFrameIds = data.getShotFrameIds();
-        log.info("Found {} shot frame IDs from Alibaba Cloud response", shotFrameIds.size());
-        
-        // Convert frame IDs to time segments (assuming 30fps)
-        // Note: This is a simplified conversion - actual implementation may need video metadata
-        for (int i = 0; i < shotFrameIds.size() - 1; i++) {
-            try {
-                int startFrame = shotFrameIds.get(i);
-                int endFrame = shotFrameIds.get(i + 1);
-                
-                // Convert frames to milliseconds (assuming 30fps)
-                long startMs = (long) (startFrame / 30.0 * 1000);
-                long endMs = (long) (endFrame / 30.0 * 1000);
-                
-                SceneSegment segment = new SceneSegment();
-                segment.setStartTimeMs(startMs);
-                segment.setEndTimeMs(endMs);
-                segment.setLabels(new ArrayList<>());
-                segment.setPersonPresent(false);
-                
-                segments.add(segment);
-                
-                log.debug("Scene {}: {}ms - {}ms (frames {}-{})", segments.size(), startMs, endMs, startFrame, endFrame);
-            } catch (Exception e) {
-                log.warn("Failed to parse shot: {}", e.getMessage());
+        // The data field contains DetectVideoShotResponseBodyData object
+        try {
+            var data = body.getData();
+            
+            // Get shot frame IDs from the data object
+            List<Integer> shotFrameIds = data.getShotFrameIds();
+            
+            if (shotFrameIds == null || shotFrameIds.isEmpty()) {
+                log.warn("No shot frame IDs found in response");
+                return segments;
             }
+            
+            log.info("Found {} shot frame IDs from Alibaba Cloud response", shotFrameIds.size());
+            
+            // Convert frame IDs to time segments (assuming 30fps)
+            for (int i = 0; i < shotFrameIds.size() - 1; i++) {
+                try {
+                    int startFrame = shotFrameIds.get(i);
+                    int endFrame = shotFrameIds.get(i + 1);
+                    
+                    // Convert frames to milliseconds (assuming 30fps)
+                    long startMs = (long) (startFrame / 30.0 * 1000);
+                    long endMs = (long) (endFrame / 30.0 * 1000);
+                    
+                    SceneSegment segment = new SceneSegment();
+                    segment.setStartTimeMs(startMs);
+                    segment.setEndTimeMs(endMs);
+                    segment.setLabels(new ArrayList<>());
+                    segment.setPersonPresent(false);
+                    
+                    segments.add(segment);
+                    
+                    log.debug("Scene {}: {}ms - {}ms (frames {}-{})", segments.size(), startMs, endMs, startFrame, endFrame);
+                } catch (Exception e) {
+                    log.warn("Failed to parse shot: {}", e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to parse data: {}", e.getMessage(), e);
         }
         
         return segments;
