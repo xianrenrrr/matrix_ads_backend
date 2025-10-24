@@ -59,6 +59,10 @@ public class FirebaseStorageService {
                 writer.write(java.nio.ByteBuffer.wrap(buffer, 0, limit));
             }
         }
+        
+        // Make video publicly readable for AI services (Alibaba Cloud, etc.)
+        storage.get(bucketName, objectName).createAcl(com.google.cloud.storage.Acl.of(com.google.cloud.storage.Acl.User.ofAllUsers(), com.google.cloud.storage.Acl.Role.READER));
+        
         String videoUrl = String.format("https://storage.googleapis.com/%s/%s", bucketName, objectName);
         // Save video to temp file for FFmpeg thumbnail extraction
         java.io.File tempVideo = java.io.File.createTempFile("upload-", ".mp4");
@@ -81,6 +85,10 @@ public class FirebaseStorageService {
                 .setContentType("image/jpeg")
                 .build();
         storage.create(thumbBlob, java.nio.file.Files.readAllBytes(tempThumb.toPath()));
+        
+        // Make thumbnail publicly readable
+        storage.get(bucketName, thumbName).createAcl(com.google.cloud.storage.Acl.of(com.google.cloud.storage.Acl.User.ofAllUsers(), com.google.cloud.storage.Acl.Role.READER));
+        
         String thumbnailUrl = String.format("https://storage.googleapis.com/%s/%s", bucketName, thumbName);
         // Clean up
         tempVideo.delete();

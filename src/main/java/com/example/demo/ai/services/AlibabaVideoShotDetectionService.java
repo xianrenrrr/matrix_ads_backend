@@ -130,10 +130,25 @@ public class AlibabaVideoShotDetectionService {
                 // Log response for debugging
                 log.info("GetAsyncJobResult response: {}", com.aliyun.teautil.Common.toJSONString(body));
                 
-                // Check if data is available (indicates completion)
+                // Check if data is available (indicates completion or failure)
                 if (body.getData() != null) {
-                    log.info("Job completed successfully, parsing results");
-                    return parseAsyncResults(response);
+                    var data = body.getData();
+                    
+                    // Check for failure status
+                    if (data.getStatus() != null && "PROCESS_FAILED".equals(data.getStatus())) {
+                        log.error("Job failed: {} - {}", data.getErrorCode(), data.getErrorMessage());
+                        return new ArrayList<>();
+                    }
+                    
+                    // Check for success status
+                    if (data.getStatus() != null && "PROCESS_SUCCESS".equals(data.getStatus())) {
+                        log.info("Job completed successfully, parsing results");
+                        return parseAsyncResults(response);
+                    }
+                    
+                    // Unknown status, wait and retry
+                    log.info("Job status: {} (attempt {}/{}), waiting...", data.getStatus(), attempt, maxAttempts);
+                    Thread.sleep(pollInterval);
                 } else {
                     // Still processing, wait and retry
                     log.info("Job still processing (attempt {}/{}), waiting...", attempt, maxAttempts);
@@ -199,10 +214,14 @@ public class AlibabaVideoShotDetectionService {
             
             var data = body.getData();
             
-            // Parse the data JSON string
+            // The data object contains the result - need to serialize and parse it
+            String dataJson = com.aliyun.teautil.Common.toJSONString(data);
+            log.info("Data JSON: {}", dataJson);
+            
+            // Parse JSON to extract ShotFrameIds
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             @SuppressWarnings("unchecked")
-            java.util.Map<String, Object> dataMap = mapper.readValue(data.toString(), java.util.Map.class);
+            java.util.Map<String, Object> dataMap = mapper.readValue(dataJson, java.util.Map.class);
             
             @SuppressWarnings("unchecked")
             List<Integer> shotFrameIds = (List<Integer>) dataMap.get("ShotFrameIds");
