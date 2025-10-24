@@ -30,9 +30,6 @@ public class SceneReviewController {
     @Autowired
     private Firestore db;
 
-    @Autowired(required = false)
-    private com.example.demo.service.FirebaseStorageService firebaseStorageService;
-
     @Autowired
     private com.example.demo.service.I18nService i18nService;
     
@@ -171,15 +168,8 @@ public class SceneReviewController {
             throw new NoSuchElementException("Scene not found or missing videoUrl: " + sceneId);
         }
 
-        String url = submission.getVideoUrl();
-        // If Firebase signing available, generate a fresh signed URL for reliable playback in browser
-        if (firebaseStorageService != null) {
-            try {
-                url = firebaseStorageService.generateSignedUrl(url);
-            } catch (Exception e) {
-                // fallback to original URL
-            }
-        }
+        // DAO handles signed URL generation
+        String url = sceneSubmissionDao.getSignedUrl(submission.getVideoUrl());
 
         return ResponseEntity.ok(com.example.demo.api.ApiResponse.ok(i18nService.getMessage("operation.success", language), url));
     }

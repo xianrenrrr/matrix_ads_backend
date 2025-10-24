@@ -31,8 +31,7 @@ public class ContentManager {
     
 
 
-    @Autowired(required = false)
-    private com.example.demo.service.FirebaseStorageService firebaseStorageService;
+
 
     @Autowired
     private com.example.demo.service.TemplateCascadeDeletionService templateCascadeDeletionService;
@@ -387,10 +386,8 @@ public class ContentManager {
                         fullSceneData.put("videoUrl", sceneSubmission.getVideoUrl());
                         // Attach a short-lived signed URL for preview/streaming in manager UI
                         try {
-                            if (firebaseStorageService != null && sceneSubmission.getVideoUrl() != null) {
-                                String signed = firebaseStorageService.generateSignedUrl(sceneSubmission.getVideoUrl());
-                                fullSceneData.put("videoSignedUrl", signed);
-                            }
+                            String signed = sceneSubmissionDao.getSignedUrl(sceneSubmission.getVideoUrl());
+                            fullSceneData.put("videoSignedUrl", signed);
                         } catch (Exception ignored) {}
                         fullSceneData.put("thumbnailUrl", sceneSubmission.getThumbnailUrl());
                         fullSceneData.put("status", sceneSubmission.getStatus());
@@ -411,8 +408,8 @@ public class ContentManager {
         // If compiledVideoUrl exists, attach a signed URL for client download
         try {
             Object compiledUrl = videoData.get("compiledVideoUrl");
-            if (compiledUrl instanceof String && firebaseStorageService != null) {
-                String signed = firebaseStorageService.generateSignedUrl((String) compiledUrl);
+            if (compiledUrl instanceof String) {
+                String signed = sceneSubmissionDao.getSignedUrl((String) compiledUrl);
                 videoData.put("compiledVideoSignedUrl", signed);
             }
         } catch (Exception ignored) {}
@@ -526,22 +523,15 @@ public class ContentManager {
                 // Continue without duration - will default to 0
             }
             
-            // 2. Upload video to Firebase (AFTER duration extraction)
+            // 2. Upload video to OSS (AFTER duration extraction)
             String videoId = java.util.UUID.randomUUID().toString();
-            com.example.demo.service.FirebaseStorageService.UploadResult uploadResult = 
-                firebaseStorageService.uploadVideoWithThumbnail(videoFile, userId, videoId);
-            log.info("✅ Video uploaded to Firebase: {}", uploadResult.videoUrl);
+            com.example.demo.model.Video video = videoDao.uploadAndSaveVideo(videoFile, userId, videoId);
+            log.info("✅ Video uploaded to OSS: {}", video.getUrl());
             
-            // 3. Create Video object
-            log.info("💾 Creating Video object with duration: {} seconds", videoDurationSeconds);
-            com.example.demo.model.Video video = new com.example.demo.model.Video();
-            video.setId(videoId);
-            video.setUserId(userId);
-            video.setUrl(uploadResult.videoUrl);
-            video.setThumbnailUrl(uploadResult.thumbnailUrl);
+            // 3. Update video with duration
+            log.info("💾 Updating Video object with duration: {} seconds", videoDurationSeconds);
             video.setDurationSeconds(videoDurationSeconds);
-            log.info("💾 Saving video to database...");
-            videoDao.saveVideo(video);
+            videoDao.updateVideo(video);
             log.info("✅ Video saved with ID: {}, duration: {} seconds", videoId, videoDurationSeconds);
             
             // 4. Analyze as single scene using UnifiedSceneAnalysisService

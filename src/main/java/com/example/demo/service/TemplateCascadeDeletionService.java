@@ -21,7 +21,7 @@ public class TemplateCascadeDeletionService {
     @Autowired private TemplateDao templateDao;
     @Autowired private SceneSubmissionDao sceneSubmissionDao;
     @Autowired private VideoDao videoDao;
-    @Autowired(required = false) private FirebaseStorageService storageService;
+    @Autowired(required = false) private com.example.demo.service.AlibabaOssStorageService storageService;
     @Autowired private Firestore db;
 
 
@@ -109,7 +109,7 @@ public class TemplateCascadeDeletionService {
                 System.err.println("[CASCADE] Submission assets delete warn: " + e);
             }
         } else if (hardDeleteStorage && storageService == null) {
-            System.err.println("[CASCADE] Storage hard-delete enabled but FirebaseStorageService unavailable; skipping storage deletion.");
+            System.err.println("[CASCADE] Storage hard-delete enabled but AlibabaOssStorageService unavailable; skipping storage deletion.");
         }
 
         // 2) Firestore docs

@@ -22,6 +22,9 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
     @Autowired
     private Firestore db;
     
+    @Autowired(required = false)
+    private com.example.demo.service.AlibabaOssStorageService ossStorageService;
+    
     @Override
     public String save(SceneSubmission sceneSubmission) throws ExecutionException, InterruptedException {
         CollectionReference collection = db.collection(COLLECTION_NAME);
@@ -294,5 +297,49 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
         }
         
         return results;
+    }
+    
+    @Override
+    public SceneSubmission uploadAndSaveScene(org.springframework.web.multipart.MultipartFile file, String assignmentId, String userId, int sceneNumber, String sceneTitle) throws Exception {
+        if (ossStorageService == null) {
+            throw new IllegalStateException("AlibabaOssStorageService not available");
+        }
+        
+        // Upload to OSS
+        String sceneVideoId = UUID.randomUUID().toString();
+        com.example.demo.service.AlibabaOssStorageService.UploadResult uploadResult = 
+            ossStorageService.uploadVideoWithThumbnail(file, userId, sceneVideoId);
+        
+        // Create scene submission
+        SceneSubmission sceneSubmission = new SceneSubmission(assignmentId, userId, sceneNumber, sceneTitle);
+        sceneSubmission.setVideoUrl(uploadResult.videoUrl);
+        sceneSubmission.setThumbnailUrl(uploadResult.thumbnailUrl);
+        sceneSubmission.setOriginalFileName(file.getOriginalFilename());
+        sceneSubmission.setFileSize(file.getSize());
+        sceneSubmission.setFormat(getFileExtension(file.getOriginalFilename()));
+        sceneSubmission.setSimilarityScore(-1.0);
+        sceneSubmission.setAiSuggestions(Arrays.asList("AI分析进行中...", "请稍后查看结果"));
+        sceneSubmission.setStatus("pending");
+        
+        // Save to database
+        String sceneId = save(sceneSubmission);
+        sceneSubmission.setId(sceneId);
+        
+        return sceneSubmission;
+    }
+    
+    @Override
+    public String getSignedUrl(String videoUrl) throws Exception {
+        if (ossStorageService == null || videoUrl == null) {
+            return videoUrl;
+        }
+        return ossStorageService.generateSignedUrl(videoUrl);
+    }
+    
+    private String getFileExtension(String filename) {
+        if (filename != null && filename.contains(".")) {
+            return filename.substring(filename.lastIndexOf(".") + 1).toLowerCase();
+        }
+        return "mp4";
     }
 }

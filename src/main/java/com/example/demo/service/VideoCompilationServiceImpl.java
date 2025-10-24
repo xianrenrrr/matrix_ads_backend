@@ -15,7 +15,7 @@ import java.util.*;
 public class VideoCompilationServiceImpl implements VideoCompilationService {
 
     @Autowired(required = false)
-    private FirebaseStorageService firebaseStorageService;
+    private com.example.demo.service.AlibabaOssStorageService ossStorageService;
 
     @Autowired
     private Firestore db;
@@ -123,10 +123,10 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                     throw new RuntimeException("ffmpeg concat (re-encode) failed with exit code " + code2);
                 }
             }
-            if (firebaseStorageService == null) {
-                throw new IllegalStateException("FirebaseStorageService not available for upload");
+            if (ossStorageService == null) {
+                throw new IllegalStateException("AlibabaOssStorageService not available for upload");
             }
-            String url = firebaseStorageService.uploadFile(outFile, destObject, "video/mp4");
+            String url = ossStorageService.uploadFile(outFile, destObject, "video/mp4");
             outFile.delete();
             return url;
         } finally {
@@ -179,7 +179,7 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                     String compositeVideoId = userId + "_" + templateId;
                     String destObject = String.format("videos/%s/%s/compiled_bgm.mp4", userId, compositeVideoId);
                     
-                    return firebaseStorageService.uploadFile(outputFile, destObject, "video/mp4");
+                    return ossStorageService.uploadFile(outputFile, destObject, "video/mp4");
                         
                 } finally {
                     outputFile.delete();

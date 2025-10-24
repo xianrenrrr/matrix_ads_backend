@@ -3,7 +3,6 @@ package com.example.demo.controller.contentmanager;
 import com.example.demo.api.ApiResponse;
 import com.example.demo.dao.BackgroundMusicDao;
 import com.example.demo.model.BackgroundMusic;
-import com.example.demo.service.FirebaseStorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,7 +10,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -19,9 +17,6 @@ import java.util.List;
 @CrossOrigin(origins = "*")
 public class BackgroundMusicController {
     private static final Logger log = LoggerFactory.getLogger(BackgroundMusicController.class);
-    
-    @Autowired(required = false)
-    private FirebaseStorageService firebaseStorageService;
     
     @Autowired
     private BackgroundMusicDao bgmDao;
@@ -39,40 +34,14 @@ public class BackgroundMusicController {
         try {
             log.info("Uploading BGM for user: {}", userId);
             
-            // Validate file
-            if (file.isEmpty()) {
-                return ResponseEntity.badRequest().body(ApiResponse.fail("File is empty"));
-            }
+            // DAO handles validation, upload, and save
+            BackgroundMusic bgm = bgmDao.uploadAndSaveBackgroundMusic(file, userId, title, description);
             
-            String contentType = file.getContentType();
-            if (contentType == null || !contentType.startsWith("audio/")) {
-                return ResponseEntity.badRequest().body(ApiResponse.fail("File must be an audio file"));
-            }
-            
-            // Generate BGM ID
-            String bgmId = java.util.UUID.randomUUID().toString();
-            
-            // Extract audio duration using FFprobe
-            long durationSeconds = extractAudioDuration(file);
-            
-            // Upload to GCS
-            String audioUrl = uploadAudioToGCS(file, userId, bgmId);
-            
-            // Create BGM record
-            BackgroundMusic bgm = new BackgroundMusic();
-            bgm.setId(bgmId);
-            bgm.setUserId(userId);
-            bgm.setTitle(title != null && !title.isBlank() ? title : file.getOriginalFilename());
-            bgm.setDescription(description);
-            bgm.setAudioUrl(audioUrl);
-            bgm.setDurationSeconds(durationSeconds);
-            bgm.setUploadedAt(LocalDateTime.now().toString());
-            
-            bgmDao.saveBackgroundMusic(bgm);
-            
-            log.info("BGM uploaded successfully: {}", bgmId);
+            log.info("BGM uploaded successfully: {}", bgm.getId());
             return ResponseEntity.ok(ApiResponse.ok("BGM uploaded successfully", bgm));
             
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.fail(e.getMessage()));
         } catch (Exception e) {
             log.error("Error uploading BGM", e);
             return ResponseEntity.internalServerError()
@@ -110,59 +79,4 @@ public class BackgroundMusicController {
         }
     }
     
-    /**
-     * Extract audio duration using FFprobe
-     */
-    private long extractAudioDuration(MultipartFile file) throws Exception {
-        java.io.File tempAudio = java.io.File.createTempFile("bgm-", ".mp3");
-        
-        try {
-            // Copy file to temp location
-            try (java.io.InputStream is = file.getInputStream();
-                 java.io.FileOutputStream fos = new java.io.FileOutputStream(tempAudio)) {
-                byte[] buffer = new byte[8192];
-                int bytesRead;
-                while ((bytesRead = is.read(buffer)) != -1) {
-                    fos.write(buffer, 0, bytesRead);
-                }
-            }
-            
-            // Use FFprobe to get duration
-            ProcessBuilder pb = new ProcessBuilder(
-                "ffprobe", "-v", "error", "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1", tempAudio.getAbsolutePath()
-            );
-            
-            Process proc = pb.start();
-            java.io.BufferedReader reader = new java.io.BufferedReader(
-                new java.io.InputStreamReader(proc.getInputStream())
-            );
-            String durationStr = reader.readLine();
-            proc.waitFor();
-            
-            if (durationStr != null && !durationStr.isEmpty()) {
-                return (long) Double.parseDouble(durationStr);
-            }
-            return 0;
-            
-        } finally {
-            tempAudio.delete();
-        }
-    }
-    
-    /**
-     * Upload audio file to GCS
-     */
-    private String uploadAudioToGCS(MultipartFile file, String userId, String bgmId) throws Exception {
-        String objectName = String.format("bgm/%s/%s/%s", userId, bgmId, file.getOriginalFilename());
-        
-        // Use the uploadFile method from FirebaseStorageService
-        java.io.File tempFile = java.io.File.createTempFile("bgm-upload-", file.getOriginalFilename());
-        try {
-            file.transferTo(tempFile);
-            return firebaseStorageService.uploadFile(tempFile, objectName, file.getContentType());
-        } finally {
-            tempFile.delete();
-        }
-    }
 }

@@ -9,4 +9,7 @@ public interface BackgroundMusicDao {
     BackgroundMusic getBackgroundMusic(String id) throws ExecutionException, InterruptedException;
     List<BackgroundMusic> getBackgroundMusicByUserId(String userId) throws ExecutionException, InterruptedException;
     boolean deleteBackgroundMusic(String id) throws ExecutionException, InterruptedException;
+    
+    // Storage operations
+    BackgroundMusic uploadAndSaveBackgroundMusic(org.springframework.web.multipart.MultipartFile file, String userId, String title, String description) throws Exception;
 }

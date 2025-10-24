@@ -41,8 +41,8 @@ src/main/java/com/example/demo/
 - **Framework:** Spring Boot 3.x
 - **Language:** Java 17+
 - **Database:** Firebase Firestore
-- **Storage:** Firebase Storage
-- **AI:** OpenAI GPT-4, DeepSeek, PaddleDetection
+- **Storage:** Alibaba OSS (Object Storage Service)
+- **AI:** OpenAI GPT-4, DeepSeek, PaddleDetection, Qwen VL
 
 ## Configuration
 

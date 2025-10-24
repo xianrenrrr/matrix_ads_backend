@@ -15,6 +15,9 @@ public class BackgroundMusicDaoImpl implements BackgroundMusicDao {
     @Autowired(required = false)
     private Firestore db;
     
+    @Autowired(required = false)
+    private com.example.demo.service.AlibabaOssStorageService ossStorageService;
+    
     private static final String COLLECTION = "background_music";
     
     @Override
@@ -63,5 +66,88 @@ public class BackgroundMusicDaoImpl implements BackgroundMusicDao {
         
         db.collection(COLLECTION).document(id).delete().get();
         return true;
+    }
+    
+    @Override
+    public BackgroundMusic uploadAndSaveBackgroundMusic(org.springframework.web.multipart.MultipartFile file, String userId, String title, String description) throws Exception {
+        if (ossStorageService == null) {
+            throw new IllegalStateException("AlibabaOssStorageService not available");
+        }
+        
+        // Validate file
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("File is empty");
+        }
+        
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("audio/")) {
+            throw new IllegalArgumentException("File must be an audio file");
+        }
+        
+        // Generate BGM ID
+        String bgmId = java.util.UUID.randomUUID().toString();
+        
+        // Extract audio duration using FFprobe
+        long durationSeconds = extractAudioDuration(file);
+        
+        // Upload to OSS
+        String objectName = String.format("bgm/%s/%s/%s", userId, bgmId, file.getOriginalFilename());
+        java.io.File tempFile = java.io.File.createTempFile("bgm-upload-", file.getOriginalFilename());
+        try {
+            file.transferTo(tempFile);
+            String audioUrl = ossStorageService.uploadFile(tempFile, objectName, file.getContentType());
+            
+            // Create BGM record
+            BackgroundMusic bgm = new BackgroundMusic();
+            bgm.setId(bgmId);
+            bgm.setUserId(userId);
+            bgm.setTitle(title != null && !title.isBlank() ? title : file.getOriginalFilename());
+            bgm.setDescription(description);
+            bgm.setAudioUrl(audioUrl);
+            bgm.setDurationSeconds(durationSeconds);
+            bgm.setUploadedAt(java.time.LocalDateTime.now().toString());
+            
+            saveBackgroundMusic(bgm);
+            return bgm;
+        } finally {
+            tempFile.delete();
+        }
+    }
+    
+    private long extractAudioDuration(org.springframework.web.multipart.MultipartFile file) throws Exception {
+        java.io.File tempAudio = java.io.File.createTempFile("bgm-", ".mp3");
+        
+        try {
+            // Copy file to temp location
+            try (java.io.InputStream is = file.getInputStream();
+                 java.io.FileOutputStream fos = new java.io.FileOutputStream(tempAudio)) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = is.read(buffer)) != -1) {
+                    fos.write(buffer, 0, bytesRead);
+                }
+            }
+            
+            // Use FFprobe to get duration
+            ProcessBuilder pb = new ProcessBuilder(
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", tempAudio.getAbsolutePath()
+            );
+            
+            Process proc = pb.start();
+            java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(proc.getInputStream())
+            );
+            String durationStr = reader.readLine();
+            proc.waitFor();
+            
+            if (durationStr != null && !durationStr.isEmpty()) {
+                return (long) Double.parseDouble(durationStr);
+            }
+            return 0;
+            
+        } finally {
+            tempAudio.delete();
+        }
     }
 }

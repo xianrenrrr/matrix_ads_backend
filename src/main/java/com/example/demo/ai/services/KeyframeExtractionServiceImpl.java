@@ -26,7 +26,7 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
     @Autowired
     private FirebaseCredentialsUtil firebaseCredentialsUtil;
 
-    @Value("${firebase.storage.bucket}")
+    @Value("${alibaba.oss.bucket-name}")
     private String bucketName;
     
     private static final String KEYFRAMES_FOLDER = "keyframes/";

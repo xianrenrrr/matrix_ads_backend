@@ -1,6 +1,6 @@
 package com.example.demo.controller;
 
-import com.example.demo.service.FirebaseStorageService;
+import com.example.demo.service.AlibabaOssStorageService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -28,11 +28,11 @@ public class ImageProxyController {
 
     private static final Logger log = LoggerFactory.getLogger(ImageProxyController.class);
 
-    @Value("${firebase.storage.bucket}")
+    @Value("${alibaba.oss.bucket-name}")
     private String bucketName;
 
     @Autowired(required = false)
-    private FirebaseStorageService firebaseStorageService;
+    private AlibabaOssStorageService ossStorageService;
 
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -63,13 +63,13 @@ public class ImageProxyController {
             return passThrough(unsignedResp);
         }
 
-        // Fallback 2: If expired/unauthorized and Firebase available, mint fresh signed URL
+        // Fallback 2: If expired/unauthorized and OSS available, mint fresh signed URL
         if ((resp.getStatusCode() == HttpStatus.FORBIDDEN || resp.getStatusCode() == HttpStatus.BAD_REQUEST
                 || resp.getStatusCode() == HttpStatus.UNAUTHORIZED
                 || unsignedResp.getStatusCode() == HttpStatus.FORBIDDEN || unsignedResp.getStatusCode() == HttpStatus.UNAUTHORIZED)
-                && firebaseStorageService != null) {
+                && ossStorageService != null) {
             try {
-                String freshSigned = firebaseStorageService.generateSignedUrl(unsignedUrl);
+                String freshSigned = ossStorageService.generateSignedUrl(unsignedUrl);
                 ResponseEntity<byte[]> retry = fetch(freshSigned);
                 if (retry.getStatusCode().is2xxSuccessful()) {
                     return passThrough(retry);
@@ -114,7 +114,7 @@ public class ImageProxyController {
         if (p.startsWith("http://") || p.startsWith("https://")) {
             return p;
         }
-        // Support form: "keyframes/abc.jpg?X-Goog-..." (decoded already)
+        // Support form: "keyframes/abc.jpg?..." (decoded already)
         String pathOnly = p;
         String query = null;
         int q = p.indexOf('?');
@@ -123,7 +123,7 @@ public class ImageProxyController {
             query = p.substring(q + 1);
         }
         if (pathOnly.startsWith("/")) pathOnly = pathOnly.substring(1);
-        String base = "https://storage.googleapis.com/" + bucketName + "/" + pathOnly;
+        String base = "https://" + bucketName + ".oss-cn-hongkong.aliyuncs.com/" + pathOnly;
         return (query != null && !query.isBlank()) ? base + "?" + query : base;
     }
 
@@ -131,14 +131,11 @@ public class ImageProxyController {
         String p = pathOrUrl;
         try {
             if (p.startsWith("http://") || p.startsWith("https://")) {
-                // Example: https://storage.googleapis.com/<bucket>/<object>?signed
+                // Example: https://<bucket>.oss-cn-hongkong.aliyuncs.com/<object>?signed
                 URI uri = new URI(p);
-                String rawPath = uri.getPath(); // /<bucket>/<object>
+                String rawPath = uri.getPath(); // /<object>
                 if (rawPath != null && rawPath.startsWith("/")) rawPath = rawPath.substring(1);
-                if (rawPath != null && rawPath.startsWith(bucketName + "/")) {
-                    return rawPath.substring(bucketName.length() + 1);
-                }
-                // If not the expected host, fall through
+                return rawPath;
             }
         } catch (Exception ignored) {}
         // Strip query if present
@@ -160,7 +157,7 @@ public class ImageProxyController {
     private String redact(String url) {
         if (url == null) return null;
         // hide signature to avoid leaking secrets in logs
-        return url.replaceAll("(X-Goog-Signature=)[A-Fa-f0-9]+", "$1<redacted>");
+        return url.replaceAll("(Signature=)[A-Za-z0-9+/=]+", "$1<redacted>");
     }
 
     private String safeTrim(String s) {

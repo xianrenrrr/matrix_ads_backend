@@ -7,7 +7,6 @@ import com.example.demo.model.SceneSubmission;
 import com.example.demo.api.ApiResponse;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Video;
-import com.example.demo.service.FirebaseStorageService;
 // ComparisonAIService removed - using QwenSceneComparisonService
 import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.DocumentReference;
@@ -33,9 +32,6 @@ public class SceneSubmissionController {
     
     @Autowired
     private TemplateDao templateDao;
-    
-    @Autowired(required = false)
-    private FirebaseStorageService firebaseStorageService;
     
     @Autowired
     private Firestore db;
@@ -72,36 +68,18 @@ public class SceneSubmissionController {
         com.example.demo.model.Scene templateScene = template.getScenes().get(sceneNumber - 1);
         String compositeVideoId = userId + "_" + assignmentId;
         
-        // Upload file
-        String sceneVideoId = UUID.randomUUID().toString();
-        FirebaseStorageService.UploadResult uploadResult = firebaseStorageService.uploadVideoWithThumbnail(file, userId, sceneVideoId);
-        
-        // Create scene submission
-        SceneSubmission sceneSubmission = new SceneSubmission(assignmentId, userId, sceneNumber, 
-            sceneTitle != null ? sceneTitle : templateScene.getSceneTitle());
-        
-        sceneSubmission.setVideoUrl(uploadResult.videoUrl);
-        sceneSubmission.setThumbnailUrl(uploadResult.thumbnailUrl);
-        sceneSubmission.setOriginalFileName(file.getOriginalFilename());
-        sceneSubmission.setFileSize(file.getSize());
-        sceneSubmission.setFormat(getFileExtension(file.getOriginalFilename()));
-        
-        // Set initial pending scores - AI will update these asynchronously
-        // Use -1 as special value to indicate "calculating" (frontend will show "正在计算")
-        sceneSubmission.setSimilarityScore(-1.0);
-        sceneSubmission.setAiSuggestions(Arrays.asList("AI分析进行中...", "请稍后查看结果"));
-        sceneSubmission.setStatus("pending");
-        
-        // Save to DB immediately for fast response
-        String sceneId = sceneSubmissionDao.save(sceneSubmission);
-        sceneSubmission.setId(sceneId);
+        // DAO handles upload and save
+        String finalSceneTitle = sceneTitle != null ? sceneTitle : templateScene.getSceneTitle();
+        SceneSubmission sceneSubmission = sceneSubmissionDao.uploadAndSaveScene(
+            file, assignmentId, userId, sceneNumber, finalSceneTitle
+        );
         
         updateSubmittedVideoWithScene(compositeVideoId, assignmentId, userId, sceneSubmission);
         
         // Process AI comparison asynchronously in background
-        final String finalSceneId = sceneId;
+        final String finalSceneId = sceneSubmission.getId();
         final String templateVideoUrl = getTemplateVideoUrl(template.getVideoId());
-        final String userVideoUrl = uploadResult.videoUrl;
+        final String userVideoUrl = sceneSubmission.getVideoUrl();
         
         java.util.concurrent.CompletableFuture.runAsync(() -> {
             try {
@@ -157,7 +135,7 @@ public class SceneSubmissionController {
         responseData.put("similarityScore", sceneSubmission.getSimilarityScore());
         responseData.put("aiSuggestions", sceneSubmission.getAiSuggestions());
         responseData.put("status", sceneSubmission.getStatus());
-        responseData.put("sceneId", sceneId);
+        responseData.put("sceneId", sceneSubmission.getId());
         
         return ResponseEntity.ok(ApiResponse.ok("Scene uploaded successfully", responseData));
     }
@@ -190,12 +168,10 @@ public class SceneSubmissionController {
                         fullSceneData.put("sceneTitle", sceneSubmission.getSceneTitle());
                         fullSceneData.put("videoUrl", sceneSubmission.getVideoUrl());
                         fullSceneData.put("thumbnailUrl", sceneSubmission.getThumbnailUrl());
-                        // Attach signed URL for playback if storage service available
+                        // Attach signed URL for playback
                         try {
-                            if (firebaseStorageService != null && sceneSubmission.getVideoUrl() != null) {
-                                String signed = firebaseStorageService.generateSignedUrl(sceneSubmission.getVideoUrl());
-                                fullSceneData.put("videoSignedUrl", signed);
-                            }
+                            String signed = sceneSubmissionDao.getSignedUrl(sceneSubmission.getVideoUrl());
+                            fullSceneData.put("videoSignedUrl", signed);
                         } catch (Exception ignored) {}
                         fullSceneData.put("status", sceneSubmission.getStatus());
                         fullSceneData.put("similarityScore", sceneSubmission.getSimilarityScore());
@@ -213,8 +189,8 @@ public class SceneSubmissionController {
         // If compiledVideoUrl exists, attach a signed URL for client download
         try {
             Object compiledUrl = videoData.get("compiledVideoUrl");
-            if (compiledUrl instanceof String && firebaseStorageService != null) {
-                String signed = firebaseStorageService.generateSignedUrl((String) compiledUrl);
+            if (compiledUrl instanceof String) {
+                String signed = sceneSubmissionDao.getSignedUrl((String) compiledUrl);
                 videoData.put("compiledVideoSignedUrl", signed);
             }
         } catch (Exception ignored) {}
@@ -248,10 +224,8 @@ public class SceneSubmissionController {
         data.put("submittedAt", scene.getSubmittedAt());
 
         try {
-            if (firebaseStorageService != null && scene.getVideoUrl() != null) {
-                String signed = firebaseStorageService.generateSignedUrl(scene.getVideoUrl());
-                data.put("videoSignedUrl", signed);
-            }
+            String signed = sceneSubmissionDao.getSignedUrl(scene.getVideoUrl());
+            data.put("videoSignedUrl", signed);
         } catch (Exception ignored) {}
 
         return ResponseEntity.ok(ApiResponse.ok("Scene retrieved", data));
@@ -325,13 +299,6 @@ public class SceneSubmissionController {
             videoDocRef.set(videoData);
             // Note: We don't update the original template's submittedVideos since we're using assignments now
         }
-    }
-    
-    private String getFileExtension(String filename) {
-        if (filename != null && filename.contains(".")) {
-            return filename.substring(filename.lastIndexOf(".") + 1).toLowerCase();
-        }
-        return "mp4";
     }
     
     private int getTemplateTotalScenes(String assignmentId) throws Exception {

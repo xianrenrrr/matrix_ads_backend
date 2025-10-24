@@ -17,6 +17,9 @@ public class VideoDaoImpl implements VideoDao {
     @Autowired(required = false)
     private Firestore db;
     
+    @Autowired(required = false)
+    private com.example.demo.service.AlibabaOssStorageService ossStorageService;
+    
     private void checkFirestore() {
         if (db == null) {
             throw new IllegalStateException("Firestore is not available in development mode. Please configure Firebase credentials or use a different data source.");
@@ -107,5 +110,33 @@ public class VideoDaoImpl implements VideoDao {
         } catch (Exception e) {
             return false;
         }
+    }
+    
+    @Override
+    public Video uploadAndSaveVideo(org.springframework.web.multipart.MultipartFile file, String userId, String videoId) throws Exception {
+        if (ossStorageService == null) {
+            throw new IllegalStateException("AlibabaOssStorageService not available");
+        }
+        
+        // Upload to OSS
+        com.example.demo.service.AlibabaOssStorageService.UploadResult uploadResult = 
+            ossStorageService.uploadVideoWithThumbnail(file, userId, videoId);
+        
+        // Create and save video object
+        Video video = new Video();
+        video.setId(videoId);
+        video.setUserId(userId);
+        video.setUrl(uploadResult.videoUrl);
+        video.setThumbnailUrl(uploadResult.thumbnailUrl);
+        
+        return saveVideo(video);
+    }
+    
+    @Override
+    public String getSignedUrl(String videoUrl) throws Exception {
+        if (ossStorageService == null || videoUrl == null) {
+            return videoUrl;
+        }
+        return ossStorageService.generateSignedUrl(videoUrl);
     }
 }

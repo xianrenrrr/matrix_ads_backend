@@ -16,18 +16,14 @@ public class FirebaseConfig {
 
     @Value("${firebase.service-account-key}")
     private String serviceAccountKeyPath;
-
-    @Value("${firebase.storage.bucket}")
-    private String storageBucket;
     
     @Value("${firebase.enabled:true}")
     private boolean firebaseEnabled;
 
     @Bean(name = "firebaseApp")
     public FirebaseApp initializeFirebase() throws IOException {
-        System.out.println("=== Initializing Firebase ===");
+        System.out.println("=== Initializing Firebase (Firestore only) ===");
         System.out.println("Firebase enabled: " + firebaseEnabled);
-        System.out.println("Storage bucket: " + storageBucket);
         
         if (!firebaseEnabled) {
             System.out.println("Firebase is disabled - running in development mode");
@@ -109,7 +105,6 @@ public class FirebaseConfig {
         
         FirebaseOptions options = FirebaseOptions.builder()
             .setCredentials(credentials)
-            .setStorageBucket(storageBucket)
             .build();
         
         FirebaseApp app = FirebaseApp.initializeApp(options);

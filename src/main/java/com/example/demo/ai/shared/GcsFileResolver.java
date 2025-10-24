@@ -29,7 +29,7 @@ public class GcsFileResolver {
     @Autowired
     private FirebaseCredentialsUtil firebaseCredentialsUtil;
     
-    @Value("${firebase.storage.bucket}")
+    @Value("${alibaba.oss.bucket-name}")
     private String bucketName;
     
     private Storage storageClient;

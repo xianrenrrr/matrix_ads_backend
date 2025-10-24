@@ -49,9 +49,6 @@ public class VideoController {
     @Autowired
     private TemplateDao templateDao; 
 
-    @Autowired(required = false)
-    private com.example.demo.service.FirebaseStorageService firebaseStorageService;
-    
     @Autowired
     private I18nService i18nService;
 
@@ -82,14 +79,9 @@ public class VideoController {
                 return ResponseEntity.status(404).body(ApiResponse.fail("Video not found"));
             }
             
-            // Generate signed URL with long expiration for development
-            if (firebaseStorageService != null) {
-                String signedUrl = firebaseStorageService.generateSignedUrl(video.getUrl());
-                return ResponseEntity.ok(ApiResponse.ok("Signed URL generated", signedUrl));
-            }
-            
-            // Fallback: return original URL
-            return ResponseEntity.ok(ApiResponse.ok("Direct URL returned", video.getUrl()));
+            // DAO handles signed URL generation
+            String signedUrl = videoDao.getSignedUrl(video.getUrl());
+            return ResponseEntity.ok(ApiResponse.ok("Signed URL generated", signedUrl));
                 
         } catch (Exception e) {
             return ResponseEntity.status(500).body(ApiResponse.fail("Failed to generate video URL"));
@@ -173,20 +165,12 @@ public class VideoController {
         System.out.println("Subtitle Extraction: ASR (Speech-to-Text) only");
         System.out.println("=============================");
         
-        // Upload to Firebase Storage and extract thumbnail
-        // Generate videoId first
+        // DAO handles upload and save
         String videoId = java.util.UUID.randomUUID().toString();
-        com.example.demo.service.FirebaseStorageService.UploadResult result = firebaseStorageService.uploadVideoWithThumbnail(file, userId, videoId);
-
-        // Create video
-        Video video = new Video();
-        video.setId(videoId);
-        video.setUserId(userId);
-        video.setTitle(title != null ? title : "");
-        video.setDescription(description != null ? description : "");
-        video.setUrl(result.videoUrl);
-        video.setThumbnailUrl(result.thumbnailUrl);
-        Video savedVideo = videoDao.saveVideo(video);
+        Video savedVideo = videoDao.uploadAndSaveVideo(file, userId, videoId);
+        savedVideo.setTitle(title != null ? title : "");
+        savedVideo.setDescription(description != null ? description : "");
+        videoDao.updateVideo(savedVideo);
         // Create a default template if no templateId is provided
         // Determine template creation strategy
         if (templateId == null) {

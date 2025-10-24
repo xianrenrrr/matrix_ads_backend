@@ -8,7 +8,7 @@ import com.aliyun.videorecog20200320.models.GetAsyncJobResultRequest;
 import com.aliyun.videorecog20200320.models.GetAsyncJobResultResponse;
 import com.aliyun.teautil.models.RuntimeOptions;
 import com.example.demo.model.SceneSegment;
-import com.example.demo.service.FirebaseStorageService;
+import com.example.demo.service.AlibabaOssStorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,7 +37,7 @@ public class AlibabaVideoShotDetectionService {
     private static final Logger log = LoggerFactory.getLogger(AlibabaVideoShotDetectionService.class);
     
     @Autowired(required = false)
-    private FirebaseStorageService firebaseStorageService;
+    private AlibabaOssStorageService ossStorageService;
     
     @Value("${ALIBABA_CLOUD_ACCESS_KEY_ID:}")
     private String accessKeyId;
@@ -63,10 +63,9 @@ public class AlibabaVideoShotDetectionService {
                 "Set ALIBABA_CLOUD_ACCESS_KEY_ID and ALIBABA_CLOUD_ACCESS_KEY_SECRET");
         }
         
-        String accessibleUrl = null;
         try {
-            // Make file temporarily public for Alibaba Cloud access
-            accessibleUrl = prepareVideoUrl(videoUrl);
+            // Generate signed URL for Alibaba Cloud access (no cleanup needed - URL expires automatically)
+            String accessibleUrl = prepareVideoUrl(videoUrl);
             
             log.info("=== SENDING TO ALIBABA CLOUD ===");
             log.info("URL being sent to Alibaba: {}", accessibleUrl);
@@ -102,11 +101,6 @@ public class AlibabaVideoShotDetectionService {
         } catch (Exception e) {
             log.error("Shot detection failed", e);
             throw e;
-        } finally {
-            // Always cleanup - make file private again
-            if (accessibleUrl != null) {
-                cleanupVideoAccess(accessibleUrl);
-            }
         }
     }
     
@@ -194,11 +188,11 @@ public class AlibabaVideoShotDetectionService {
     /**
      * Prepare video URL for Alibaba Cloud access
      * 
-     * Alibaba Cloud cannot access Google Cloud Storage signed URLs due to network restrictions.
-     * Instead, we temporarily make the file public, process it, then make it private again.
+     * For OSS URLs, generate a 7-day signed URL that Alibaba Cloud services can access.
+     * OSS signed URLs work perfectly with Alibaba Cloud services (same cloud provider).
      * 
-     * @param videoUrl Original video URL (Firebase Storage or public URL)
-     * @return Accessible URL for Alibaba Cloud (public URL)
+     * @param videoUrl Original video URL (OSS or public URL)
+     * @return Accessible URL for Alibaba Cloud (signed URL)
      */
     private String prepareVideoUrl(String videoUrl) {
         if (videoUrl == null || videoUrl.isEmpty()) {
@@ -208,57 +202,33 @@ public class AlibabaVideoShotDetectionService {
         
         log.info("Original video URL: {}", videoUrl);
         
-        // Check if it's a Firebase Storage URL
-        if (videoUrl.contains("storage.googleapis.com")) {
-            if (firebaseStorageService == null) {
-                log.error("Firebase Storage URL detected but FirebaseStorageService is not available!");
+        // Check if it's an OSS URL
+        if (videoUrl.contains("aliyuncs.com")) {
+            if (ossStorageService == null) {
+                log.error("OSS URL detected but AlibabaOssStorageService is not available!");
                 return videoUrl;
             }
             
-            log.info("Making Firebase Storage file temporarily public for Alibaba Cloud access");
-            log.warn("Note: File will be made public temporarily during processing");
+            log.info("Generating 7-day signed URL for Alibaba Cloud access");
             
             try {
-                // Make the file temporarily public
-                firebaseStorageService.makeFilePublic(videoUrl);
+                // Generate 7-day signed URL (OSS signed URLs work perfectly with Alibaba services!)
+                String signedUrl = ossStorageService.generateSignedUrl(videoUrl, 7, TimeUnit.DAYS);
                 
-                log.info("File is now temporarily public, Alibaba Cloud can access it");
+                log.info("Successfully generated 7-day signed URL");
+                log.info("Signed URL length: {} characters", signedUrl.length());
                 
-                // Return the original URL (now publicly accessible)
-                return videoUrl;
+                return signedUrl;
             } catch (Exception e) {
-                log.error("Failed to make file public: {}", e.getMessage(), e);
-                log.error("Alibaba Cloud will likely fail to access the file");
+                log.error("Failed to generate signed URL: {}", e.getMessage(), e);
+                log.error("Falling back to original URL");
                 return videoUrl;
             }
         }
         
-        // Not a Firebase URL, return as-is
-        log.info("Not a Firebase Storage URL, using original URL");
+        // Not an OSS URL, return as-is (assume it's publicly accessible)
+        log.info("Not an OSS URL, using original URL");
         return videoUrl;
-    }
-    
-    /**
-     * Cleanup after video processing - make the file private again
-     */
-    private void cleanupVideoAccess(String videoUrl) {
-        if (videoUrl == null || !videoUrl.contains("storage.googleapis.com")) {
-            return;
-        }
-        
-        if (firebaseStorageService == null) {
-            log.warn("Cannot cleanup - FirebaseStorageService not available");
-            return;
-        }
-        
-        try {
-            log.info("Making file private again after processing");
-            firebaseStorageService.makeFilePrivate(videoUrl);
-            log.info("File is now private again");
-        } catch (Exception e) {
-            log.error("Failed to make file private again: {}", e.getMessage(), e);
-            log.error("SECURITY WARNING: File may still be publicly accessible!");
-        }
     }
     
     /**

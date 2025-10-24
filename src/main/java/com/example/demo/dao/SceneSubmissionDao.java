@@ -16,6 +16,10 @@ public interface SceneSubmissionDao {
     void update(SceneSubmission sceneSubmission) throws ExecutionException, InterruptedException;
     void delete(String id) throws ExecutionException, InterruptedException;
     
+    // Storage operations
+    SceneSubmission uploadAndSaveScene(org.springframework.web.multipart.MultipartFile file, String assignmentId, String userId, int sceneNumber, String sceneTitle) throws Exception;
+    String getSignedUrl(String videoUrl) throws Exception;
+    
     // Query Methods for Scene Management
     List<SceneSubmission> findByTemplateId(String templateId) throws ExecutionException, InterruptedException;
     List<SceneSubmission> findByUserId(String userId) throws ExecutionException, InterruptedException;

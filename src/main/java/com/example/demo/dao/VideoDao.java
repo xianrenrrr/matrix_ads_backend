@@ -9,4 +9,8 @@ public interface VideoDao {
     void updateVideo(Video video) throws ExecutionException, InterruptedException;
     Video saveVideoWithTemplate(Video video, String templateId) throws ExecutionException, InterruptedException;
     boolean deleteVideoById(String videoId) throws ExecutionException, InterruptedException;
+    
+    // Storage operations
+    Video uploadAndSaveVideo(org.springframework.web.multipart.MultipartFile file, String userId, String videoId) throws Exception;
+    String getSignedUrl(String videoUrl) throws Exception;
 }
