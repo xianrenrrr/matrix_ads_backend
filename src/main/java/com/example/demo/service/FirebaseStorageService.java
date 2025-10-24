@@ -235,4 +235,66 @@ public class FirebaseStorageService {
         if (url == null) return null;
         return url.replaceAll("(Signature=)[^&]+", "$1<redacted>");
     }
+    
+    /**
+     * Make a file temporarily public (for AI services that can't access signed URLs)
+     * WARNING: This makes the file publicly accessible to anyone with the URL
+     */
+    public void makeFilePublic(String firebaseUrl) {
+        try {
+            String objectName = parseObjectNameFromUrl(firebaseUrl);
+            if (objectName == null) {
+                System.err.println("Cannot make file public - invalid URL: " + firebaseUrl);
+                return;
+            }
+            
+            var blob = storage.get(bucketName, objectName);
+            if (blob == null) {
+                System.err.println("Cannot make file public - file not found: " + objectName);
+                return;
+            }
+            
+            // Create ACL to make file publicly readable
+            blob.createAcl(com.google.cloud.storage.Acl.of(
+                com.google.cloud.storage.Acl.User.ofAllUsers(), 
+                com.google.cloud.storage.Acl.Role.READER
+            ));
+            
+            System.out.println("Made file public: " + objectName);
+        } catch (Exception e) {
+            System.err.println("Failed to make file public: " + e.getMessage());
+            throw new RuntimeException("Failed to make file public", e);
+        }
+    }
+    
+    /**
+     * Make a file private again (remove public access)
+     */
+    public void makeFilePrivate(String firebaseUrl) {
+        try {
+            String objectName = parseObjectNameFromUrl(firebaseUrl);
+            if (objectName == null) {
+                System.err.println("Cannot make file private - invalid URL: " + firebaseUrl);
+                return;
+            }
+            
+            var blob = storage.get(bucketName, objectName);
+            if (blob == null) {
+                System.err.println("Cannot make file private - file not found: " + objectName);
+                return;
+            }
+            
+            // Delete the public ACL
+            try {
+                blob.deleteAcl(com.google.cloud.storage.Acl.User.ofAllUsers());
+                System.out.println("Made file private: " + objectName);
+            } catch (Exception e) {
+                // ACL might not exist, which is fine
+                System.out.println("File was already private or ACL not found: " + objectName);
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to make file private: " + e.getMessage());
+            throw new RuntimeException("Failed to make file private", e);
+        }
+    }
 }

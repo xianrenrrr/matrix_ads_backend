@@ -63,9 +63,10 @@ public class AlibabaVideoShotDetectionService {
                 "Set ALIBABA_CLOUD_ACCESS_KEY_ID and ALIBABA_CLOUD_ACCESS_KEY_SECRET");
         }
         
+        String accessibleUrl = null;
         try {
-            // Convert Firebase Storage URL to 7-day signed URL for Alibaba Cloud access
-            String accessibleUrl = prepareVideoUrl(videoUrl);
+            // Make file temporarily public for Alibaba Cloud access
+            accessibleUrl = prepareVideoUrl(videoUrl);
             
             log.info("=== SENDING TO ALIBABA CLOUD ===");
             log.info("URL being sent to Alibaba: {}", accessibleUrl);
@@ -101,6 +102,11 @@ public class AlibabaVideoShotDetectionService {
         } catch (Exception e) {
             log.error("Shot detection failed", e);
             throw e;
+        } finally {
+            // Always cleanup - make file private again
+            if (accessibleUrl != null) {
+                cleanupVideoAccess(accessibleUrl);
+            }
         }
     }
     
@@ -188,11 +194,11 @@ public class AlibabaVideoShotDetectionService {
     /**
      * Prepare video URL for Alibaba Cloud access
      * 
-     * If the URL is a Firebase Storage URL, generates a 7-day signed URL for secure access.
-     * Otherwise, returns the URL as-is (assumes it's already publicly accessible).
+     * Alibaba Cloud cannot access Google Cloud Storage signed URLs due to network restrictions.
+     * Instead, we temporarily make the file public, process it, then make it private again.
      * 
      * @param videoUrl Original video URL (Firebase Storage or public URL)
-     * @return Accessible URL for Alibaba Cloud (signed URL or original)
+     * @return Accessible URL for Alibaba Cloud (public URL)
      */
     private String prepareVideoUrl(String videoUrl) {
         if (videoUrl == null || videoUrl.isEmpty()) {
@@ -206,24 +212,23 @@ public class AlibabaVideoShotDetectionService {
         if (videoUrl.contains("storage.googleapis.com")) {
             if (firebaseStorageService == null) {
                 log.error("Firebase Storage URL detected but FirebaseStorageService is not available!");
-                log.error("This will cause Alibaba Cloud to fail accessing the private video.");
                 return videoUrl;
             }
             
-            log.info("Converting Firebase Storage URL to 7-day signed URL for Alibaba Cloud access");
+            log.info("Making Firebase Storage file temporarily public for Alibaba Cloud access");
+            log.warn("Note: File will be made public temporarily during processing");
             
             try {
-                // Generate 7-day signed URL (enough time for Alibaba Cloud to process the video)
-                String signedUrl = firebaseStorageService.generateSignedUrl(videoUrl, 7, TimeUnit.DAYS);
+                // Make the file temporarily public
+                firebaseStorageService.makeFilePublic(videoUrl);
                 
-                log.info("Successfully generated 7-day signed URL");
-                log.info("Signed URL length: {} characters", signedUrl.length());
-                log.info("Signed URL (first 100 chars): {}", signedUrl.substring(0, Math.min(100, signedUrl.length())));
+                log.info("File is now temporarily public, Alibaba Cloud can access it");
                 
-                return signedUrl;
+                // Return the original URL (now publicly accessible)
+                return videoUrl;
             } catch (Exception e) {
-                log.error("Failed to generate signed URL: {}", e.getMessage(), e);
-                log.error("Falling back to original URL (will likely fail if file is private)");
+                log.error("Failed to make file public: {}", e.getMessage(), e);
+                log.error("Alibaba Cloud will likely fail to access the file");
                 return videoUrl;
             }
         }
@@ -231,6 +236,29 @@ public class AlibabaVideoShotDetectionService {
         // Not a Firebase URL, return as-is
         log.info("Not a Firebase Storage URL, using original URL");
         return videoUrl;
+    }
+    
+    /**
+     * Cleanup after video processing - make the file private again
+     */
+    private void cleanupVideoAccess(String videoUrl) {
+        if (videoUrl == null || !videoUrl.contains("storage.googleapis.com")) {
+            return;
+        }
+        
+        if (firebaseStorageService == null) {
+            log.warn("Cannot cleanup - FirebaseStorageService not available");
+            return;
+        }
+        
+        try {
+            log.info("Making file private again after processing");
+            firebaseStorageService.makeFilePrivate(videoUrl);
+            log.info("File is now private again");
+        } catch (Exception e) {
+            log.error("Failed to make file private again: {}", e.getMessage(), e);
+            log.error("SECURITY WARNING: File may still be publicly accessible!");
+        }
     }
     
     /**
