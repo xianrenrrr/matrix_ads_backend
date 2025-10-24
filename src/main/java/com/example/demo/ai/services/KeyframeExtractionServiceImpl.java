@@ -82,17 +82,17 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
                     "image/jpeg"
                 );
                 
-                // Use proxy URL for YOLO compatibility (avoids signed URL signature issues)
-                String proxyUrl = String.format("https://xpectra-ai-backend.onrender.com/images/proxy?path=%s", 
-                    java.net.URLEncoder.encode(keyframeObjectName, "UTF-8"));
+                // Generate long-lived signed URL for AI services (7 days)
+                // Qwen and other AI services need direct access to the image
+                String signedUrl = ossStorageService.generateSignedUrl(keyframeUrl, 7, java.util.concurrent.TimeUnit.DAYS);
                 
                 System.out.printf("✅ Keyframe extracted and uploaded successfully:%n");
                 System.out.printf("   Object name: %s%n", keyframeObjectName);
                 System.out.printf("   OSS URL: %s%n", keyframeUrl);
-                System.out.printf("   Proxy URL: %s%n", proxyUrl);
+                System.out.printf("   Signed URL (7 days): %s%n", signedUrl);
                 System.out.printf("   Generated at: %s%n", java.time.Instant.now());
                 
-                return proxyUrl;
+                return signedUrl;
                 
             } finally {
                 // Clean up temporary files
