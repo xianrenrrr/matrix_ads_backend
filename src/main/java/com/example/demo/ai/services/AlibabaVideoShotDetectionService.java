@@ -8,13 +8,16 @@ import com.aliyun.videorecog20200320.models.GetAsyncJobResultRequest;
 import com.aliyun.videorecog20200320.models.GetAsyncJobResultResponse;
 import com.aliyun.teautil.models.RuntimeOptions;
 import com.example.demo.model.SceneSegment;
+import com.example.demo.service.FirebaseStorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Alibaba Cloud Video Shot Detection Service
@@ -26,10 +29,15 @@ import java.util.List;
  * SDK Reference: videorecog20200320 (Tea SDK)
  * 
  * Pricing: ~¥0.05 per minute of video
+ * 
+ * Security: Uses 7-day signed URLs instead of public URLs for Firebase Storage videos
  */
 @Service
 public class AlibabaVideoShotDetectionService {
     private static final Logger log = LoggerFactory.getLogger(AlibabaVideoShotDetectionService.class);
+    
+    @Autowired(required = false)
+    private FirebaseStorageService firebaseStorageService;
     
     @Value("${ALIBABA_CLOUD_ACCESS_KEY_ID:}")
     private String accessKeyId;
@@ -42,7 +50,7 @@ public class AlibabaVideoShotDetectionService {
     /**
      * Detect scene shots in a video (async with polling)
      * 
-     * @param videoUrl Public URL of the video to analyze
+     * @param videoUrl Firebase Storage URL or public URL of the video to analyze
      * @return List of scene segments with start/end times
      * @throws Exception if detection fails
      */
@@ -56,12 +64,15 @@ public class AlibabaVideoShotDetectionService {
         }
         
         try {
+            // Convert Firebase Storage URL to 7-day signed URL for Alibaba Cloud access
+            String accessibleUrl = prepareVideoUrl(videoUrl);
+            
             // Create client
             com.aliyun.videorecog20200320.Client client = createClient();
             
             // Step 1: Submit async job (API is async by default)
             DetectVideoShotRequest request = new DetectVideoShotRequest();
-            request.setVideoUrl(videoUrl);
+            request.setVideoUrl(accessibleUrl);
             
             RuntimeOptions runtime = new RuntimeOptions();
             DetectVideoShotResponse response = client.detectVideoShotWithOptions(request, runtime);
@@ -166,6 +177,36 @@ public class AlibabaVideoShotDetectionService {
         
         log.error("Job timed out after {} attempts", maxAttempts);
         return new ArrayList<>();
+    }
+    
+    /**
+     * Prepare video URL for Alibaba Cloud access
+     * 
+     * If the URL is a Firebase Storage URL, generates a 7-day signed URL for secure access.
+     * Otherwise, returns the URL as-is (assumes it's already publicly accessible).
+     * 
+     * @param videoUrl Original video URL (Firebase Storage or public URL)
+     * @return Accessible URL for Alibaba Cloud (signed URL or original)
+     */
+    private String prepareVideoUrl(String videoUrl) {
+        if (videoUrl == null || videoUrl.isEmpty()) {
+            return videoUrl;
+        }
+        
+        // Check if it's a Firebase Storage URL
+        if (videoUrl.contains("storage.googleapis.com") && firebaseStorageService != null) {
+            log.info("Converting Firebase Storage URL to 7-day signed URL for Alibaba Cloud access");
+            
+            // Generate 7-day signed URL (enough time for Alibaba Cloud to process the video)
+            String signedUrl = firebaseStorageService.generateSignedUrl(videoUrl, 7, TimeUnit.DAYS);
+            
+            log.info("Generated 7-day signed URL (expires in 7 days)");
+            return signedUrl;
+        }
+        
+        // Not a Firebase URL or service not available, return as-is
+        log.info("Using original URL (not a Firebase Storage URL or service unavailable)");
+        return videoUrl;
     }
     
     /**

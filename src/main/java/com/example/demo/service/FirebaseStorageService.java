@@ -60,9 +60,6 @@ public class FirebaseStorageService {
             }
         }
         
-        // Make video publicly readable for AI services (Alibaba Cloud, etc.)
-        storage.get(bucketName, objectName).createAcl(com.google.cloud.storage.Acl.of(com.google.cloud.storage.Acl.User.ofAllUsers(), com.google.cloud.storage.Acl.Role.READER));
-        
         String videoUrl = String.format("https://storage.googleapis.com/%s/%s", bucketName, objectName);
         // Save video to temp file for FFmpeg thumbnail extraction
         java.io.File tempVideo = java.io.File.createTempFile("upload-", ".mp4");
@@ -86,9 +83,6 @@ public class FirebaseStorageService {
                 .build();
         storage.create(thumbBlob, java.nio.file.Files.readAllBytes(tempThumb.toPath()));
         
-        // Make thumbnail publicly readable
-        storage.get(bucketName, thumbName).createAcl(com.google.cloud.storage.Acl.of(com.google.cloud.storage.Acl.User.ofAllUsers(), com.google.cloud.storage.Acl.Role.READER));
-        
         String thumbnailUrl = String.format("https://storage.googleapis.com/%s/%s", bucketName, thumbName);
         // Clean up
         tempVideo.delete();
@@ -100,6 +94,14 @@ public class FirebaseStorageService {
     }
 
     public String generateSignedUrl(String firebaseUrl) {
+        return generateSignedUrl(firebaseUrl, 15, TimeUnit.MINUTES);
+    }
+    
+    /**
+     * Generate signed URL with custom expiration time
+     * Useful for AI services that need longer access (e.g., Alibaba Cloud video processing)
+     */
+    public String generateSignedUrl(String firebaseUrl, long duration, TimeUnit unit) {
         try {
             // Extract object name from Firebase Storage URL
             // URL format: https://storage.googleapis.com/bucket-name/path/to/object
@@ -109,14 +111,13 @@ public class FirebaseStorageService {
             
             String objectName = firebaseUrl.substring(firebaseUrl.indexOf(bucketName) + bucketName.length() + 1);
             
-            // Generate signed URL with 15 minutes expiration
+            // Generate signed URL with specified expiration
             URL signedUrl = storage.signUrl(
                 BlobInfo.newBuilder(bucketName, objectName).build(),
-                15, TimeUnit.MINUTES
+                duration, unit
             );
             
-            System.out.println("Generated signed URL for: " + objectName);
-            System.out.println("Signed URL: " + signedUrl.toString());
+            System.out.println("Generated signed URL for: " + objectName + " (expires in " + duration + " " + unit + ")");
             
             return signedUrl.toString();
         } catch (Exception e) {
