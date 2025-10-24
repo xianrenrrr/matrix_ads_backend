@@ -286,8 +286,35 @@ public class AlibabaVideoShotDetectionService {
             @SuppressWarnings("unchecked")
             java.util.Map<String, Object> dataMap = mapper.readValue(dataJson, java.util.Map.class);
             
+            // The result field contains another JSON string that needs to be parsed
+            String resultJson = (String) dataMap.get("result");
+            if (resultJson == null || resultJson.isEmpty()) {
+                log.warn("No result field in data");
+                return segments;
+            }
+            
+            log.info("Result JSON string: {}", resultJson);
+            
+            // Parse the inner result JSON
             @SuppressWarnings("unchecked")
-            List<Integer> shotFrameIds = (List<Integer>) dataMap.get("ShotFrameIds");
+            java.util.Map<String, Object> resultMap = mapper.readValue(resultJson, java.util.Map.class);
+            
+            // Extract ShotFrameIds from the result
+            Object shotFrameIdsObj = resultMap.get("ShotFrameIds");
+            List<Integer> shotFrameIds = null;
+            
+            if (shotFrameIdsObj instanceof String) {
+                // It's a JSON string, parse it
+                String shotFrameIdsStr = (String) shotFrameIdsObj;
+                log.info("ShotFrameIds string: {}", shotFrameIdsStr);
+                shotFrameIds = mapper.readValue(shotFrameIdsStr, 
+                    mapper.getTypeFactory().constructCollectionType(List.class, Integer.class));
+            } else if (shotFrameIdsObj instanceof List) {
+                // It's already a list
+                @SuppressWarnings("unchecked")
+                List<Integer> list = (List<Integer>) shotFrameIdsObj;
+                shotFrameIds = list;
+            }
             
             if (shotFrameIds == null || shotFrameIds.isEmpty()) {
                 log.warn("No shot frame IDs in async result");
