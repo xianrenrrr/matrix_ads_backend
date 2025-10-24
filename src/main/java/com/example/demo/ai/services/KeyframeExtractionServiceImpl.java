@@ -1,30 +1,21 @@
 package com.example.demo.ai.services;
 
-import com.example.demo.util.FirebaseCredentialsUtil;
-import com.google.auth.oauth2.GoogleCredentials;
-import com.google.cloud.storage.Blob;
-import com.google.cloud.storage.BlobId;
-import com.google.cloud.storage.BlobInfo;
-import com.google.cloud.storage.Storage;
-import com.google.cloud.storage.StorageOptions;
-import com.google.cloud.storage.Storage.SignUrlOption;
+import com.example.demo.service.AlibabaOssStorageService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 @Service
 public class KeyframeExtractionServiceImpl implements KeyframeExtractionService {
     
-    @Autowired
-    private FirebaseCredentialsUtil firebaseCredentialsUtil;
+    @Autowired(required = false)
+    private AlibabaOssStorageService ossStorageService;
 
     @Value("${alibaba.oss.bucket-name}")
     private String bucketName;
@@ -36,35 +27,30 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
         System.out.printf("Extracting keyframe from video: %s (start: %s, end: %s)%n", 
                          videoUrl, startTime, endTime);
         
+        if (ossStorageService == null) {
+            System.err.println("AlibabaOssStorageService not available");
+            return null;
+        }
+        
         try {
-            // Get credentials using utility (environment or file)
-            GoogleCredentials credentials = firebaseCredentialsUtil.getCredentials();
-            
             // Use scene start timestamp (default to 0 if null)
             Duration target = startTime != null ? startTime : Duration.ZERO;
             double targetSeconds = target.getSeconds() + target.getNano() / 1_000_000_000.0;
             
-            // Extract bucket name and object name from GCS URL
-            String objectName = videoUrl.replace("https://storage.googleapis.com/" + bucketName + "/", "");
-            
-            // Create storage client with credentials
-            Storage storage = StorageOptions.newBuilder()
-                .setCredentials(credentials)
-                .build()
-                .getService();
-            Blob videoBlob = storage.get(bucketName, objectName);
-            
-            if (videoBlob == null || !videoBlob.exists()) {
-                throw new IOException("Video not found in Cloud Storage: " + objectName);
-            }
+            // Generate signed URL for video download (7 days for processing)
+            String signedVideoUrl = ossStorageService.generateSignedUrl(videoUrl, 7, java.util.concurrent.TimeUnit.DAYS);
             
             // Create temporary files
             Path tempVideoPath = Files.createTempFile("video_", ".mp4");
             Path tempKeyframePath = Files.createTempFile("keyframe_", ".jpg");
             
             try {
-                // Download video
-                videoBlob.downloadTo(tempVideoPath);
+                // Download video from OSS using signed URL
+                System.out.printf("Downloading video from OSS: %s%n", videoUrl);
+                java.net.URL url = new java.net.URL(signedVideoUrl);
+                try (java.io.InputStream in = url.openStream()) {
+                    Files.copy(in, tempVideoPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
                 
                 // Build FFmpeg command (seek to scene start)
                 ProcessBuilder processBuilder = new ProcessBuilder(
@@ -86,30 +72,27 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
                     throw new RuntimeException("FFmpeg failed with exit code: " + exitCode);
                 }
                 
-                // Upload keyframe to Cloud Storage
+                // Upload keyframe to OSS
                 String keyframeObjectName = KEYFRAMES_FOLDER + UUID.randomUUID().toString() + ".jpg";
-                byte[] keyframeBytes = Files.readAllBytes(tempKeyframePath);
                 
-                BlobId blobId = BlobId.of(bucketName, keyframeObjectName);
-                BlobInfo blobInfo = BlobInfo.newBuilder(blobId)
-                    .setContentType("image/jpeg")
-                    .build();
-                
-                storage.create(blobInfo, keyframeBytes);
+                // Upload using OSS service
+                String keyframeUrl = ossStorageService.uploadFile(
+                    new java.io.FileInputStream(tempKeyframePath.toFile()),
+                    keyframeObjectName,
+                    "image/jpeg"
+                );
                 
                 // Use proxy URL for YOLO compatibility (avoids signed URL signature issues)
-                // The proxy endpoint handles authentication internally
                 String proxyUrl = String.format("https://xpectra-ai-backend.onrender.com/images/proxy?path=%s", 
                     java.net.URLEncoder.encode(keyframeObjectName, "UTF-8"));
                 
-                String signedUrlString = proxyUrl;
                 System.out.printf("✅ Keyframe extracted and uploaded successfully:%n");
                 System.out.printf("   Object name: %s%n", keyframeObjectName);
-                System.out.printf("   Blob exists: %s%n", storage.get(bucketName, keyframeObjectName).exists());
-                System.out.printf("   Signed URL (15min TTL): %s%n", signedUrlString);
+                System.out.printf("   OSS URL: %s%n", keyframeUrl);
+                System.out.printf("   Proxy URL: %s%n", proxyUrl);
                 System.out.printf("   Generated at: %s%n", java.time.Instant.now());
                 
-                return signedUrlString;
+                return proxyUrl;
                 
             } finally {
                 // Clean up temporary files
