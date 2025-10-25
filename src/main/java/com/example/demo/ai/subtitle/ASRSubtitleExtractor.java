@@ -68,7 +68,8 @@ public class ASRSubtitleExtractor {
             log.info("Audio extracted to: {}", audioFile.getAbsolutePath());
             
             // Step 2: Upload audio to OSS (required by Fun-ASR API)
-            audioOssUrl = ossStorageService.uploadFile(audioFile, "asr-audio");
+            String objectKey = "asr-audio/" + System.currentTimeMillis() + "_" + audioFile.getName();
+            audioOssUrl = ossStorageService.uploadFile(audioFile, objectKey, "audio/wav");
             log.info("Audio uploaded to OSS: {}", audioOssUrl);
             
             // Step 3: Call Alibaba Cloud ASR API with OSS URL
