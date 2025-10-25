@@ -45,6 +45,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Autowired
     private UnifiedSceneAnalysisService unifiedSceneAnalysisService;
     
+    @Autowired(required = false)
+    private com.example.demo.ai.subtitle.ASRSubtitleExtractor asrSubtitleExtractor;
+    
     @Value("${ai.template.useObjectOverlay:true}")
     private boolean useObjectOverlay;
     
@@ -111,8 +114,22 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 return createFallbackTemplate(video, language);
             }
 
-            // Step 2: Process each scene
-            log.info("Step 2: Processing {} detected scenes", sceneSegments.size());
+            // Step 2: Extract speech transcript using ASR
+            log.info("Step 2: Extracting speech transcript using ASR");
+            List<com.example.demo.ai.subtitle.SubtitleSegment> transcript = new ArrayList<>();
+            if (asrSubtitleExtractor != null) {
+                try {
+                    transcript = asrSubtitleExtractor.extract(videoUrl, language);
+                    log.info("ASR extracted {} transcript segments", transcript.size());
+                } catch (Exception e) {
+                    log.warn("ASR extraction failed, continuing without transcript: {}", e.getMessage());
+                }
+            } else {
+                log.warn("ASR service not available, scenes will not have script lines");
+            }
+
+            // Step 3: Process each scene and assign transcript
+            log.info("Step 3: Processing {} detected scenes", sceneSegments.size());
             List<Scene> scenes = new ArrayList<>();
             List<String> allSceneLabels = new ArrayList<>();
 
@@ -121,6 +138,14 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 log.info("Processing scene {}/{} with language: {}", i + 1, sceneSegments.size(), language);
                 
                 Scene scene = processScene(segment, i + 1, video.getUrl(), language);
+                
+                // Assign transcript to scene based on timestamps
+                String scriptLine = extractScriptForScene(transcript, segment.getStartTimeMs(), segment.getEndTimeMs());
+                if (scriptLine != null && !scriptLine.isEmpty()) {
+                    scene.setScriptLine(scriptLine);
+                    log.info("Scene {} script: {}", i + 1, scriptLine);
+                }
+                
                 scenes.add(scene);
                 
                 // Collect labels for summary (no more block descriptions)
@@ -442,6 +467,34 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         
         // Convert to seconds and cast to int
         return (int) (maxEndMs / 1000);
+    }
+    
+    /**
+     * Extract script text for a specific scene based on timestamps
+     * Matches transcript segments that overlap with the scene time range
+     */
+    private String extractScriptForScene(List<com.example.demo.ai.subtitle.SubtitleSegment> transcript, 
+                                        long sceneStartMs, long sceneEndMs) {
+        if (transcript == null || transcript.isEmpty()) {
+            return null;
+        }
+        
+        StringBuilder scriptBuilder = new StringBuilder();
+        
+        for (com.example.demo.ai.subtitle.SubtitleSegment segment : transcript) {
+            // Check if segment overlaps with scene time range
+            boolean overlaps = segment.getStartTimeMs() < sceneEndMs && 
+                             segment.getEndTimeMs() > sceneStartMs;
+            
+            if (overlaps) {
+                if (scriptBuilder.length() > 0) {
+                    scriptBuilder.append(" ");
+                }
+                scriptBuilder.append(segment.getText());
+            }
+        }
+        
+        return scriptBuilder.toString().trim();
     }
     
     /**

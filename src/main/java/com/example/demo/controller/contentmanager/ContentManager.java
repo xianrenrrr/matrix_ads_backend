@@ -428,6 +428,9 @@ public class ContentManager {
     @Autowired
     private com.example.demo.ai.label.ObjectLabelService objectLabelService;
     
+    @Autowired(required = false)
+    private com.example.demo.ai.subtitle.ASRSubtitleExtractor asrSubtitleExtractor;
+    
     /**
      * Create manual template with AI analysis for each scene video.
      * Each uploaded video is analyzed as ONE complete scene (no scene detection/cutting).
@@ -447,7 +450,7 @@ public class ContentManager {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
         log.info("Creating manual template with AI analysis for user: {}", userId);
-        log.info("Subtitle extraction method: ASR (Speech-to-Text) only");
+        log.info("Speech extraction: ASR per scene video (Alibaba Cloud Qwen)");
         
         // Parse scenes metadata
         com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
@@ -534,7 +537,36 @@ public class ContentManager {
             videoDao.updateVideo(video);
             log.info("✅ Video saved with ID: {}, duration: {} seconds", videoId, videoDurationSeconds);
             
-            // 4. Analyze as single scene using UnifiedSceneAnalysisService
+            // 4. Extract speech transcript using ASR (per scene video)
+            String scriptLine = "";
+            if (asrSubtitleExtractor != null) {
+                try {
+                    log.info("🎤 Extracting speech transcript for scene {} using ASR", metadata.getSceneNumber());
+                    List<com.example.demo.ai.subtitle.SubtitleSegment> transcript = 
+                        asrSubtitleExtractor.extract(video.getUrl(), language);
+                    
+                    if (transcript != null && !transcript.isEmpty()) {
+                        // Concatenate all transcript segments into scriptLine
+                        scriptLine = transcript.stream()
+                            .map(com.example.demo.ai.subtitle.SubtitleSegment::getText)
+                            .collect(java.util.stream.Collectors.joining(" "));
+                        log.info("✅ ASR extracted {} segments, total text length: {} chars", 
+                                 transcript.size(), scriptLine.length());
+                        log.info("📝 Scene {} script: {}", metadata.getSceneNumber(), 
+                                 scriptLine.length() > 100 ? scriptLine.substring(0, 100) + "..." : scriptLine);
+                    } else {
+                        log.warn("⚠️ ASR returned empty transcript for scene {}", metadata.getSceneNumber());
+                    }
+                } catch (Exception e) {
+                    log.warn("⚠️ ASR extraction failed for scene {}: {} - {}", 
+                             metadata.getSceneNumber(), e.getClass().getSimpleName(), e.getMessage());
+                    // Continue without transcript
+                }
+            } else {
+                log.warn("⚠️ ASR service not available, scene {} will not have script line", metadata.getSceneNumber());
+            }
+            
+            // 5. Analyze as single scene using UnifiedSceneAnalysisService
             log.info("🎬 Creating Scene object for scene {}", metadata.getSceneNumber());
             com.example.demo.model.Scene aiScene = new com.example.demo.model.Scene();
             aiScene.setSceneSource("manual");
@@ -543,9 +575,10 @@ public class ContentManager {
             aiScene.setSceneDescription(metadata.getSceneDescription());
             aiScene.setVideoId(videoId);
             aiScene.setSceneDurationInSeconds(videoDurationSeconds); // Set duration from video metadata
+            aiScene.setScriptLine(scriptLine); // Set ASR-extracted script
             log.info("✅ Scene {} duration set to: {} seconds", metadata.getSceneNumber(), videoDurationSeconds);
             
-            // Analyze the video for AI metadata (VL analysis, overlays, etc.)
+            // 6. Analyze the video for AI metadata (VL analysis, overlays, etc.)
             try {
                 if (unifiedSceneAnalysisService == null) {
                     log.error("❌ UnifiedSceneAnalysisService is NULL - service not autowired!");
@@ -582,7 +615,7 @@ public class ContentManager {
                      metadata.getSceneNumber(), aiScene.getOverlayType());
         }
         
-        // 5. Create template with calculated metadata
+        // 7. Create template with calculated metadata
         ManualTemplate template = new ManualTemplate();
         template.setUserId(userId);
         template.setTemplateTitle(templateTitle);
@@ -602,11 +635,11 @@ public class ContentManager {
             .sum();
         template.setTotalVideoLength(totalDuration);
         
-        // 6. Generate AI metadata using reasoning model (sets deviceOrientation)
+        // 8. Generate AI metadata using reasoning model (sets deviceOrientation)
         log.info("Generating AI metadata for manual template with {} scenes", aiAnalyzedScenes.size());
         generateManualTemplateMetadata(template, aiAnalyzedScenes, language, templateDescription);
         
-        // 7. Derive video format from first scene's device orientation (AFTER AI metadata)
+        // 9. Derive video format from first scene's device orientation (AFTER AI metadata)
         log.info("=== DERIVING VIDEO FORMAT from first scene ===");
         String videoFormat = "1080p 16:9"; // Fallback
         
@@ -636,13 +669,13 @@ public class ContentManager {
             }
         }
         
-        // 8. Save template (groups are now assigned via push button with TemplateAssignment)
+        // 10. Save template (groups are now assigned via push button with TemplateAssignment)
         String templateId = templateDao.createTemplate(template);
         userDao.addCreatedTemplate(userId, templateId);
         
         log.info("Manual template created successfully: {} with {} scenes", templateId, aiAnalyzedScenes.size());
         
-        // 9. Response
+        // 11. Response
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("templateId", templateId);
         responseData.put("template", template);
