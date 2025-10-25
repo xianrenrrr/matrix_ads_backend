@@ -4,17 +4,18 @@ import com.alibaba.dashscope.audio.asr.transcription.Transcription;
 import com.alibaba.dashscope.audio.asr.transcription.TranscriptionParam;
 import com.alibaba.dashscope.audio.asr.transcription.TranscriptionResult;
 import com.alibaba.dashscope.audio.asr.transcription.TranscriptionQueryParam;
+import com.alibaba.dashscope.audio.asr.transcription.TranscriptionTaskResult;
+import com.alibaba.dashscope.common.TaskStatus;
+import com.example.demo.service.AlibabaOssStorageService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
-import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.nio.file.Files;
@@ -22,8 +23,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 /**
  * ASR (Automatic Speech Recognition) based subtitle extraction using Alibaba Cloud Qwen
@@ -43,8 +42,11 @@ public class ASRSubtitleExtractor {
     @Value("${AI_QWEN_API_KEY:}")
     private String apiKey;
     
+    @Autowired
+    private AlibabaOssStorageService ossStorageService;
+    
     private static final String MODEL = "sensevoice-v1";
-    private static final int MAX_WAIT_SECONDS = 300; // 5 minutes max wait
+    private static final int MAX_WAIT_SECONDS = 600; // 10 minutes max wait
     private static final ObjectMapper objectMapper = new ObjectMapper();
     
     /**
@@ -57,23 +59,32 @@ public class ASRSubtitleExtractor {
     public List<SubtitleSegment> extract(String videoUrl, String language) {
         log.info("Starting ASR subtitle extraction for video: {}, language: {}", videoUrl, language);
         
+        File audioFile = null;
+        String audioOssUrl = null;
+        
         try {
             // Step 1: Extract audio from video
-            File audioFile = extractAudio(videoUrl);
+            audioFile = extractAudio(videoUrl);
             log.info("Audio extracted to: {}", audioFile.getAbsolutePath());
             
-            // Step 2: Call Alibaba Cloud ASR API
-            List<SubtitleSegment> segments = callQwenASR(audioFile, language);
-            log.info("ASR extraction completed. Found {} segments", segments.size());
+            // Step 2: Upload audio to OSS (required by Fun-ASR API)
+            audioOssUrl = ossStorageService.uploadFile(audioFile, "asr-audio");
+            log.info("Audio uploaded to OSS: {}", audioOssUrl);
             
-            // Step 3: Clean up temporary audio file
-            audioFile.delete();
+            // Step 3: Call Alibaba Cloud ASR API with OSS URL
+            List<SubtitleSegment> segments = callQwenASR(audioOssUrl, language);
+            log.info("ASR extraction completed. Found {} segments", segments.size());
             
             return segments;
             
         } catch (Exception e) {
             log.error("ASR subtitle extraction failed", e);
             return new ArrayList<>();
+        } finally {
+            // Clean up temporary audio file
+            if (audioFile != null && audioFile.exists()) {
+                audioFile.delete();
+            }
         }
     }
     
@@ -135,24 +146,40 @@ public class ASRSubtitleExtractor {
     /**
      * Call Alibaba Cloud Qwen ASR API
      * Documentation: https://help.aliyun.com/zh/model-studio/recording-file-recognition
+     * 
+     * @param audioOssUrl Public OSS URL of the audio file
+     * @param language Language code (zh for Chinese, en for English)
      */
-    private List<SubtitleSegment> callQwenASR(File audioFile, String language) throws Exception {
-        log.info("Calling Qwen ASR API for file: {}", audioFile.getName());
+    private List<SubtitleSegment> callQwenASR(String audioOssUrl, String language) throws Exception {
+        log.info("Calling Qwen ASR API for audio URL: {}", audioOssUrl);
         
         if (apiKey == null || apiKey.isEmpty()) {
             throw new IllegalStateException("AI_QWEN_API_KEY is not configured");
         }
         
-        // Step 1: Submit transcription task
-        String taskId = submitTranscriptionTask(audioFile, language);
-        log.info("Transcription task submitted. Task ID: {}", taskId);
+        // Step 1: Submit transcription task with audio URL
+        TranscriptionResult result = submitTranscriptionTask(audioOssUrl, language);
+        log.info("Transcription task submitted. Task ID: {}", result.getTaskId());
         
-        // Step 2: Poll for task completion
-        String transcriptionUrl = waitForTaskCompletion(taskId);
-        log.info("Transcription completed. Result URL: {}", transcriptionUrl);
+        // Step 2: Wait for task completion (blocking call)
+        TranscriptionQueryParam queryParam = TranscriptionQueryParam.FromTranscriptionParam(
+            TranscriptionParam.builder()
+                .model(MODEL)
+                .fileUrls(List.of(audioOssUrl))
+                .apiKey(apiKey)
+                .build(),
+            result.getTaskId()
+        );
         
-        // Step 3: Download and parse transcription result
-        List<SubtitleSegment> segments = parseTranscriptionResult(transcriptionUrl);
+        TranscriptionResult finalResult = new Transcription().wait(queryParam);
+        log.info("Transcription completed. Status: {}", finalResult.getTaskStatus());
+        
+        // Step 3: Parse transcription result
+        if (finalResult.getTaskStatus() != TaskStatus.SUCCEEDED) {
+            throw new RuntimeException("Transcription task failed with status: " + finalResult.getTaskStatus());
+        }
+        
+        List<SubtitleSegment> segments = parseTranscriptionResult(finalResult);
         log.info("Parsed {} subtitle segments", segments.size());
         
         return segments;
@@ -160,99 +187,58 @@ public class ASRSubtitleExtractor {
     
     /**
      * Submit transcription task to Alibaba Cloud
+     * 
+     * @param audioOssUrl Public OSS URL of the audio file (HTTP/HTTPS)
+     * @param language Language code (zh for Chinese, en for English)
      */
-    private String submitTranscriptionTask(File audioFile, String language) throws Exception {
+    private TranscriptionResult submitTranscriptionTask(String audioOssUrl, String language) throws Exception {
         Transcription transcription = new Transcription();
         
+        // Build transcription parameters
+        // Note: fileUrls must be publicly accessible HTTP/HTTPS URLs
         TranscriptionParam param = TranscriptionParam.builder()
             .model(MODEL)
-            .fileUrls(List.of(audioFile.toURI().toString()))
+            .fileUrls(List.of(audioOssUrl))
             .apiKey(apiKey)
             .build();
         
+        // Submit async task
         TranscriptionResult result = transcription.asyncCall(param);
         
-        JsonObject output = result.getOutput();
-        if (output == null || !output.has("task_id")) {
-            throw new RuntimeException("Failed to submit transcription task: " + result);
+        if (result.getTaskId() == null || result.getTaskId().isEmpty()) {
+            throw new RuntimeException("Failed to submit transcription task: no task ID returned");
         }
         
-        return output.get("task_id").getAsString();
+        return result;
     }
     
     /**
-     * Wait for transcription task to complete
-     * Polls the task status until it's SUCCEEDED or FAILED
-     */
-    private String waitForTaskCompletion(String taskId) throws Exception {
-        Transcription transcription = new Transcription();
-        
-        long startTime = System.currentTimeMillis();
-        long maxWaitMs = MAX_WAIT_SECONDS * 1000L;
-        
-        while (true) {
-            // Check timeout
-            if (System.currentTimeMillis() - startTime > maxWaitMs) {
-                throw new RuntimeException("Transcription task timed out after " + MAX_WAIT_SECONDS + " seconds");
-            }
-            
-            // Query task status
-            TranscriptionQueryParam queryParam = TranscriptionQueryParam.builder()
-                .taskId(taskId)
-                .apiKey(apiKey)
-                .build();
-            
-            TranscriptionResult result = transcription.wait(queryParam);
-            
-            JsonObject output = result.getOutput();
-            if (output == null) {
-                throw new RuntimeException("Failed to query transcription task: " + result);
-            }
-            
-            String status = output.has("task_status") ? output.get("task_status").getAsString() : "UNKNOWN";
-            log.info("Task {} status: {}", taskId, status);
-            
-            if ("SUCCEEDED".equals(status)) {
-                // Task completed successfully
-                if (!output.has("results")) {
-                    throw new RuntimeException("No transcription results found");
-                }
-                
-                JsonArray results = output.getAsJsonArray("results");
-                if (results == null || results.isEmpty()) {
-                    throw new RuntimeException("Results array is empty");
-                }
-                
-                JsonObject firstResult = results.get(0).getAsJsonObject();
-                if (!firstResult.has("transcription_url")) {
-                    throw new RuntimeException("Transcription URL not found in result");
-                }
-                
-                String transcriptionUrl = firstResult.get("transcription_url").getAsString();
-                if (transcriptionUrl == null || transcriptionUrl.isEmpty()) {
-                    throw new RuntimeException("Transcription URL is empty");
-                }
-                
-                return transcriptionUrl;
-                
-            } else if ("FAILED".equals(status)) {
-                throw new RuntimeException("Transcription task failed: " + result);
-                
-            } else if ("RUNNING".equals(status) || "PENDING".equals(status)) {
-                // Task still in progress, wait and retry
-                Thread.sleep(2000); // Wait 2 seconds before next poll
-                
-            } else {
-                throw new RuntimeException("Unknown task status: " + status);
-            }
-        }
-    }
-    
-    /**
-     * Download and parse transcription result from URL
+     * Parse transcription result from TranscriptionResult
      * Converts Qwen ASR format to SubtitleSegment list
      */
-    private List<SubtitleSegment> parseTranscriptionResult(String transcriptionUrl) throws Exception {
+    private List<SubtitleSegment> parseTranscriptionResult(TranscriptionResult result) throws Exception {
+        List<SubtitleSegment> segments = new ArrayList<>();
+        
+        // Get results from the task
+        List<TranscriptionTaskResult> taskResults = result.getResults();
+        if (taskResults == null || taskResults.isEmpty()) {
+            log.warn("No task results found");
+            return segments;
+        }
+        
+        // Process first result (we only submitted one audio file)
+        TranscriptionTaskResult taskResult = taskResults.get(0);
+        
+        if (taskResult.getSubTaskStatus() != TaskStatus.SUCCEEDED) {
+            throw new RuntimeException("Subtask failed with status: " + taskResult.getSubTaskStatus() 
+                + ", message: " + taskResult.getMessage());
+        }
+        
+        String transcriptionUrl = taskResult.getTranscriptionUrl();
+        if (transcriptionUrl == null || transcriptionUrl.isEmpty()) {
+            throw new RuntimeException("Transcription URL is empty");
+        }
+        
         log.info("Downloading transcription result from: {}", transcriptionUrl);
         
         // Download JSON result
@@ -265,7 +251,6 @@ public class ASRSubtitleExtractor {
         
         // Parse JSON
         JsonNode root = objectMapper.readTree(jsonContent);
-        List<SubtitleSegment> segments = new ArrayList<>();
         
         // Navigate to transcripts array
         JsonNode transcripts = root.path("transcripts");
