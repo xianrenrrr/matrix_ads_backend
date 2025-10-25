@@ -48,6 +48,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Autowired(required = false)
     private com.example.demo.ai.subtitle.ASRSubtitleExtractor asrSubtitleExtractor;
     
+    @Autowired
+    private com.example.demo.service.AlibabaOssStorageService alibabaOssStorageService;
+    
     @Value("${ai.template.useObjectOverlay:true}")
     private boolean useObjectOverlay;
     
@@ -119,7 +122,11 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             List<com.example.demo.ai.subtitle.SubtitleSegment> transcript = new ArrayList<>();
             if (asrSubtitleExtractor != null) {
                 try {
-                    transcript = asrSubtitleExtractor.extract(videoUrl, language);
+                    // Generate signed URL with 1 hour expiration for ASR processing
+                    String signedUrl = alibabaOssStorageService.generateSignedUrl(videoUrl, 60, java.util.concurrent.TimeUnit.MINUTES);
+                    log.info("Generated signed URL for ASR (expires in 1 hour)");
+                    
+                    transcript = asrSubtitleExtractor.extract(signedUrl, language);
                     log.info("ASR extracted {} transcript segments", transcript.size());
                 } catch (Exception e) {
                     log.warn("ASR extraction failed, continuing without transcript: {}", e.getMessage());

@@ -431,6 +431,9 @@ public class ContentManager {
     @Autowired(required = false)
     private com.example.demo.ai.subtitle.ASRSubtitleExtractor asrSubtitleExtractor;
     
+    @Autowired
+    private com.example.demo.service.AlibabaOssStorageService alibabaOssStorageService;
+    
     /**
      * Create manual template with AI analysis for each scene video.
      * Each uploaded video is analyzed as ONE complete scene (no scene detection/cutting).
@@ -542,8 +545,13 @@ public class ContentManager {
             if (asrSubtitleExtractor != null) {
                 try {
                     log.info("🎤 Extracting speech transcript for scene {} using ASR", metadata.getSceneNumber());
+                    
+                    // Generate signed URL with 1 hour expiration for ASR processing
+                    String signedUrl = alibabaOssStorageService.generateSignedUrl(video.getUrl(), 60, java.util.concurrent.TimeUnit.MINUTES);
+                    log.info("✅ Generated signed URL for ASR (expires in 1 hour)");
+                    
                     List<com.example.demo.ai.subtitle.SubtitleSegment> transcript = 
-                        asrSubtitleExtractor.extract(video.getUrl(), language);
+                        asrSubtitleExtractor.extract(signedUrl, language);
                     
                     if (transcript != null && !transcript.isEmpty()) {
                         // Concatenate all transcript segments into scriptLine

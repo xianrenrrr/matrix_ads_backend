@@ -92,11 +92,17 @@ public class ASRSubtitleExtractor {
         if (videoUrl.startsWith("http")) {
             log.info("Downloading video from URL: {}", videoUrl);
             Path tempVideo = Files.createTempFile("video_", ".mp4");
-            try (InputStream in = new URL(videoUrl).openStream()) {
+            
+            // Use URLConnection with proper timeout settings for large files
+            java.net.URLConnection connection = new URL(videoUrl).openConnection();
+            connection.setConnectTimeout(30000); // 30 seconds
+            connection.setReadTimeout(300000);   // 5 minutes for large video files
+            
+            try (InputStream in = connection.getInputStream()) {
                 Files.copy(in, tempVideo, StandardCopyOption.REPLACE_EXISTING);
             }
             videoFile = tempVideo.toFile();
-            log.info("Video downloaded to: {}", tempVideo);
+            log.info("Video downloaded to: {} (size: {} bytes)", tempVideo, videoFile.length());
         } else {
             videoFile = new File(videoUrl);
         }
