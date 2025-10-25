@@ -286,4 +286,41 @@ public class AlibabaOssStorageService {
         String objectKey = String.format("compiled/%s/%s/final-video.mp4", userId, compilationId);
         return uploadFile(videoFile, objectKey, "video/mp4");
     }
+    
+    /**
+     * Prepare URL for Alibaba Cloud AI services access
+     * 
+     * For OSS URLs, generates a signed URL with specified expiration.
+     * For non-OSS URLs, returns the original URL.
+     * 
+     * @param url Original URL (OSS or public URL)
+     * @param duration Expiration duration
+     * @param unit Time unit for duration
+     * @return Accessible URL for Alibaba Cloud services
+     */
+    public String prepareUrlForAlibabaCloud(String url, long duration, TimeUnit unit) {
+        if (url == null || url.isEmpty()) {
+            System.out.println("[OSS] URL is null or empty");
+            return url;
+        }
+        
+        // Check if it's an OSS URL
+        if (url.contains("aliyuncs.com")) {
+            System.out.println("[OSS] Generating signed URL for Alibaba Cloud access");
+            
+            try {
+                String signedUrl = generateSignedUrl(url, duration, unit);
+                System.out.println("[OSS] Successfully generated signed URL (expires in " + duration + " " + unit + ")");
+                return signedUrl;
+            } catch (Exception e) {
+                System.err.println("[OSS] Failed to generate signed URL: " + e.getMessage());
+                System.err.println("[OSS] Falling back to original URL");
+                return url;
+            }
+        }
+        
+        // Not an OSS URL, return as-is (assume it's publicly accessible)
+        System.out.println("[OSS] Not an OSS URL, using original URL");
+        return url;
+    }
 }

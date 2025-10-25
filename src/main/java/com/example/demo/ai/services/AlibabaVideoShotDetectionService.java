@@ -195,40 +195,20 @@ public class AlibabaVideoShotDetectionService {
      * @return Accessible URL for Alibaba Cloud (signed URL)
      */
     private String prepareVideoUrl(String videoUrl) {
-        if (videoUrl == null || videoUrl.isEmpty()) {
-            log.warn("Video URL is null or empty");
+        if (ossStorageService == null) {
+            log.warn("AlibabaOssStorageService is not available, using original URL");
             return videoUrl;
         }
         
         log.info("Original video URL: {}", videoUrl);
         
-        // Check if it's an OSS URL
-        if (videoUrl.contains("aliyuncs.com")) {
-            if (ossStorageService == null) {
-                log.error("OSS URL detected but AlibabaOssStorageService is not available!");
-                return videoUrl;
-            }
-            
-            log.info("Generating 7-day signed URL for Alibaba Cloud access");
-            
-            try {
-                // Generate 7-day signed URL (OSS signed URLs work perfectly with Alibaba services!)
-                String signedUrl = ossStorageService.generateSignedUrl(videoUrl, 7, TimeUnit.DAYS);
-                
-                log.info("Successfully generated 7-day signed URL");
-                log.info("Signed URL length: {} characters", signedUrl.length());
-                
-                return signedUrl;
-            } catch (Exception e) {
-                log.error("Failed to generate signed URL: {}", e.getMessage(), e);
-                log.error("Falling back to original URL");
-                return videoUrl;
-            }
-        }
+        // Use shared method from OSS service
+        String signedUrl = ossStorageService.prepareUrlForAlibabaCloud(videoUrl, 7, TimeUnit.DAYS);
         
-        // Not an OSS URL, return as-is (assume it's publicly accessible)
-        log.info("Not an OSS URL, using original URL");
-        return videoUrl;
+        log.info("Prepared URL for Alibaba Cloud (length: {} characters)", 
+            signedUrl != null ? signedUrl.length() : 0);
+        
+        return signedUrl;
     }
     
     /**

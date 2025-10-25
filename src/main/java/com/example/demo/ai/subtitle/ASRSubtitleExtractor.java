@@ -67,12 +67,16 @@ public class ASRSubtitleExtractor {
             audioFile = extractAudio(videoUrl);
             log.info("Audio extracted to: {}", audioFile.getAbsolutePath());
             
-            // Step 2: Upload audio to OSS (required by Fun-ASR API)
+            // Step 2: Upload audio to OSS (required by ASR API)
             String objectKey = "asr-audio/" + System.currentTimeMillis() + "_" + audioFile.getName();
-            audioOssUrl = ossStorageService.uploadFile(audioFile, objectKey, "audio/wav");
-            log.info("Audio uploaded to OSS: {}", audioOssUrl);
+            String ossUrl = ossStorageService.uploadFile(audioFile, objectKey, "audio/wav");
+            log.info("Audio uploaded to OSS: {}", ossUrl);
             
-            // Step 3: Call Alibaba Cloud ASR API with OSS URL
+            // Step 3: Prepare URL for Alibaba Cloud access (generates signed URL)
+            audioOssUrl = ossStorageService.prepareUrlForAlibabaCloud(ossUrl, 2, java.util.concurrent.TimeUnit.HOURS);
+            log.info("Prepared URL for ASR (expires in 2 hours)");
+            
+            // Step 4: Call Alibaba Cloud ASR API with signed URL
             List<SubtitleSegment> segments = callQwenASR(audioOssUrl, language);
             log.info("ASR extraction completed. Found {} segments", segments.size());
             
@@ -177,7 +181,16 @@ public class ASRSubtitleExtractor {
         
         // Step 3: Parse transcription result
         if (finalResult.getTaskStatus() != TaskStatus.SUCCEEDED) {
-            throw new RuntimeException("Transcription task failed with status: " + finalResult.getTaskStatus());
+            // Log detailed error information
+            String errorDetails = "Status: " + finalResult.getTaskStatus();
+            if (finalResult.getResults() != null && !finalResult.getResults().isEmpty()) {
+                TranscriptionTaskResult taskResult = finalResult.getResults().get(0);
+                errorDetails += ", SubTask Status: " + taskResult.getSubTaskStatus();
+                errorDetails += ", Message: " + taskResult.getMessage();
+            }
+            log.error("Transcription task failed. Details: {}", errorDetails);
+            log.error("Full result output: {}", finalResult.getOutput());
+            throw new RuntimeException("Transcription task failed: " + errorDetails);
         }
         
         List<SubtitleSegment> segments = parseTranscriptionResult(finalResult);
