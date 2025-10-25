@@ -72,27 +72,22 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
                     throw new RuntimeException("FFmpeg failed with exit code: " + exitCode);
                 }
                 
-                // Upload keyframe to OSS
+                // Upload keyframe to OSS with public-read ACL for AI services
                 String keyframeObjectName = KEYFRAMES_FOLDER + UUID.randomUUID().toString() + ".jpg";
                 
-                // Upload using OSS service
-                String keyframeUrl = ossStorageService.uploadFile(
+                // Upload using OSS service with public-read ACL
+                String keyframeUrl = ossStorageService.uploadFilePublic(
                     new java.io.FileInputStream(tempKeyframePath.toFile()),
                     keyframeObjectName,
                     "image/jpeg"
                 );
                 
-                // Generate long-lived signed URL for AI services (7 days)
-                // Qwen and other AI services need direct access to the image
-                String signedUrl = ossStorageService.generateSignedUrl(keyframeUrl, 7, java.util.concurrent.TimeUnit.DAYS);
-                
                 System.out.printf("✅ Keyframe extracted and uploaded successfully:%n");
                 System.out.printf("   Object name: %s%n", keyframeObjectName);
-                System.out.printf("   OSS URL: %s%n", keyframeUrl);
-                System.out.printf("   Signed URL (7 days): %s%n", signedUrl);
+                System.out.printf("   Public URL: %s%n", keyframeUrl);
                 System.out.printf("   Generated at: %s%n", java.time.Instant.now());
                 
-                return signedUrl;
+                return keyframeUrl;
                 
             } finally {
                 // Clean up temporary files

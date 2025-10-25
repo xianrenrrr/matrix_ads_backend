@@ -142,6 +142,25 @@ public class AlibabaOssStorageService {
     }
     
     /**
+     * Upload file with public-read ACL (for AI services like YOLO that need direct access)
+     */
+    public String uploadFilePublic(InputStream inputStream, String objectKey, String contentType) throws IOException {
+        ObjectMetadata metadata = new ObjectMetadata();
+        metadata.setContentType(contentType);
+        
+        PutObjectRequest putRequest = new PutObjectRequest(bucketName, objectKey, inputStream, metadata);
+        // Set public-read ACL so external AI services can access
+        putRequest.setCannedACL(com.aliyun.oss.model.CannedAccessControlList.PublicRead);
+        
+        ossClient.putObject(putRequest);
+        
+        System.out.println("Uploaded file with public-read ACL: " + objectKey);
+        
+        // Return public URL (directly accessible)
+        return String.format("https://%s.%s/%s", bucketName, endpoint, objectKey);
+    }
+    
+    /**
      * Upload file from File object
      */
     public String uploadFile(java.io.File file, String objectKey, String contentType) throws IOException {

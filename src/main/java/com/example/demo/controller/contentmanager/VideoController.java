@@ -35,12 +35,12 @@ public class VideoController {
         return "en";
     }
     
-    private ManualTemplate generateAITemplate(Video video, String language, String userDescription, Double sceneThreshold) {
+    private ManualTemplate generateAITemplate(Video video, String language, String userDescription) {
         // Use AI template generator to create template with user description
         System.out.println("Generating AI template for video ID: " + video.getId() + " in language: " + language + 
                           " with user description: " + (userDescription != null ? "provided" : "none") +
-                          " and scene threshold: " + (sceneThreshold != null ? sceneThreshold : "default"));
-        return aiTemplateGenerator.generateTemplate(video, language, userDescription, sceneThreshold);
+                          " using Alibaba Cloud AI scene detection");
+        return aiTemplateGenerator.generateTemplate(video, language, userDescription);
     }
     
     @Autowired
@@ -151,7 +151,6 @@ public class VideoController {
                                              @RequestParam(value = "templateId", required = false) String templateId,
                                              @RequestParam(value = "groupIds", required = false) String groupIdsStr,
                                              @RequestParam(value = "folderId", required = false) String folderId,
-                                             @RequestParam(value = "sceneThreshold", required = false) Double sceneThreshold,
                                              @RequestHeader(value = "Accept-Language", required = false, defaultValue = "en") String acceptLanguage) throws Exception {
         System.out.println("=== VIDEO UPLOAD REQUEST ===");
         System.out.println("Accept-Language header: " + acceptLanguage);
@@ -161,7 +160,7 @@ public class VideoController {
         System.out.println("Template ID: " + templateId);
         System.out.println("Group IDs: " + groupIdsStr);
         System.out.println("Folder ID: " + folderId);
-        System.out.println("Scene Threshold: " + (sceneThreshold != null ? sceneThreshold : "default"));
+        System.out.println("Scene Detection: Alibaba Cloud AI (automatic)");
         System.out.println("Subtitle Extraction: ASR (Speech-to-Text) only");
         System.out.println("=============================");
         
@@ -180,7 +179,7 @@ public class VideoController {
             String language = detectLanguage(acceptLanguage);
             System.out.println("Detected language: " + language);
             
-            ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language, description, sceneThreshold);
+            ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language, description);
             aiGeneratedTemplate.setUserId(userId);
             aiGeneratedTemplate.setVideoId(savedVideo.getId());
             aiGeneratedTemplate.setThumbnailUrl(savedVideo.getThumbnailUrl());  // Set thumbnail from video

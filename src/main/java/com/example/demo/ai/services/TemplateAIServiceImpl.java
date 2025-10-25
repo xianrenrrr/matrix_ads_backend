@@ -108,15 +108,13 @@ public class TemplateAIServiceImpl implements TemplateAIService {
      * @return ManualTemplate with AI-detected and analyzed scenes
      */
     @Override
-    public ManualTemplate generateTemplate(Video video, String language, String userDescription, Double sceneThresholdOverride) {
+    public ManualTemplate generateTemplate(Video video, String language, String userDescription) {
         log.info("Starting AI template generation for video ID: {} in language: {} with user description: {}", 
                  video.getId(), language, userDescription != null ? "provided" : "none");
         if (userDescription != null && !userDescription.trim().isEmpty()) {
             log.info("User description content: {}", userDescription);
         }
-        if (sceneThresholdOverride != null) {
-            log.info("Scene detection threshold override provided: {}", sceneThresholdOverride);
-        }
+        log.info("Using Alibaba Cloud AI for automatic scene detection");
 
         try {
             // Step 1: Detect scenes using Alibaba Cloud Video Shot Detection
