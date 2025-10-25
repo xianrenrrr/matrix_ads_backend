@@ -66,31 +66,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     /**
      * USED BY: AI Template Creation
      * 
-     * Overload 2/4: Allows custom language
-     * Delegates to overload 4 with: userDescription=null, sceneThresholdOverride=null
-     */
-    @Override
-    public ManualTemplate generateTemplate(Video video, String language) {
-        return generateTemplate(video, language, null, null);
-    }
-    
-    /**
-     * USED BY: AI Template Creation
-     * 
-     * Overload 3/4: Allows custom language + user description
-     * Delegates to overload 4 with: sceneThresholdOverride=null
-     * 
-     * @param userDescription Optional user-provided description to guide AI metadata generation
-     */
-    @Override
-    public ManualTemplate generateTemplate(Video video, String language, String userDescription) {
-        return generateTemplate(video, language, userDescription, null);
-    }
-    
-    /**
-     * USED BY: AI Template Creation
-     * 
-     * Overload 4/4: Main implementation with all parameters
+     * Overload 2/2: Main implementation with all parameters
      * 
      * Flow:
      * 1. Detect scenes from video using scene detection service (FFmpeg or Azure/Alibaba)

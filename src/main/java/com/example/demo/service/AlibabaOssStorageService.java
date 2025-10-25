@@ -149,10 +149,12 @@ public class AlibabaOssStorageService {
         metadata.setContentType(contentType);
         
         PutObjectRequest putRequest = new PutObjectRequest(bucketName, objectKey, inputStream, metadata);
-        // Set public-read ACL so external AI services can access
-        putRequest.setCannedACL(com.aliyun.oss.model.CannedAccessControlList.PublicRead);
         
+        // Upload first
         ossClient.putObject(putRequest);
+        
+        // Then set public-read ACL so external AI services can access
+        ossClient.setObjectAcl(bucketName, objectKey, com.aliyun.oss.model.CannedAccessControlList.PublicRead);
         
         System.out.println("Uploaded file with public-read ACL: " + objectKey);
         
