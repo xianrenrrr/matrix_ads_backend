@@ -294,6 +294,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 so.put("sceneNumber", s.getSceneNumber());
                 so.put("durationSeconds", s.getSceneDurationInSeconds());
                 so.put("keyframeUrl", s.getKeyframeUrl());
+                
                 // Collect top-K detected object labels (Chinese) for context
                 java.util.List<String> labels = new java.util.ArrayList<>();
                 if (s.getOverlayPolygons() != null) {
@@ -311,14 +312,38 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 if (labels.size() > 5) labels = labels.subList(0, 5);
                 so.put("detectedObjects", labels);
                 
-                // NEW: Add VL scene analysis for richer context
+                // Add VL scene analysis for richer context
                 if (s.getVlSceneAnalysis() != null && !s.getVlSceneAnalysis().isEmpty()) {
                     so.put("sceneAnalysis", s.getVlSceneAnalysis());
                 }
                 
+                // Add ASR script line for AI validation/correction
+                if (s.getScriptLine() != null && !s.getScriptLine().isEmpty()) {
+                    so.put("asrScriptLine", s.getScriptLine());
+                }
+                
+                // Add scene description if available (for manual templates)
+                if (s.getSceneDescription() != null && !s.getSceneDescription().isEmpty()) {
+                    so.put("sceneDescription", s.getSceneDescription());
+                }
+                
+                log.info("=== SCENE {} DATA FOR AI ===", s.getSceneNumber());
+                log.info("Duration: {} seconds", s.getSceneDurationInSeconds());
+                log.info("Detected Objects: {}", labels);
+                log.info("VL Scene Analysis: {}", s.getVlSceneAnalysis() != null ? s.getVlSceneAnalysis() : "null");
+                log.info("Scene Description: {}", s.getSceneDescription() != null ? s.getSceneDescription() : "null");
+                log.info("ASR Script Line: {}", s.getScriptLine() != null ? s.getScriptLine() : "null");
+                log.info("===========================");
+                
                 sceneArr.add(so);
             }
             payload.put("scenes", sceneArr);
+            
+            log.info("=== FULL PAYLOAD TO AI ===");
+            log.info("Template info: videoTitle={}, language={}, totalDuration={}, userDescription={}", 
+                video.getTitle(), language, template.getTotalVideoLength(), userDescription);
+            log.info("Total scenes: {}", sceneArr.size());
+            log.info("==========================")
 
             // BACKUP: Save VL data before guidance generation (in case it gets lost)
             Map<Integer, String> vlRawBackup = new java.util.HashMap<>();

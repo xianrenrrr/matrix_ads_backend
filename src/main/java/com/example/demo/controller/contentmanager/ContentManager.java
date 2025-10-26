@@ -774,6 +774,16 @@ public class ContentManager {
                     so.put("sceneDescription", s.getSceneDescription());
                 }
                 
+                // Include ASR script line for AI validation/correction
+                if (s.getScriptLine() != null && !s.getScriptLine().isEmpty()) {
+                    so.put("asrScriptLine", s.getScriptLine());
+                }
+                
+                // Include VL scene analysis for context
+                if (s.getVlSceneAnalysis() != null && !s.getVlSceneAnalysis().isEmpty()) {
+                    so.put("sceneAnalysis", s.getVlSceneAnalysis());
+                }
+                
                 sceneArr.add(so);
             }
             payload.put("scenes", sceneArr);

@@ -286,7 +286,9 @@ public class ASRSubtitleExtractor {
             jsonContent = new String(in.readAllBytes(), "UTF-8");
         }
         
-        log.debug("Transcription JSON: {}", jsonContent);
+        log.info("=== RAW ASR RESPONSE ===");
+        log.info("Transcription JSON: {}", jsonContent);
+        log.info("========================");
         
         // Parse JSON
         JsonNode root = objectMapper.readTree(jsonContent);
@@ -313,10 +315,11 @@ public class ASRSubtitleExtractor {
             long endTime = sentence.path("end_time").asLong();
             String text = sentence.path("text").asText();
             
+            log.info("ASR Sentence: start={}ms, end={}ms, text=\"{}\"", beginTime, endTime, text);
+            
             if (text != null && !text.isEmpty()) {
                 SubtitleSegment segment = new SubtitleSegment(beginTime, endTime, text, 1.0);
                 segments.add(segment);
-                log.debug("Parsed segment: {}", segment);
             }
         }
         
