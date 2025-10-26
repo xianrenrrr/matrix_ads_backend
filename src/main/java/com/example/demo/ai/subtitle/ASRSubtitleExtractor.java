@@ -60,7 +60,7 @@ public class ASRSubtitleExtractor {
         log.info("Starting ASR subtitle extraction for video: {}, language: {}", videoUrl, language);
         
         File audioFile = null;
-        String audioOssUrl = null;
+        String ossUrl = null;
         
         try {
             // Step 1: Extract audio from video
@@ -69,11 +69,11 @@ public class ASRSubtitleExtractor {
             
             // Step 2: Upload audio to OSS (required by ASR API)
             String objectKey = "asr-audio/" + System.currentTimeMillis() + "_" + audioFile.getName();
-            String ossUrl = ossStorageService.uploadFile(audioFile, objectKey, "audio/wav");
+            ossUrl = ossStorageService.uploadFile(audioFile, objectKey, "audio/wav");
             log.info("Audio uploaded to OSS: {}", ossUrl);
             
             // Step 3: Prepare URL for Alibaba Cloud access (generates signed URL)
-            audioOssUrl = ossStorageService.prepareUrlForAlibabaCloud(ossUrl, 2, java.util.concurrent.TimeUnit.HOURS);
+            String audioOssUrl = ossStorageService.prepareUrlForAlibabaCloud(ossUrl, 2, java.util.concurrent.TimeUnit.HOURS);
             log.info("Prepared URL for ASR (expires in 2 hours)");
             
             // Step 4: Call Alibaba Cloud ASR API with signed URL
@@ -88,7 +88,18 @@ public class ASRSubtitleExtractor {
         } finally {
             // Clean up temporary audio file
             if (audioFile != null && audioFile.exists()) {
-                audioFile.delete();
+                boolean deleted = audioFile.delete();
+                log.debug("Cleaned up temp audio file: {} (deleted: {})", audioFile.getName(), deleted);
+            }
+            
+            // Clean up OSS audio file (no longer needed after processing)
+            if (ossUrl != null) {
+                try {
+                    ossStorageService.deleteObjectByUrl(ossUrl);
+                    log.debug("Cleaned up OSS audio file: {}", ossUrl);
+                } catch (Exception e) {
+                    log.warn("Failed to clean up OSS audio file: {}", e.getMessage());
+                }
             }
         }
     }
@@ -104,48 +115,62 @@ public class ASRSubtitleExtractor {
         Path tempAudio = Files.createTempFile("asr_audio_", ".wav");
         
         // Download video if it's a URL
-        File videoFile;
-        if (videoUrl.startsWith("http")) {
-            log.info("Downloading video from URL: {}", videoUrl);
-            Path tempVideo = Files.createTempFile("video_", ".mp4");
-            
-            // Use URLConnection with proper timeout settings for large files
-            java.net.URLConnection connection = new URL(videoUrl).openConnection();
-            connection.setConnectTimeout(30000); // 30 seconds
-            connection.setReadTimeout(300000);   // 5 minutes for large video files
-            
-            try (InputStream in = connection.getInputStream()) {
-                Files.copy(in, tempVideo, StandardCopyOption.REPLACE_EXISTING);
+        File videoFile = null;
+        File tempVideoFile = null;
+        boolean isDownloadedVideo = false;
+        
+        try {
+            if (videoUrl.startsWith("http")) {
+                log.info("Downloading video from URL: {}", videoUrl);
+                Path tempVideo = Files.createTempFile("video_", ".mp4");
+                tempVideoFile = tempVideo.toFile();
+                isDownloadedVideo = true;
+                
+                // Use URLConnection with proper timeout settings for large files
+                java.net.URLConnection connection = new URL(videoUrl).openConnection();
+                connection.setConnectTimeout(30000); // 30 seconds
+                connection.setReadTimeout(300000);   // 5 minutes for large video files
+                
+                try (InputStream in = connection.getInputStream()) {
+                    Files.copy(in, tempVideo, StandardCopyOption.REPLACE_EXISTING);
+                }
+                videoFile = tempVideoFile;
+                log.info("Video downloaded to: {} (size: {} bytes)", tempVideo, videoFile.length());
+            } else {
+                videoFile = new File(videoUrl);
             }
-            videoFile = tempVideo.toFile();
-            log.info("Video downloaded to: {} (size: {} bytes)", tempVideo, videoFile.length());
-        } else {
-            videoFile = new File(videoUrl);
+            
+            // Extract audio using FFmpeg
+            // Format: 16kHz, mono, PCM 16-bit (required by Alibaba Cloud ASR)
+            ProcessBuilder pb = new ProcessBuilder(
+                "ffmpeg",
+                "-i", videoFile.getAbsolutePath(),
+                "-vn",  // No video
+                "-acodec", "pcm_s16le",  // PCM 16-bit
+                "-ar", "16000",  // 16kHz sample rate
+                "-ac", "1",  // Mono
+                "-y",  // Overwrite output
+                tempAudio.toString()
+            );
+            
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            int exitCode = process.waitFor();
+            
+            if (exitCode != 0) {
+                throw new RuntimeException("FFmpeg audio extraction failed with exit code: " + exitCode);
+            }
+            
+            log.info("Audio extraction completed: {}", tempAudio);
+            return tempAudio.toFile();
+            
+        } finally {
+            // Clean up downloaded video file
+            if (isDownloadedVideo && tempVideoFile != null && tempVideoFile.exists()) {
+                boolean deleted = tempVideoFile.delete();
+                log.debug("Cleaned up temp video file: {} (deleted: {})", tempVideoFile.getName(), deleted);
+            }
         }
-        
-        // Extract audio using FFmpeg
-        // Format: 16kHz, mono, PCM 16-bit (required by Alibaba Cloud ASR)
-        ProcessBuilder pb = new ProcessBuilder(
-            "ffmpeg",
-            "-i", videoFile.getAbsolutePath(),
-            "-vn",  // No video
-            "-acodec", "pcm_s16le",  // PCM 16-bit
-            "-ar", "16000",  // 16kHz sample rate
-            "-ac", "1",  // Mono
-            "-y",  // Overwrite output
-            tempAudio.toString()
-        );
-        
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
-        int exitCode = process.waitFor();
-        
-        if (exitCode != 0) {
-            throw new RuntimeException("FFmpeg audio extraction failed with exit code: " + exitCode);
-        }
-        
-        log.info("Audio extraction completed: {}", tempAudio);
-        return tempAudio.toFile();
     }
     
     /**
