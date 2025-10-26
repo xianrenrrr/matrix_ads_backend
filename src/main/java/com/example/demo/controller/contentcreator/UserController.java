@@ -34,6 +34,45 @@ public class UserController {
     
     // Removed getPublishStatus - no longer needed
 
-    // Removed getTemplateByIdForContentCreator - unused endpoint (0 references)
+    /**
+     * Get template by assignment ID for content creator
+     * This endpoint is used by mini app when recording scenes
+     * It fetches the template snapshot from templateAssignments collection
+     */
+    @GetMapping("/templates/{assignmentId}")
+    public ResponseEntity<ApiResponse<ManualTemplate>> getTemplateByAssignmentId(
+            @PathVariable String assignmentId) {
+        try {
+            log.info("Fetching template for assignment ID: {}", assignmentId);
+            
+            // Get the assignment which contains the template snapshot
+            com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
+            
+            if (assignment == null) {
+                log.warn("Assignment not found: {}", assignmentId);
+                return ResponseEntity.status(404)
+                    .body(ApiResponse.error(i18nService.getMessage("assignment.notFound", "Assignment not found")));
+            }
+            
+            ManualTemplate template = assignment.getTemplateSnapshot();
+            
+            if (template == null) {
+                log.warn("Template snapshot not found in assignment: {}", assignmentId);
+                return ResponseEntity.status(404)
+                    .body(ApiResponse.error(i18nService.getMessage("template.notFound", "Template not found")));
+            }
+            
+            log.info("Successfully retrieved template for assignment: {}", assignmentId);
+            return ResponseEntity.ok(ApiResponse.ok(
+                i18nService.getMessage("template.retrieved", "Template retrieved successfully"), 
+                template
+            ));
+            
+        } catch (Exception e) {
+            log.error("Error fetching template for assignment {}: {}", assignmentId, e.getMessage(), e);
+            return ResponseEntity.status(500)
+                .body(ApiResponse.error(i18nService.getMessage("error.internal", "Internal server error")));
+        }
+    }
     
 }
