@@ -51,7 +51,7 @@ public class UserController {
             if (assignment == null) {
                 log.warn("Assignment not found: {}", assignmentId);
                 return ResponseEntity.status(404)
-                    .body(ApiResponse.error(i18nService.getMessage("assignment.notFound", "Assignment not found")));
+                    .body(ApiResponse.fail(i18nService.getMessage("assignment.notFound", "Assignment not found")));
             }
             
             ManualTemplate template = assignment.getTemplateSnapshot();
@@ -59,7 +59,7 @@ public class UserController {
             if (template == null) {
                 log.warn("Template snapshot not found in assignment: {}", assignmentId);
                 return ResponseEntity.status(404)
-                    .body(ApiResponse.error(i18nService.getMessage("template.notFound", "Template not found")));
+                    .body(ApiResponse.fail(i18nService.getMessage("template.notFound", "Template not found")));
             }
             
             log.info("Successfully retrieved template for assignment: {}", assignmentId);
@@ -71,7 +71,7 @@ public class UserController {
         } catch (Exception e) {
             log.error("Error fetching template for assignment {}: {}", assignmentId, e.getMessage(), e);
             return ResponseEntity.status(500)
-                .body(ApiResponse.error(i18nService.getMessage("error.internal", "Internal server error")));
+                .body(ApiResponse.fail(i18nService.getMessage("error.internal", "Internal server error")));
         }
     }
     
