@@ -343,7 +343,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             log.info("Template info: videoTitle={}, language={}, totalDuration={}, userDescription={}", 
                 video.getTitle(), language, template.getTotalVideoLength(), userDescription);
             log.info("Total scenes: {}", sceneArr.size());
-            log.info("==========================")
+            log.info("==========================");
 
             // BACKUP: Save VL data before guidance generation (in case it gets lost)
             Map<Integer, String> vlRawBackup = new java.util.HashMap<>();
