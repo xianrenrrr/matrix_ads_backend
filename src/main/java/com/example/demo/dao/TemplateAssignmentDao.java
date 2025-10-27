@@ -52,4 +52,10 @@ public interface TemplateAssignmentDao {
      * Check if a group already has an active assignment for a template
      */
     boolean hasActiveAssignment(String templateId, String groupId) throws Exception;
+    
+    /**
+     * Delete all assignments for a specific template
+     * Used when a template is deleted to clean up all assigned copies
+     */
+    void deleteAssignmentsByTemplate(String templateId) throws Exception;
 }

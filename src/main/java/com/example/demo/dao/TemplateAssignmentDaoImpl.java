@@ -136,6 +136,22 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
         return !querySnapshot.isEmpty();
     }
     
+    @Override
+    public void deleteAssignmentsByTemplate(String templateId) throws Exception {
+        // Get all assignments for this template
+        QuerySnapshot querySnapshot = db.collection(COLLECTION_NAME)
+            .whereEqualTo("masterTemplateId", templateId)
+            .get()
+            .get();
+        
+        // Delete each assignment
+        for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
+            doc.getReference().delete().get();
+        }
+        
+        System.out.println("[CASCADE] Deleted " + querySnapshot.size() + " assignments for template: " + templateId);
+    }
+    
     // Helper methods
     private Map<String, Object> assignmentToMap(TemplateAssignment assignment) {
         Map<String, Object> data = new HashMap<>();
