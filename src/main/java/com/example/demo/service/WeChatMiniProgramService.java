@@ -98,6 +98,33 @@ public class WeChatMiniProgramService {
                 (body.length > 0 && body[0] == '{')) {
                 String err = (body == null ? "" : new String(body));
                 log.error("❌ WeChat QR error: status={} ct={} body={}", resp.getStatusCode(), ct, err);
+                
+                // Check if error is 40001 (invalid access_token) - retry with fresh token
+                if (err.contains("\"errcode\":40001") || err.contains("invalid credential")) {
+                    log.warn("⚠️ Access token expired (40001), invalidating cache and retrying once...");
+                    tokenCache.token = null; // Invalidate cached token
+                    
+                    // Retry once with fresh token
+                    try {
+                        String freshAccessToken = getAccessToken();
+                        String retryUrl = "https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=" + freshAccessToken;
+                        HttpEntity<String> retryEntity = new HttpEntity<>(json, headers);
+                        
+                        log.info("🔄 Retry POST {}", retryUrl);
+                        ResponseEntity<byte[]> retryResp = restTemplate.exchange(retryUrl, HttpMethod.POST, retryEntity, byte[].class);
+                        byte[] retryBody = retryResp.getBody();
+                        
+                        if (retryResp.getStatusCode().is2xxSuccessful() && retryBody != null && 
+                            retryBody.length > 0 && retryBody[0] != '{') {
+                            String base64 = Base64.getEncoder().encodeToString(retryBody);
+                            log.info("✅ Retry succeeded with fresh token");
+                            return "data:image/png;base64," + base64;
+                        }
+                    } catch (Exception retryEx) {
+                        log.error("❌ Retry also failed: {}", retryEx.getMessage());
+                    }
+                }
+                
                 return generateFallbackQRCode(token);
             }
 
