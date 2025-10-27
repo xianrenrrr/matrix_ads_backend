@@ -176,6 +176,7 @@ public class GroupController {
     // 4. Get Group QR Code
     @GetMapping("/{groupId}/qrcode")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getGroupQRCode(@PathVariable String groupId,
+                                                                            @RequestParam(value = "regenerate", defaultValue = "false") boolean regenerate,
                                                                             @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         Group group = groupDao.findById(groupId);
@@ -183,11 +184,28 @@ public class GroupController {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
         }
 
+        // Check if we have a cached QR code and don't need to regenerate
+        String qrCodeUrl;
+        if (!regenerate && group.getQrCodeUrl() != null && !group.getQrCodeUrl().isEmpty()) {
+            qrCodeUrl = group.getQrCodeUrl();
+            System.out.println("✅ Using cached QR code for group: " + groupId);
+        } else {
+            // Generate new QR code
+            qrCodeUrl = generateQRCodeUrl(group.getId());
+            
+            // Save QR code to database
+            group.setQrCodeUrl(qrCodeUrl);
+            groupDao.update(group);
+            System.out.println("✅ Generated and cached new QR code for group: " + groupId);
+        }
+
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("groupId", group.getId());
         responseData.put("groupName", group.getGroupName());
         responseData.put("token", group.getToken());
-        responseData.put("qrCodeUrl", generateQRCodeUrl(group.getId()));
+        responseData.put("qrCodeUrl", qrCodeUrl);
+        responseData.put("qrCodeCached", !regenerate && group.getQrCodeUrl() != null);
+        responseData.put("qrCodeGeneratedAt", group.getQrCodeGeneratedAt());
         responseData.put("inviteUrl", generateInviteUrl(group.getToken()));
         responseData.put("miniProgramPath", "pages/signup/signup?token=" + group.getToken());
 

@@ -17,6 +17,8 @@ public class Group {
     private String groupName;                        // Name of the group
     private String description;                      // Group description
     private String token;                            // Unique token for joining the group
+    private String qrCodeUrl;                        // Cached QR code image (base64 or URL)
+    private Date qrCodeGeneratedAt;                  // When QR code was last generated
     private String status;                           // "active" or "inactive"
     private Date createdAt;                          // Group creation timestamp
     private Date updatedAt;                          // Last update timestamp
@@ -96,6 +98,16 @@ public class Group {
 
     public String getToken() { return token; }
     public void setToken(String token) { this.token = token; }
+
+    public String getQrCodeUrl() { return qrCodeUrl; }
+    public void setQrCodeUrl(String qrCodeUrl) { 
+        this.qrCodeUrl = qrCodeUrl;
+        this.qrCodeGeneratedAt = new Date();
+        this.updatedAt = new Date();
+    }
+
+    public Date getQrCodeGeneratedAt() { return qrCodeGeneratedAt; }
+    public void setQrCodeGeneratedAt(Date qrCodeGeneratedAt) { this.qrCodeGeneratedAt = qrCodeGeneratedAt; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
