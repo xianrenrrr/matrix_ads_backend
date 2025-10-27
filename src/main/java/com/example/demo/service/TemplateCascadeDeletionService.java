@@ -22,6 +22,7 @@ public class TemplateCascadeDeletionService {
     @Autowired private SceneSubmissionDao sceneSubmissionDao;
     @Autowired private VideoDao videoDao;
     @Autowired(required = false) private com.example.demo.service.AlibabaOssStorageService storageService;
+    @Autowired(required = false) private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
     @Autowired private Firestore db;
 
 
@@ -131,7 +132,14 @@ public class TemplateCascadeDeletionService {
         }
 
         // 2c) remove template assignments (new system)
-        // Note: Assignments are automatically cleaned up when template is deleted
+        try {
+            // Delete all assignments for this template
+            if (templateAssignmentDao != null) {
+                templateAssignmentDao.deleteAssignmentsByTemplate(templateId);
+            }
+        } catch (Exception e) {
+            System.err.println("[CASCADE] Template assignments delete warn: " + e);
+        }
 
         // 2d) delete template doc
         boolean ok = templateDao.deleteTemplate(templateId);
