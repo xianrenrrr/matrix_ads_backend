@@ -4,8 +4,10 @@ import com.example.demo.model.User;
 import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Repository;
 import java.util.concurrent.ExecutionException;
+import java.util.UUID;
 
 @Repository
 public class UserDaoImpl implements UserDao {
@@ -13,6 +15,7 @@ public class UserDaoImpl implements UserDao {
     private Firestore db;
     
     private static final String COLLECTION_NAME = "users";
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
 
     @Override
@@ -200,6 +203,86 @@ public class UserDaoImpl implements UserDao {
             return users;
         } catch (Exception e) {
             throw new RuntimeException("Failed to find users by role: " + role, e);
+        }
+    }
+    
+    /**
+     * Create a new user with password encoding
+     * Returns the generated user ID
+     */
+    public String createUser(User user) {
+        try {
+            // Generate ID if not set
+            if (user.getId() == null || user.getId().isEmpty()) {
+                user.setId(UUID.randomUUID().toString());
+            }
+            
+            // Encode password if not already encoded
+            if (user.getPassword() != null && !user.getPassword().startsWith("$2a$")) {
+                user.setPassword(passwordEncoder.encode(user.getPassword()));
+            }
+            
+            // Save to Firestore
+            DocumentReference docRef = db.collection(COLLECTION_NAME).document(user.getId());
+            ApiFuture<WriteResult> result = docRef.set(user);
+            result.get(); // Wait for write to complete
+            
+            return user.getId();
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Failed to create user", e);
+        }
+    }
+    
+    /**
+     * Authenticate user and return user with role information
+     */
+    public User authenticateUser(String username, String password) {
+        try {
+            User user = findByUsername(username);
+            if (user != null && passwordEncoder.matches(password, user.getPassword())) {
+                return user; // Return user with role information
+            }
+            return null;
+        } catch (Exception e) {
+            System.err.println("Error authenticating user: " + e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Find users created by a specific manager (for employee management)
+     */
+    public java.util.List<User> findByCreatedBy(String managerId) {
+        try {
+            Query query = db.collection(COLLECTION_NAME).whereEqualTo("createdBy", managerId);
+            QuerySnapshot querySnapshot = query.get().get();
+            
+            java.util.List<User> employees = new java.util.ArrayList<>();
+            for (DocumentSnapshot document : querySnapshot.getDocuments()) {
+                User user = document.toObject(User.class);
+                if (user != null) {
+                    user.setId(document.getId());
+                    employees.add(user);
+                }
+            }
+            
+            return employees;
+        } catch (Exception e) {
+            System.err.println("Error finding users by createdBy: " + e.getMessage());
+            return new java.util.ArrayList<>();
+        }
+    }
+    
+    /**
+     * Delete a user by ID
+     */
+    public void delete(String userId) {
+        try {
+            DocumentReference docRef = db.collection(COLLECTION_NAME).document(userId);
+            ApiFuture<WriteResult> result = docRef.delete();
+            result.get(); // Wait for delete to complete
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Failed to delete user", e);
         }
     }
 }

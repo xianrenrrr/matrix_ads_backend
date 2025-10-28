@@ -12,8 +12,13 @@ public class User {
     private String province;
     private String city;
     private String password;
-    private String role; // "content_creator" or "content_manager"
+    private String role; // "content_creator", "content_manager", "CONTENT_MANAGER", or "EMPLOYEE"
     private String groupId; // Group ID for content creators
+    
+    // IAM fields for employee management
+    private String createdBy; // User ID of the content manager who created this employee account
+    private String organizationId; // Organization/company ID
+    private java.util.Date createdAt; // Account creation timestamp
 
     // New fields for db.md compatibility
     private java.util.Map<String, Boolean> created_Templates;
@@ -77,4 +82,14 @@ public class User {
 
     public java.util.Map<String, Notification> getNotifications() { return notifications; }
     public void setNotifications(java.util.Map<String, Notification> notifications) { this.notifications = notifications; }
+    
+    // IAM getters and setters
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+    
+    public String getOrganizationId() { return organizationId; }
+    public void setOrganizationId(String organizationId) { this.organizationId = organizationId; }
+    
+    public java.util.Date getCreatedAt() { return createdAt; }
+    public void setCreatedAt(java.util.Date createdAt) { this.createdAt = createdAt; }
 }

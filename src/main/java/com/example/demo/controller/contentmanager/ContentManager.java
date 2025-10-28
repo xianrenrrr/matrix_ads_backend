@@ -29,6 +29,9 @@ public class ContentManager {
     @Autowired
     private UserDao userDao;
     
+    @Autowired
+    private com.example.demo.service.PermissionService permissionService;
+    
 
 
 
@@ -305,6 +308,18 @@ public class ContentManager {
                                                                @RequestParam String userId,
                                                                @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        // Permission check
+        ManualTemplate template = templateDao.getTemplate(templateId);
+        if (template == null) {
+            return ResponseEntity.status(404).body(ApiResponse.fail("Template not found"));
+        }
+        
+        if (!permissionService.canDeleteTemplate(userId, template)) {
+            String reason = permissionService.getDeleteDeniedReason(userId, template);
+            return ResponseEntity.status(403).body(ApiResponse.fail(reason));
+        }
+        
         // Cascade delete: storage first, then Firestore docs and relationships
         templateCascadeDeletionService.deleteTemplateAssetsAndDocs(templateId);
         {

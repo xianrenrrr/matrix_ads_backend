@@ -24,6 +24,7 @@ public class ManualTemplate {
     private String thumbnailUrl;  // Thumbnail URL for template preview
     private String localeUsed;  // Locale used for template generation (e.g., "zh-CN")
     private String folderId;  // Folder ID for organization (null = root folder)
+    private java.util.Date createdAt;  // Template creation timestamp for IAM permission checks
     
     // Additional database fields to prevent Firestore warnings
     private List<String> submittedVideos;
@@ -166,6 +167,14 @@ public class ManualTemplate {
     
     public void setFolderId(String folderId) {
         this.folderId = folderId;
+    }
+    
+    public java.util.Date getCreatedAt() {
+        return createdAt;
+    }
+    
+    public void setCreatedAt(java.util.Date createdAt) {
+        this.createdAt = createdAt;
     }
 
 }

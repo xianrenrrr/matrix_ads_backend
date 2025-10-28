@@ -36,6 +36,9 @@ public class GroupController {
     
     @Autowired
     private WeChatMiniProgramService weChatService;
+    
+    @Autowired
+    private com.example.demo.service.PermissionService permissionService;
 
     // 1. Create Group/Invite
     @PostMapping("/create")
@@ -49,6 +52,11 @@ public class GroupController {
         // Validate required fields
         if (managerId == null || groupName == null || groupName.trim().isEmpty()) {
             throw new IllegalArgumentException("Missing required fields: managerId and groupName");
+        }
+
+        // Permission check - only content managers can create groups
+        if (!permissionService.canManageGroups(managerId)) {
+            return ResponseEntity.status(403).body(ApiResponse.fail("只有管理者可以管理分组"));
         }
 
         // Verify manager exists and has correct role
@@ -216,11 +224,23 @@ public class GroupController {
     // 4. Delete Group
     @DeleteMapping("/{groupId}")
     public ResponseEntity<ApiResponse<Void>> deleteGroup(@PathVariable String groupId,
+                                                         @RequestParam String managerId,
                                                          @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        // Permission check - only content managers can delete groups
+        if (!permissionService.canManageGroups(managerId)) {
+            return ResponseEntity.status(403).body(ApiResponse.fail("只有管理者可以管理分组"));
+        }
+        
         Group group = groupDao.findById(groupId);
         if (group == null) {
             throw new NoSuchElementException("Group not found with ID: " + groupId);
+        }
+        
+        // Verify the manager owns this group
+        if (!managerId.equals(group.getManagerId())) {
+            return ResponseEntity.status(403).body(ApiResponse.fail("只能删除自己创建的分组"));
         }
 
         groupDao.delete(groupId);

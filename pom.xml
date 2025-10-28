@@ -109,6 +109,13 @@
     <scope>test</scope>
   </dependency>
   
+  <!-- Spring Security for BCrypt password encoding -->
+  <dependency>
+    <groupId>org.springframework.security</groupId>
+    <artifactId>spring-security-crypto</artifactId>
+    <version>6.2.1</version>
+  </dependency>
+  
   <!-- Alibaba Cloud OSS SDK -->
   <dependency>
     <groupId>com.aliyun.oss</groupId>

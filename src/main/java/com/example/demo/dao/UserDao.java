@@ -22,4 +22,10 @@ public interface UserDao {
     
     // Find users by role
     java.util.List<User> findByRole(String role);
+    
+    // IAM methods
+    String createUser(User user);
+    User authenticateUser(String username, String password);
+    java.util.List<User> findByCreatedBy(String managerId);
+    void delete(String userId);
 }
