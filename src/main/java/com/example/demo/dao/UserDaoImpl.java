@@ -235,13 +235,30 @@ public class UserDaoImpl implements UserDao {
     
     /**
      * Authenticate user and return user with role information
+     * Handles both BCrypt-encoded and plain text passwords for backward compatibility
      */
     public User authenticateUser(String username, String password) {
         try {
             User user = findByUsername(username);
-            if (user != null && passwordEncoder.matches(password, user.getPassword())) {
-                return user; // Return user with role information
+            if (user == null) {
+                return null;
             }
+            
+            String storedPassword = user.getPassword();
+            
+            // Check if password is BCrypt encoded (starts with $2a$, $2b$, or $2y$)
+            if (storedPassword != null && storedPassword.startsWith("$2")) {
+                // BCrypt encoded password - use BCrypt matcher
+                if (passwordEncoder.matches(password, storedPassword)) {
+                    return user;
+                }
+            } else {
+                // Plain text password - direct comparison for backward compatibility
+                if (password.equals(storedPassword)) {
+                    return user;
+                }
+            }
+            
             return null;
         } catch (Exception e) {
             System.err.println("Error authenticating user: " + e.getMessage());

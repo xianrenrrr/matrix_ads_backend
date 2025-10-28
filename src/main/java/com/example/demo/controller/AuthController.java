@@ -64,7 +64,9 @@ public class AuthController {
                 user.setCreated_Templates(new java.util.HashMap<>()); // Map<String, Boolean>
             }
             user.setNotifications(new java.util.HashMap<>()); // Map<String, Notification>
-            userDao.save(user);
+            
+            // Use createUser to encode password with BCrypt
+            userDao.createUser(user);
             user.setPassword(null); // Don't return password
             
         String message = i18nService.getMessage("registration.success", language);
