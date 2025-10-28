@@ -5,9 +5,9 @@ package com.example.demo.constants;
  */
 public class UserRole {
     
-    // Role constants
-    public static final String CONTENT_MANAGER = "CONTENT_MANAGER";
-    public static final String EMPLOYEE = "EMPLOYEE";
+    // Role constants - using lowercase with underscore to match existing data
+    public static final String CONTENT_MANAGER = "content_manager";
+    public static final String EMPLOYEE = "employee";
     
     /**
      * Check if role is content manager

@@ -40,7 +40,7 @@ public class PermissionService {
         String role = user.getRole();
         
         // Content managers can delete any template
-        if (UserRole.isContentManager(role) || "content_manager".equals(role)) {
+        if (UserRole.isContentManager(role)) {
             log.info("User {} (content manager) can delete template {}", userId, template.getId());
             return true;
         }
@@ -119,7 +119,7 @@ public class PermissionService {
         }
         
         String role = user.getRole();
-        boolean canManage = UserRole.isContentManager(role) || "content_manager".equals(role);
+        boolean canManage = UserRole.isContentManager(role);
         
         log.info("User {} {} manage groups (role: {})", 
             userId, canManage ? "can" : "cannot", role);
@@ -140,7 +140,7 @@ public class PermissionService {
         }
         
         String role = user.getRole();
-        boolean canCreate = UserRole.isContentManager(role) || "content_manager".equals(role);
+        boolean canCreate = UserRole.isContentManager(role);
         
         log.info("User {} {} create employees (role: {})", 
             userId, canCreate ? "can" : "cannot", role);
@@ -161,9 +161,7 @@ public class PermissionService {
         }
         
         String role = user.getRole();
-        return UserRole.isContentManager(role) || 
-               "content_manager".equals(role) ||
-               UserRole.isEmployee(role);
+        return UserRole.isContentManager(role) || UserRole.isEmployee(role);
     }
     
     /**
@@ -179,9 +177,7 @@ public class PermissionService {
         }
         
         String role = user.getRole();
-        return UserRole.isContentManager(role) || 
-               "content_manager".equals(role) ||
-               UserRole.isEmployee(role);
+        return UserRole.isContentManager(role) || UserRole.isEmployee(role);
     }
     
     /**
@@ -194,7 +190,7 @@ public class PermissionService {
         }
         
         String role = user.getRole();
-        return UserRole.isContentManager(role) || "content_manager".equals(role);
+        return UserRole.isContentManager(role);
     }
     
     /**
