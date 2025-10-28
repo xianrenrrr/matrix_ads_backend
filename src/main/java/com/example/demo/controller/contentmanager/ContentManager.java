@@ -62,7 +62,15 @@ public class ContentManager {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
         try {
-            List<com.example.demo.model.Group> groups = groupDao.findByManagerId(managerId);
+            // Determine the actual manager ID to use
+            // If user is an employee, use their manager's ID (createdBy)
+            String actualManagerId = managerId;
+            com.example.demo.model.User user = userDao.findById(managerId);
+            if (user != null && "employee".equals(user.getRole()) && user.getCreatedBy() != null) {
+                actualManagerId = user.getCreatedBy();
+            }
+            
+            List<com.example.demo.model.Group> groups = groupDao.findByManagerId(actualManagerId);
             
             List<Map<String, Object>> groupList = new ArrayList<>();
             for (com.example.demo.model.Group group : groups) {
@@ -90,8 +98,16 @@ public class ContentManager {
             @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
+        // Determine the actual manager ID to use
+        // If user is an employee, use their manager's ID (createdBy)
+        String actualManagerId = managerId;
+        com.example.demo.model.User user = userDao.findById(managerId);
+        if (user != null && "employee".equals(user.getRole()) && user.getCreatedBy() != null) {
+            actualManagerId = user.getCreatedBy();
+        }
+        
         // Get manager's groups and their assignment IDs
-        List<com.example.demo.model.Group> groups = groupDao.findByManagerId(managerId);
+        List<com.example.demo.model.Group> groups = groupDao.findByManagerId(actualManagerId);
         Set<String> assignmentIds = new HashSet<>();
         Set<String> memberIds = new HashSet<>();
         
@@ -222,7 +238,16 @@ public class ContentManager {
     public ResponseEntity<ApiResponse<List<com.example.demo.model.TemplateSummary>>> getTemplatesByUserId(@PathVariable String userId,
                                                                                       @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        List<ManualTemplate> templates = templateDao.getTemplatesByUserId(userId);
+        
+        // Determine the actual user ID to use for fetching templates
+        // If user is an employee, show their manager's templates
+        String actualUserId = userId;
+        com.example.demo.model.User user = userDao.findById(userId);
+        if (user != null && "employee".equals(user.getRole()) && user.getCreatedBy() != null) {
+            actualUserId = user.getCreatedBy();
+        }
+        
+        List<ManualTemplate> templates = templateDao.getTemplatesByUserId(actualUserId);
         
         // Convert to lightweight DTO with only essential fields
         List<com.example.demo.model.TemplateSummary> summaries = templates.stream()
@@ -640,7 +665,16 @@ public class ContentManager {
         
         // 7. Create template with calculated metadata
         ManualTemplate template = new ManualTemplate();
-        template.setUserId(userId);
+        
+        // If user is an employee, create template under manager's ID
+        String templateOwnerId = userId;
+        com.example.demo.model.User user = userDao.findById(userId);
+        if (user != null && "employee".equals(user.getRole()) && user.getCreatedBy() != null) {
+            templateOwnerId = user.getCreatedBy();
+            log.info("Employee {} creating template under manager {}", userId, templateOwnerId);
+        }
+        
+        template.setUserId(templateOwnerId);
         template.setTemplateTitle(templateTitle);
         template.setTemplateDescription(templateDescription);
         template.setScenes(aiAnalyzedScenes);
