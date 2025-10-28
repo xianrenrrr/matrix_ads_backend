@@ -1,6 +1,7 @@
 package com.example.demo.model;
 
 import com.example.demo.ai.seg.dto.OverlayPolygonClass;
+import com.example.demo.ai.subtitle.SubtitleSegment;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.time.Duration;
@@ -40,6 +41,9 @@ public class Scene {
     // VL Analysis Output (for comparison and reasoning)
     private String vlRawResponse;  // Complete raw VL API response (JSON string)
     private String vlSceneAnalysis;  // Detailed scene analysis from VL (for video comparison)
+    
+    // Subtitles for this scene (word-level timestamps)
+    private List<SubtitleSegment> subtitles;
     
     // Inner class for object overlay data
     public static class ObjectOverlay {
@@ -320,6 +324,14 @@ public class Scene {
     
     public void setVlSceneAnalysis(String vlSceneAnalysis) {
         this.vlSceneAnalysis = vlSceneAnalysis;
+    }
+    
+    public List<SubtitleSegment> getSubtitles() {
+        return subtitles;
+    }
+    
+    public void setSubtitles(List<SubtitleSegment> subtitles) {
+        this.subtitles = subtitles;
     }
     
 }

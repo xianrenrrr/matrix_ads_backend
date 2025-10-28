@@ -80,10 +80,33 @@ public class UnifiedSceneAnalysisService {
         Duration startTime,
         Duration endTime
     ) {
-        log.info("[UNIFIED] Analyzing scene: videoUrl={}, hasProvidedRegions={}, language={}", 
+        return analyzeScene(videoUrl, providedRegions, language, startTime, endTime, null);
+    }
+    
+    /**
+     * Analyze a scene video with subtitle context
+     * 
+     * @param videoUrl Video URL to analyze
+     * @param providedRegions Optional regions (null = auto-detect with YOLO)
+     * @param language Language for analysis (zh-CN, en, etc.)
+     * @param startTime Optional start time for keyframe extraction
+     * @param endTime Optional end time for keyframe extraction
+     * @param subtitleText Optional subtitle text for this scene (enhances VL analysis)
+     * @return SceneAnalysisResult with VL data
+     */
+    public SceneAnalysisResult analyzeScene(
+        String videoUrl,
+        List<Scene.ObjectOverlay> providedRegions,
+        String language,
+        Duration startTime,
+        Duration endTime,
+        String subtitleText
+    ) {
+        log.info("[UNIFIED] Analyzing scene: videoUrl={}, hasProvidedRegions={}, language={}, hasSubtitles={}", 
             videoUrl != null ? videoUrl.substring(0, Math.min(50, videoUrl.length())) + "..." : "null",
             providedRegions != null && !providedRegions.isEmpty(),
-            language);
+            language,
+            subtitleText != null && !subtitleText.isEmpty());
         
         SceneAnalysisResult result = new SceneAnalysisResult();
         
@@ -140,10 +163,20 @@ public class UnifiedSceneAnalysisService {
             }
             
             log.info("[UNIFIED] Calling Qwen VL with {} regions", regions.size());
+            if (subtitleText != null && !subtitleText.isEmpty()) {
+                log.info("[UNIFIED] Including subtitle context: \"{}\"", 
+                    subtitleText.substring(0, Math.min(50, subtitleText.length())) + 
+                    (subtitleText.length() > 50 ? "..." : ""));
+            }
             Map<String, ObjectLabelService.LabelResult> vlResults = new java.util.HashMap<>();
             
             try {
-                vlResults = objectLabelService.labelRegions(keyframeUrl, regions, language != null ? language : "zh-CN");
+                vlResults = objectLabelService.labelRegions(
+                    keyframeUrl, 
+                    regions, 
+                    language != null ? language : "zh-CN",
+                    subtitleText  // Pass subtitle context to VL
+                );
                 
                 // Step 4: Extract VL data
                 if (!vlResults.isEmpty()) {

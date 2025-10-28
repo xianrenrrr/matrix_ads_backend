@@ -9,6 +9,11 @@ public interface ObjectLabelService {
 
     // Minimal batch API for region-by-id labeling (backward compatible default)
     default Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale) {
+        return labelRegions(keyframeUrl, regions, locale, null);
+    }
+    
+    // Enhanced API with subtitle context for better scene understanding
+    default Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale, String subtitleText) {
         return Collections.emptyMap();
     }
 

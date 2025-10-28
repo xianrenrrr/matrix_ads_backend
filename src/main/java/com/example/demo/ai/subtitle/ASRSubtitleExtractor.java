@@ -25,15 +25,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * ASR (Automatic Speech Recognition) based subtitle extraction using Alibaba Cloud Qwen
+ * ASR (Automatic Speech Recognition) based subtitle extraction using Alibaba Cloud Fun-ASR
  * 
- * API Documentation: https://help.aliyun.com/zh/model-studio/recording-file-recognition
+ * API Documentation: https://help.aliyun.com/zh/model-studio/fun-asr-realtime-java-sdk
+ * 
+ * Fun-ASR provides word-level timestamps (words[] with begin_time/end_time)
+ * which is more accurate than sentence-level timestamps.
  * 
  * Implementation:
  * 1. Extract audio from video using FFmpeg
- * 2. Upload audio to Alibaba Cloud ASR (Qwen)
- * 3. Parse ASR response to SubtitleSegment list
- * 4. Return segments with timestamps
+ * 2. Upload audio to Alibaba Cloud ASR (Fun-ASR)
+ * 3. Parse ASR response with word-level timestamps
+ * 4. Return segments with precise word-level timing
  */
 @Service
 public class ASRSubtitleExtractor {
@@ -42,10 +45,13 @@ public class ASRSubtitleExtractor {
     @Value("${AI_QWEN_API_KEY:}")
     private String apiKey;
     
+    @Value("${asr.use.word.level.timestamps:true}")
+    private boolean useWordLevelTimestamps;
+    
     @Autowired
     private AlibabaOssStorageService ossStorageService;
     
-    private static final String MODEL = "sensevoice-v1";
+    private static final String MODEL = "paraformer-v2";  // Fun-ASR model with word-level timestamps
     private static final int MAX_WAIT_SECONDS = 600; // 10 minutes max wait
     private static final ObjectMapper objectMapper = new ObjectMapper();
     
@@ -253,7 +259,22 @@ public class ASRSubtitleExtractor {
     
     /**
      * Parse transcription result from TranscriptionResult
-     * Converts Qwen ASR format to SubtitleSegment list
+     * Converts Fun-ASR format to SubtitleSegment list
+     * 
+     * Fun-ASR provides word-level timestamps in words[] array:
+     * {
+     *   "transcripts": [{
+     *     "sentences": [{
+     *       "begin_time": 0,
+     *       "end_time": 2000,
+     *       "text": "你好世界",
+     *       "words": [
+     *         {"text": "你好", "begin_time": 0, "end_time": 1000},
+     *         {"text": "世界", "begin_time": 1000, "end_time": 2000}
+     *       ]
+     *     }]
+     *   }]
+     * }
      */
     private List<SubtitleSegment> parseTranscriptionResult(TranscriptionResult result) throws Exception {
         List<SubtitleSegment> segments = new ArrayList<>();
@@ -287,7 +308,8 @@ public class ASRSubtitleExtractor {
         }
         
         log.info("=== RAW ASR RESPONSE ===");
-        log.info("Transcription JSON: {}", jsonContent);
+        log.info("Transcription JSON length: {} chars", jsonContent.length());
+        log.debug("Full JSON: {}", jsonContent);
         log.info("========================");
         
         // Parse JSON
@@ -309,21 +331,58 @@ public class ASRSubtitleExtractor {
             return segments;
         }
         
-        // Convert each sentence to SubtitleSegment
+        log.info("Found {} sentences in transcript", sentences.size());
+        
+        // Process each sentence
         for (JsonNode sentence : sentences) {
-            long beginTime = sentence.path("begin_time").asLong();
-            long endTime = sentence.path("end_time").asLong();
-            String text = sentence.path("text").asText();
-            
-            log.info("ASR Sentence: start={}ms, end={}ms, text=\"{}\"", beginTime, endTime, text);
-            
-            if (text != null && !text.isEmpty()) {
-                SubtitleSegment segment = new SubtitleSegment(beginTime, endTime, text, 1.0);
-                segments.add(segment);
+            if (useWordLevelTimestamps) {
+                // Use word-level timestamps (more accurate)
+                JsonNode words = sentence.path("words");
+                
+                if (words.isArray() && words.size() > 0) {
+                    log.info("Processing sentence with {} words", words.size());
+                    
+                    // Create segments for each word
+                    for (JsonNode word : words) {
+                        long beginTime = word.path("begin_time").asLong();
+                        long endTime = word.path("end_time").asLong();
+                        String text = word.path("text").asText();
+                        
+                        if (text != null && !text.isEmpty()) {
+                            log.debug("Word: start={}ms, end={}ms, text=\"{}\"", beginTime, endTime, text);
+                            SubtitleSegment segment = new SubtitleSegment(beginTime, endTime, text, 1.0);
+                            segments.add(segment);
+                        }
+                    }
+                } else {
+                    // Fallback to sentence-level if words not available
+                    log.warn("No words array found, falling back to sentence-level timestamp");
+                    long beginTime = sentence.path("begin_time").asLong();
+                    long endTime = sentence.path("end_time").asLong();
+                    String text = sentence.path("text").asText();
+                    
+                    if (text != null && !text.isEmpty()) {
+                        SubtitleSegment segment = new SubtitleSegment(beginTime, endTime, text, 1.0);
+                        segments.add(segment);
+                    }
+                }
+            } else {
+                // Use sentence-level timestamps (original behavior)
+                long beginTime = sentence.path("begin_time").asLong();
+                long endTime = sentence.path("end_time").asLong();
+                String text = sentence.path("text").asText();
+                
+                log.info("Sentence: start={}ms, end={}ms, text=\"{}\"", beginTime, endTime, text);
+                
+                if (text != null && !text.isEmpty()) {
+                    SubtitleSegment segment = new SubtitleSegment(beginTime, endTime, text, 1.0);
+                    segments.add(segment);
+                }
             }
         }
         
-        log.info("Successfully parsed {} subtitle segments", segments.size());
+        log.info("Successfully parsed {} subtitle segments (word-level: {})", 
+            segments.size(), useWordLevelTimestamps);
         return segments;
     }
 }

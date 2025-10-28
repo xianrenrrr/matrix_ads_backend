@@ -144,10 +144,13 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 SceneSegment segment = sceneSegments.get(i);
                 log.info("Processing scene {}/{} with language: {}", i + 1, sceneSegments.size(), language);
                 
-                Scene scene = processScene(segment, i + 1, video.getUrl(), language);
-                
-                // Assign transcript to scene based on timestamps
+                // Extract subtitle text for this scene BEFORE analysis
                 String scriptLine = extractScriptForScene(transcript, segment.getStartTimeMs(), segment.getEndTimeMs());
+                
+                // Process scene WITH subtitle context
+                Scene scene = processScene(segment, i + 1, video.getUrl(), language, scriptLine);
+                
+                // Assign transcript to scene
                 if (scriptLine != null && !scriptLine.isEmpty()) {
                     scene.setScriptLine(scriptLine);
                     log.info("Scene {} script: {}", i + 1, scriptLine);
@@ -212,7 +215,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
      * @param language Language for AI analysis
      * @return Scene with AI analysis (overlays, labels, metadata)
      */
-    private Scene processScene(SceneSegment segment, int sceneNumber, String videoUrl, String language) {
+    private Scene processScene(SceneSegment segment, int sceneNumber, String videoUrl, String language, String subtitleText) {
         // Create base scene with clean data
         Scene scene = new Scene();
         scene.setSceneNumber(sceneNumber);
@@ -222,13 +225,23 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         scene.setSceneSource("ai");
         
         try {
-            // Use unified scene analysis service
-            log.info("Analyzing scene {} using UnifiedSceneAnalysisService", sceneNumber);
+            // Use unified scene analysis service WITH subtitle context
+            if (subtitleText != null && !subtitleText.isEmpty()) {
+                log.info("Analyzing scene {} with subtitle context: \"{}\"", 
+                    sceneNumber, 
+                    subtitleText.substring(0, Math.min(50, subtitleText.length())) + 
+                    (subtitleText.length() > 50 ? "..." : ""));
+            } else {
+                log.info("Analyzing scene {} without subtitle context", sceneNumber);
+            }
+            
             SceneAnalysisResult analysisResult = unifiedSceneAnalysisService.analyzeScene(
                 videoUrl,
+                null,  // auto-detect objects with YOLO
                 language,
                 segment.getStartTime(),
-                segment.getEndTime()
+                segment.getEndTime(),
+                subtitleText  // ✨ Pass subtitle context to VL
             );
             
             // Apply analysis results to scene
@@ -236,12 +249,13 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             
         } catch (Exception e) {
             log.error("Scene analysis failed for scene {}: {} - {}", sceneNumber, e.getClass().getSimpleName(), e.getMessage());
-            // Continue with basic scene - will use grid overlay as fallback
+            // Continue with basic scene without overlays
         }
         
-        // Fallback to grid if no overlays
+        // No grid fallback - if YOLO fails, continue without overlays
+        // VL analysis is still valuable without object regions
         if (scene.getOverlayType() == null) {
-            scene.setOverlayType("grid");
+            log.warn("Scene {} has no object overlays (YOLO detection may have failed or no objects detected)", sceneNumber);
         }
     
         
