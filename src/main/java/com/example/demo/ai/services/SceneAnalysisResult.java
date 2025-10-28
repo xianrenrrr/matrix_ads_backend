@@ -16,8 +16,8 @@ public class SceneAnalysisResult {
     private List<com.example.demo.ai.seg.dto.OverlayPolygonClass> overlayPolygons;
     private String overlayType;  // "objects", "polygons", or "grid"
     private String shortLabelZh;
-    private String sceneDescriptionZh;  // Chinese scene description (same as vlSceneAnalysis)
     private String sourceAspect;  // e.g., "9:16" or "16:9"
+    private List<String> keyElements;  // Key elements for this scene (for comparison)
     
     public SceneAnalysisResult() {}
     
@@ -78,14 +78,7 @@ public class SceneAnalysisResult {
     public void setShortLabelZh(String shortLabelZh) {
         this.shortLabelZh = shortLabelZh;
     }
-    
-    public String getSceneDescriptionZh() {
-        return sceneDescriptionZh;
-    }
-    
-    public void setSceneDescriptionZh(String sceneDescriptionZh) {
-        this.sceneDescriptionZh = sceneDescriptionZh;
-    }
+
     
     public String getSourceAspect() {
         return sourceAspect;
@@ -120,11 +113,19 @@ public class SceneAnalysisResult {
         if (shortLabelZh != null) {
             scene.setShortLabelZh(shortLabelZh);
         }
-        if (sceneDescriptionZh != null) {
-            scene.setSceneDescriptionZh(sceneDescriptionZh);
-        }
         if (sourceAspect != null) {
             scene.setSourceAspect(sourceAspect);
         }
+        if (keyElements != null) {
+            scene.setKeyElements(keyElements);
+        }
+    }
+    
+    public List<String> getKeyElements() {
+        return keyElements;
+    }
+    
+    public void setKeyElements(List<String> keyElements) {
+        this.keyElements = keyElements;
     }
 }

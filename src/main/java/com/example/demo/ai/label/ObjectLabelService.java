@@ -4,9 +4,28 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Service interface for AI-powered object labeling and scene analysis
+ * 
+ * Implementations:
+ * - QwenVLPlusLabeler: Uses Alibaba Qwen VL model
+ * 
+ * Used by:
+ * - UnifiedSceneAnalysisService: Scene analysis during template creation
+ * - TemplateAIServiceImpl: Template metadata generation
+ * - ContentManager: Manual template metadata generation
+ */
 public interface ObjectLabelService {
-    String labelZh(byte[] imageBytes);
-
+    
+    /**
+     * Legacy method - not currently used
+     * @deprecated Use labelRegions() instead
+     */
+    @Deprecated
+    default String labelZh(byte[] imageBytes) {
+        return "未知";
+    }
+    
     // Minimal batch API for region-by-id labeling (backward compatible default)
     default Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale) {
         return labelRegions(keyframeUrl, regions, locale, null);
@@ -34,8 +53,10 @@ public interface ObjectLabelService {
         public String id;
         public String labelZh;
         public double conf;
-        public String sceneAnalysis;  // NEW - detailed scene analysis from VL (for comparison)
-        public String rawResponse;    // NEW - raw VL response for debugging/comparison
+        public String sceneAnalysis;  // Detailed scene analysis from VL
+        public String rawResponse;    // Raw VL response for debugging
+        public List<String> keyElements;  // NEW - Key visual elements (3-5 items)
+        public String scriptLine;  // NEW - Cleaned/validated ASR text
         public LabelResult() {}
         public LabelResult(String id, String labelZh, double conf) {
             this.id = id; this.labelZh = labelZh; this.conf = conf;

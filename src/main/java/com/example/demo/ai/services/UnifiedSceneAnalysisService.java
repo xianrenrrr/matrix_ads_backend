@@ -184,11 +184,6 @@ public class UnifiedSceneAnalysisService {
                     result.setVlRawResponse(firstResult.rawResponse);
                     result.setVlSceneAnalysis(firstResult.sceneAnalysis);
                     
-                    // Set sceneDescriptionZh (same as vlSceneAnalysis for Chinese)
-                    if (firstResult.sceneAnalysis != null && !firstResult.sceneAnalysis.isEmpty()) {
-                        result.setSceneDescriptionZh(firstResult.sceneAnalysis);
-                    }
-                    
                     // Extract shortLabelZh from VL result if available
                     if (firstResult.labelZh != null && !firstResult.labelZh.isEmpty()) {
                         result.setShortLabelZh(firstResult.labelZh);
@@ -198,6 +193,9 @@ public class UnifiedSceneAnalysisService {
                     log.info("[UNIFIED] VL analysis complete - rawResponse: {}, sceneAnalysis: {}",
                         firstResult.rawResponse != null ? firstResult.rawResponse.length() + " chars" : "null",
                         firstResult.sceneAnalysis != null ? firstResult.sceneAnalysis.length() + " chars" : "null");
+                    
+                    // Key elements will be extracted by Qwen VL in the prompt
+                    // (see ObjectLabelService.labelRegions prompt enhancement)
                 } else {
                     log.warn("[UNIFIED] VL returned empty results");
                 }

@@ -83,11 +83,11 @@ public class SceneSubmissionController {
         
         java.util.concurrent.CompletableFuture.runAsync(() -> {
             try {
-                log.info("Starting async AI comparison for scene {} using QwenSceneComparisonService", sceneNumber);
+                log.info("Starting async AI comparison for scene {} using NEW direct 2-image method", sceneNumber);
                 
-                // NEW: Use Qwen-based comparison (VL + Reasoning)
-                com.example.demo.ai.services.ComparisonResult comparisonResult = qwenComparisonService.compareScenes(
-                    templateScene, userVideoUrl, "zh-CN");
+                // NEW: Use direct 2-image comparison with purpose-driven evaluation
+                com.example.demo.ai.services.ComparisonResult comparisonResult = qwenComparisonService.compareWithDirectVL(
+                    templateScene, userVideoUrl, "zh");
                 
                 // Update the scene submission with AI results
                 SceneSubmission updatedSubmission = sceneSubmissionDao.findById(finalSceneId);

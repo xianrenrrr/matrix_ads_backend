@@ -36,7 +36,6 @@ public class Scene {
     private List<OverlayPolygonClass> overlayPolygons; // only when overlayType="polygons"
     private String sourceAspect;  // e.g., "9:16" for mini-app pixel mapping
     private String shortLabelZh;  // Chinese short label for the dominant object
-    private String sceneDescriptionZh;  // Chinese scene description
     
     // VL Analysis Output (for comparison and reasoning)
     private String vlRawResponse;  // Complete raw VL API response (JSON string)
@@ -44,6 +43,9 @@ public class Scene {
     
     // Subtitles for this scene (word-level timestamps)
     private List<SubtitleSegment> subtitles;
+    
+    // Key elements for this scene (for purpose-driven comparison)
+    private List<String> keyElements;
     
     // Inner class for object overlay data
     public static class ObjectOverlay {
@@ -302,14 +304,6 @@ public class Scene {
         this.shortLabelZh = shortLabelZh;
     }
     
-    public String getSceneDescriptionZh() {
-        return sceneDescriptionZh;
-    }
-    
-    public void setSceneDescriptionZh(String sceneDescriptionZh) {
-        this.sceneDescriptionZh = sceneDescriptionZh;
-    }
-    
     public String getVlRawResponse() {
         return vlRawResponse;
     }
@@ -332,6 +326,14 @@ public class Scene {
     
     public void setSubtitles(List<SubtitleSegment> subtitles) {
         this.subtitles = subtitles;
+    }
+    
+    public List<String> getKeyElements() {
+        return keyElements;
+    }
+    
+    public void setKeyElements(List<String> keyElements) {
+        this.keyElements = keyElements;
     }
     
 }
