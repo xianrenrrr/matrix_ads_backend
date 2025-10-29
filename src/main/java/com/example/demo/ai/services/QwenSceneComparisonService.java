@@ -126,13 +126,10 @@ public class QwenSceneComparisonService {
                 sb.append(String.join("、", templateScene.getKeyElements())).append("\n\n");
             }
             
-            // Context 3: Template Subtitle (for reference)
-            if (templateScene.getSubtitles() != null && !templateScene.getSubtitles().isEmpty()) {
-                String templateSubtitle = templateScene.getSubtitles().stream()
-                    .map(com.example.demo.ai.subtitle.SubtitleSegment::getText)
-                    .collect(java.util.stream.Collectors.joining(" "));
+            // Context 3: Template ScriptLine (for reference)
+            if (templateScene.getScriptLine() != null && !templateScene.getScriptLine().isEmpty()) {
                 sb.append("【模板语音内容（参考）】\n");
-                sb.append(templateSubtitle).append("\n\n");
+                sb.append(templateScene.getScriptLine()).append("\n\n");
             }
             
             // Evaluation Criteria (weighted, with harsh purpose filtering)
@@ -190,12 +187,9 @@ public class QwenSceneComparisonService {
                 sb.append(String.join(", ", templateScene.getKeyElements())).append("\n\n");
             }
             
-            if (templateScene.getSubtitles() != null && !templateScene.getSubtitles().isEmpty()) {
-                String templateSubtitle = templateScene.getSubtitles().stream()
-                    .map(com.example.demo.ai.subtitle.SubtitleSegment::getText)
-                    .collect(java.util.stream.Collectors.joining(" "));
+            if (templateScene.getScriptLine() != null && !templateScene.getScriptLine().isEmpty()) {
                 sb.append("【Template Audio (Reference)】\n");
-                sb.append(templateSubtitle).append("\n\n");
+                sb.append(templateScene.getScriptLine()).append("\n\n");
             }
             
             sb.append("Evaluate in order (weighted):\n\n");

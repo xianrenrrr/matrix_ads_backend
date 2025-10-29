@@ -190,12 +190,19 @@ public class UnifiedSceneAnalysisService {
                         log.info("[UNIFIED] Extracted shortLabelZh from VL: {}", firstResult.labelZh);
                     }
                     
-                    log.info("[UNIFIED] VL analysis complete - rawResponse: {}, sceneAnalysis: {}",
-                        firstResult.rawResponse != null ? firstResult.rawResponse.length() + " chars" : "null",
-                        firstResult.sceneAnalysis != null ? firstResult.sceneAnalysis.length() + " chars" : "null");
+                    // Extract key elements from VL result
+                    if (firstResult.keyElements != null && !firstResult.keyElements.isEmpty()) {
+                        result.setKeyElements(firstResult.keyElements);
+                        log.info("[UNIFIED] Extracted {} key elements from VL: {}", 
+                            firstResult.keyElements.size(), firstResult.keyElements);
+                    } else {
+                        log.warn("[UNIFIED] No key elements in VL result");
+                    }
                     
-                    // Key elements will be extracted by Qwen VL in the prompt
-                    // (see ObjectLabelService.labelRegions prompt enhancement)
+                    log.info("[UNIFIED] VL analysis complete - rawResponse: {}, sceneAnalysis: {}, keyElements: {}",
+                        firstResult.rawResponse != null ? firstResult.rawResponse.length() + " chars" : "null",
+                        firstResult.sceneAnalysis != null ? firstResult.sceneAnalysis.length() + " chars" : "null",
+                        firstResult.keyElements != null ? firstResult.keyElements.size() : 0);
                 } else {
                     log.warn("[UNIFIED] VL returned empty results");
                 }

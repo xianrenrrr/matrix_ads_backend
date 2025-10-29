@@ -41,9 +41,6 @@ public class Scene {
     private String vlRawResponse;  // Complete raw VL API response (JSON string)
     private String vlSceneAnalysis;  // Detailed scene analysis from VL (for video comparison)
     
-    // Subtitles for this scene (word-level timestamps)
-    private List<SubtitleSegment> subtitles;
-    
     // Key elements for this scene (for purpose-driven comparison)
     private List<String> keyElements;
     
@@ -318,14 +315,6 @@ public class Scene {
     
     public void setVlSceneAnalysis(String vlSceneAnalysis) {
         this.vlSceneAnalysis = vlSceneAnalysis;
-    }
-    
-    public List<SubtitleSegment> getSubtitles() {
-        return subtitles;
-    }
-    
-    public void setSubtitles(List<SubtitleSegment> subtitles) {
-        this.subtitles = subtitles;
     }
     
     public List<String> getKeyElements() {
