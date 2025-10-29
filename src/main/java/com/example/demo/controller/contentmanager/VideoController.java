@@ -56,6 +56,9 @@ public class VideoController {
     @Autowired(required = false)
     private com.google.cloud.firestore.Firestore db;
     
+    @Autowired
+    private com.example.demo.dao.UserDao userDao;
+    
 
 
     @GetMapping("/{videoId}")
@@ -180,9 +183,10 @@ public class VideoController {
             System.out.println("Detected language: " + language);
             
             ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language, description);
-            aiGeneratedTemplate.setUserId(userId);
+            aiGeneratedTemplate.setUserId(userId);  // Always set to actual creator
             aiGeneratedTemplate.setVideoId(savedVideo.getId());
             aiGeneratedTemplate.setThumbnailUrl(savedVideo.getThumbnailUrl());  // Set thumbnail from video
+            aiGeneratedTemplate.setCreatedAt(new java.util.Date());  // Set creation timestamp for permission checks
             
             // Set folderId if provided
             if (folderId != null && !folderId.isBlank()) {
@@ -198,6 +202,22 @@ public class VideoController {
             
             // Create template (groups are now assigned via push button with TemplateAssignment)
             String savedTemplateId = templateDao.createTemplate(aiGeneratedTemplate);
+            
+            // Determine who should own the template in created_Templates
+            try {
+                String templateOwnerId = userId;
+                com.example.demo.model.User user = userDao.findById(userId);
+                if (user != null && "employee".equals(user.getRole()) && user.getCreatedBy() != null) {
+                    // If creator is an employee, add to manager's created_Templates only
+                    templateOwnerId = user.getCreatedBy();
+                    System.out.println("Employee " + userId + " template " + savedTemplateId + " added to manager " + templateOwnerId);
+                }
+                // Add template to manager's created_Templates (or creator's if they are a manager)
+                userDao.addCreatedTemplate(templateOwnerId, savedTemplateId);
+            } catch (Exception e) {
+                System.err.println("Failed to add template to user: " + e.getMessage());
+                // Continue - template is still created successfully
+            }
             
             savedVideo.setTemplateId(savedTemplateId);
             videoDao.updateVideo(savedVideo);

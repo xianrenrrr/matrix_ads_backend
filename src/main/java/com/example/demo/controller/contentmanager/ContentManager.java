@@ -347,11 +347,31 @@ public class ContentManager {
         
         // Cascade delete: storage first, then Firestore docs and relationships
         templateCascadeDeletionService.deleteTemplateAssetsAndDocs(templateId);
-        {
-            userDao.removeCreatedTemplate(userId, templateId); // Remove templateId from created_template field in user doc
-            String message = i18nService.getMessage("template.deleted", language);
-            return ResponseEntity.ok(ApiResponse.ok(message));
+        
+        // Determine who owns the template in created_Templates
+        String creatorId = template.getUserId();
+        String templateOwnerId = creatorId;
+        
+        if (creatorId != null) {
+            try {
+                com.example.demo.model.User creator = userDao.findById(creatorId);
+                if (creator != null && "employee".equals(creator.getRole()) && creator.getCreatedBy() != null) {
+                    // If creator was an employee, template is in manager's created_Templates
+                    templateOwnerId = creator.getCreatedBy();
+                    log.info("Removing employee {} template {} from manager {}", creatorId, templateId, templateOwnerId);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to determine template owner: {}", e.getMessage());
+            }
         }
+        
+        // Remove from the owner's created_Templates
+        if (templateOwnerId != null) {
+            userDao.removeCreatedTemplate(templateOwnerId, templateId);
+        }
+        
+        String message = i18nService.getMessage("template.deleted", language);
+        return ResponseEntity.ok(ApiResponse.ok(message));
     }
     
     /**
@@ -695,19 +715,13 @@ public class ContentManager {
         // 7. Create template with calculated metadata
         ManualTemplate template = new ManualTemplate();
         
-        // If user is an employee, create template under manager's ID
-        String templateOwnerId = userId;
-        com.example.demo.model.User user = userDao.findById(userId);
-        if (user != null && "employee".equals(user.getRole()) && user.getCreatedBy() != null) {
-            templateOwnerId = user.getCreatedBy();
-            log.info("Employee {} creating template under manager {}", userId, templateOwnerId);
-        }
-        
-        template.setUserId(templateOwnerId);
+        // Always set userId to the actual creator (employee or manager)
+        template.setUserId(userId);
         template.setTemplateTitle(templateTitle);
         template.setTemplateDescription(templateDescription);
         template.setScenes(aiAnalyzedScenes);
         template.setLocaleUsed(language);
+        template.setCreatedAt(new java.util.Date());  // Set creation timestamp for permission checks
         
         // Set folderId if provided
         if (folderId != null && !folderId.isBlank()) {
@@ -757,7 +771,17 @@ public class ContentManager {
         
         // 10. Save template (groups are now assigned via push button with TemplateAssignment)
         String templateId = templateDao.createTemplate(template);
-        // Add template to the owner's created_Templates (manager if employee, or user if manager)
+        
+        // Determine who should own the template in created_Templates
+        String templateOwnerId = userId;
+        com.example.demo.model.User user = userDao.findById(userId);
+        if (user != null && "employee".equals(user.getRole()) && user.getCreatedBy() != null) {
+            // If creator is an employee, add to manager's created_Templates only
+            templateOwnerId = user.getCreatedBy();
+            log.info("Employee {} template {} added to manager {}", userId, templateId, templateOwnerId);
+        }
+        
+        // Add template to manager's created_Templates (or creator's if they are a manager)
         userDao.addCreatedTemplate(templateOwnerId, templateId);
         
         log.info("Manual template created successfully: {} with {} scenes", templateId, aiAnalyzedScenes.size());
