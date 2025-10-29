@@ -52,7 +52,6 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
     }
 
     @Override
-    @Override
     public String cleanSingleScriptLine(List<Map<String, Object>> asrSegments, String videoDescription, String sceneDescription) {
         try {
             if (asrSegments == null || asrSegments.isEmpty()) {
