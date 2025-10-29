@@ -119,15 +119,15 @@ public class TemplateAIServiceImpl implements TemplateAIService {
 
             // Step 2: Extract speech transcript using ASR
             log.info("Step 2: Extracting speech transcript using ASR");
-            List<com.example.demo.ai.subtitle.SubtitleSegment> transcript = new ArrayList<>();
+            List<com.example.demo.ai.subtitle.SubtitleSegment> allAsrSegments = new ArrayList<>();
             if (asrSubtitleExtractor != null) {
                 try {
                     // Generate signed URL with 1 hour expiration for ASR processing
                     String signedUrl = alibabaOssStorageService.generateSignedUrl(videoUrl, 60, java.util.concurrent.TimeUnit.MINUTES);
                     log.info("Generated signed URL for ASR (expires in 1 hour)");
                     
-                    transcript = asrSubtitleExtractor.extract(signedUrl, language);
-                    log.info("ASR extracted {} transcript segments", transcript.size());
+                    allAsrSegments = asrSubtitleExtractor.extract(signedUrl, language);
+                    log.info("ASR extracted {} transcript segments", allAsrSegments.size());
                 } catch (Exception e) {
                     log.warn("ASR extraction failed, continuing without transcript: {}", e.getMessage());
                 }
@@ -135,28 +135,78 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 log.warn("ASR service not available, scenes will not have script lines");
             }
 
-            // Step 3: Process each scene and assign transcript
-            log.info("Step 3: Processing {} detected scenes", sceneSegments.size());
+            // Step 3: Create basic scene objects first
+            log.info("Step 3: Creating {} scene objects", sceneSegments.size());
             List<Scene> scenes = new ArrayList<>();
+            for (int i = 0; i < sceneSegments.size(); i++) {
+                SceneSegment segment = sceneSegments.get(i);
+                Scene scene = new Scene();
+                scene.setSceneNumber(i + 1);
+                scene.setStartTimeMs(segment.getStartTimeMs());
+                scene.setEndTimeMs(segment.getEndTimeMs());
+                scene.setSceneDurationInSeconds((segment.getEndTimeMs() - segment.getStartTimeMs()) / 1000);
+                scene.setSceneSource("ai");
+                scenes.add(scene);
+            }
+            
+            // Step 4: Clean scriptLines and set to scenes
+            log.info("Step 4: Cleaning scriptLines with {} ASR segments", allAsrSegments.size());
+            if (!allAsrSegments.isEmpty()) {
+                try {
+                    // Build scene data for scriptLine cleaning
+                    List<Map<String, Object>> sceneDataForCleaning = new ArrayList<>();
+                    for (Scene scene : scenes) {
+                        Map<String, Object> sceneMap = new HashMap<>();
+                        sceneMap.put("sceneNumber", scene.getSceneNumber());
+                        sceneMap.put("startMs", scene.getStartTimeMs());
+                        sceneMap.put("endMs", scene.getEndTimeMs());
+                        // Add video description for context
+                        if (userDescription != null && !userDescription.isEmpty()) {
+                            sceneMap.put("videoDescription", userDescription);
+                        }
+                        sceneDataForCleaning.add(sceneMap);
+                    }
+                    
+                    // Convert ASR to Maps
+                    List<Map<String, Object>> asrMaps = new ArrayList<>();
+                    for (com.example.demo.ai.subtitle.SubtitleSegment seg : allAsrSegments) {
+                        Map<String, Object> asrObj = new HashMap<>();
+                        asrObj.put("startMs", seg.getStartTimeMs());
+                        asrObj.put("endMs", seg.getEndTimeMs());
+                        asrObj.put("text", seg.getText());
+                        asrMaps.add(asrObj);
+                    }
+                    
+                    // Call cleanScriptLines
+                    Map<String, Object> scriptResult = objectLabelService.cleanScriptLines(asrMaps, sceneDataForCleaning);
+                    if (scriptResult != null && scriptResult.containsKey("scriptLines")) {
+                        @SuppressWarnings("unchecked")
+                        List<String> lines = (List<String>) scriptResult.get("scriptLines");
+                        
+                        // Set scriptLines to scenes immediately
+                        for (int i = 0; i < Math.min(scenes.size(), lines.size()); i++) {
+                            scenes.get(i).setScriptLine(lines.get(i));
+                            log.info("✅ Scene {} scriptLine: \"{}\"", i + 1, lines.get(i));
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("❌ ScriptLine cleaning failed: {}", e.getMessage(), e);
+                }
+            }
+
+            // Step 5: Process each scene with VL analysis (scriptLine already set)
+            log.info("Step 5: Processing {} scenes with VL analysis", scenes.size());
             List<String> allSceneLabels = new ArrayList<>();
 
             for (int i = 0; i < sceneSegments.size(); i++) {
                 SceneSegment segment = sceneSegments.get(i);
+                Scene scene = scenes.get(i);
                 log.info("Processing scene {}/{} with language: {}", i + 1, sceneSegments.size(), language);
                 
-                // Extract subtitle text for this scene BEFORE analysis
-                String scriptLine = extractScriptForScene(transcript, segment.getStartTimeMs(), segment.getEndTimeMs());
+                // Process scene WITH scriptLine context (already set)
+                processSceneVL(scene, segment, video.getUrl(), language);
                 
-                // Process scene WITH subtitle context
-                Scene scene = processScene(segment, i + 1, video.getUrl(), language, scriptLine);
-                
-                // Assign transcript to scene
-                if (scriptLine != null && !scriptLine.isEmpty()) {
-                    scene.setScriptLine(scriptLine);
-                    log.info("Scene {} script: {}", i + 1, scriptLine);
-                }
-                
-                scenes.add(scene);
+                // ScriptLine already set in Step 4
                 
                 // Collect labels for summary (no more block descriptions)
                 if (segment.getLabels() != null) {
@@ -164,8 +214,8 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 }
             }
 
-            // Step 3: Create the template
-            log.info("Step 3: Creating final template...");
+            // Step 6: Create the template
+            log.info("Step 6: Creating final template...");
             ManualTemplate template = new ManualTemplate();
             template.setVideoId(video.getId());
             template.setUserId(video.getUserId());
@@ -176,7 +226,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             template.setScenes(scenes);
             template.setTotalVideoLength(calculateTotalDuration(sceneSegments));
             
-            // AI-driven template metadata & per-scene guidance (no presets if AI fails)
+            // Step 7: AI-driven template metadata & per-scene guidance
             log.info("=== AI TEMPLATE GUIDANCE GENERATION START ===");
             log.info("About to call generateAIMetadata with {} scenes", scenes.size());
             try {
@@ -215,25 +265,15 @@ public class TemplateAIServiceImpl implements TemplateAIService {
      * @param language Language for AI analysis
      * @return Scene with AI analysis (overlays, labels, metadata)
      */
-    private Scene processScene(SceneSegment segment, int sceneNumber, String videoUrl, String language, String subtitleText) {
-        // Create base scene with clean data
-        Scene scene = new Scene();
-        scene.setSceneNumber(sceneNumber);
-        scene.setStartTimeMs(segment.getStartTimeMs());
-        scene.setEndTimeMs(segment.getEndTimeMs());
-        scene.setSceneDurationInSeconds((segment.getEndTimeMs() - segment.getStartTimeMs()) / 1000);
-        scene.setSceneSource("ai");
-        
+    /**
+     * Process scene with VL analysis (scene object already created with scriptLine)
+     */
+    private void processSceneVL(Scene scene, SceneSegment segment, String videoUrl, String language) {
         try {
-            // Use unified scene analysis service WITH subtitle context
-            if (subtitleText != null && !subtitleText.isEmpty()) {
-                log.info("Analyzing scene {} with subtitle context: \"{}\"", 
-                    sceneNumber, 
-                    subtitleText.substring(0, Math.min(50, subtitleText.length())) + 
-                    (subtitleText.length() > 50 ? "..." : ""));
-            } else {
-                log.info("Analyzing scene {} without subtitle context", sceneNumber);
-            }
+            // Use unified scene analysis service (WITH scriptLine context)
+            String scriptLine = scene.getScriptLine();
+            log.info("Analyzing scene {} with scriptLine context: {}", scene.getSceneNumber(), 
+                scriptLine != null && !scriptLine.isEmpty() ? "\"" + scriptLine + "\"" : "none");
             
             SceneAnalysisResult analysisResult = unifiedSceneAnalysisService.analyzeScene(
                 videoUrl,
@@ -241,25 +281,22 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 language,
                 segment.getStartTime(),
                 segment.getEndTime(),
-                subtitleText  // ✨ Pass subtitle context to VL
+                scriptLine  // Pass scriptLine as context for VL
             );
             
             // Apply analysis results to scene
             analysisResult.applyToScene(scene);
             
         } catch (Exception e) {
-            log.error("Scene analysis failed for scene {}: {} - {}", sceneNumber, e.getClass().getSimpleName(), e.getMessage());
+            log.error("Scene analysis failed for scene {}: {} - {}", scene.getSceneNumber(), e.getClass().getSimpleName(), e.getMessage());
             // Continue with basic scene without overlays
         }
         
         // No grid fallback - if YOLO fails, continue without overlays
         // VL analysis is still valuable without object regions
         if (scene.getOverlayType() == null) {
-            log.warn("Scene {} has no object overlays (YOLO detection may have failed or no objects detected)", sceneNumber);
+            log.warn("Scene {} has no object overlays (YOLO detection may have failed or no objects detected)", scene.getSceneNumber());
         }
-    
-        
-        return scene;
     }
 
     /**
@@ -272,11 +309,12 @@ public class TemplateAIServiceImpl implements TemplateAIService {
      * 
      * Flow:
      * 1. Build payload with template info + scene data (keyframes, detected objects, VL analysis)
-     * 2. Call Qwen reasoning model via objectLabelService.generateTemplateGuidance()
-     * 3. Apply returned metadata to template:
+     * 2. Add ALL ASR segments to payload for AI to clean and assign to scenes
+     * 3. Call Qwen reasoning model via objectLabelService.generateTemplateGuidance()
+     * 4. Apply returned metadata to template:
      *    - Template level: videoPurpose, tone, lightingRequirements, backgroundMusic
-     *    - Scene level: presenceOfPerson, movementInstructions, backgroundInstructions, etc.
-     * 4. Derive device orientation and video format from first scene's keyframe dimensions
+     *    - Scene level: presenceOfPerson, movementInstructions, backgroundInstructions, scriptLine (cleaned)
+     * 5. Derive device orientation and video format from first scene's keyframe dimensions
      * 
      * @param template Template to populate with metadata
      * @param video Original video object
@@ -284,6 +322,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
      * @param sceneLabels Collected scene labels (legacy, may be unused)
      * @param language Language for AI generation
      * @param userDescription Optional user description to guide AI
+     * @param allAsrSegments All ASR transcript segments for the entire video (to be cleaned by AI)
      */
     private void generateAIMetadata(ManualTemplate template, Video video, List<Scene> scenes, 
                                    List<String> sceneLabels, String language, String userDescription) {
@@ -307,6 +346,8 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 Map<String, Object> so = new java.util.HashMap<>();
                 so.put("sceneNumber", s.getSceneNumber());
                 so.put("durationSeconds", s.getSceneDurationInSeconds());
+                so.put("startMs", s.getStartTimeMs());
+                so.put("endMs", s.getEndTimeMs());
                 so.put("keyframeUrl", s.getKeyframeUrl());
                 
                 // Collect top-K detected object labels (Chinese) for context
@@ -331,11 +372,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                     so.put("sceneAnalysis", s.getVlSceneAnalysis());
                 }
                 
-                // Add ASR script line for AI validation/correction
-                if (s.getScriptLine() != null && !s.getScriptLine().isEmpty()) {
-                    so.put("asrScriptLine", s.getScriptLine());
-                }
-                
                 // Add scene description if available (for manual templates)
                 if (s.getSceneDescription() != null && !s.getSceneDescription().isEmpty()) {
                     so.put("sceneDescription", s.getSceneDescription());
@@ -343,10 +379,10 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 
                 log.info("=== SCENE {} DATA FOR AI ===", s.getSceneNumber());
                 log.info("Duration: {} seconds", s.getSceneDurationInSeconds());
+                log.info("Time range: {}-{}ms", s.getStartTimeMs(), s.getEndTimeMs());
                 log.info("Detected Objects: {}", labels);
                 log.info("VL Scene Analysis: {}", s.getVlSceneAnalysis() != null ? s.getVlSceneAnalysis() : "null");
                 log.info("Scene Description: {}", s.getSceneDescription() != null ? s.getSceneDescription() : "null");
-                log.info("ASR Script Line: {}", s.getScriptLine() != null ? s.getScriptLine() : "null");
                 log.info("===========================");
                 
                 sceneArr.add(so);
@@ -359,6 +395,17 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             log.info("Total scenes: {}", sceneArr.size());
             log.info("==========================");
 
+            // Combine all scriptLines for AI context
+            String combinedScriptLines = scenes.stream()
+                .map(Scene::getScriptLine)
+                .filter(sl -> sl != null && !sl.isEmpty())
+                .collect(java.util.stream.Collectors.joining(" | "));
+            
+            if (!combinedScriptLines.isEmpty()) {
+                tpl.put("combinedScriptLines", combinedScriptLines);
+                log.info("[METADATA] Combined scriptLines for AI: \"{}\"", combinedScriptLines);
+            }
+            
             // BACKUP: Save VL data before guidance generation (in case it gets lost)
             Map<Integer, String> vlRawBackup = new java.util.HashMap<>();
             Map<Integer, String> vlAnalysisBackup = new java.util.HashMap<>();
@@ -369,14 +416,10 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 if (s.getVlSceneAnalysis() != null) {
                     vlAnalysisBackup.put(s.getSceneNumber(), s.getVlSceneAnalysis());
                 }
-                log.info("[DEBUG] Scene {} BEFORE guidance - vlRawResponse: {}, vlSceneAnalysis: {}", 
-                    s.getSceneNumber(),
-                    s.getVlRawResponse() != null ? s.getVlRawResponse().length() + " chars" : "null",
-                    s.getVlSceneAnalysis() != null ? s.getVlSceneAnalysis().length() + " chars" : "null");
             }
             
-            // Ask Qwen (single call) via ObjectLabelService extension
-            log.info("[METADATA] Calling objectLabelService.generateTemplateGuidance with payload size: {}", payload.size());
+            // Generate template metadata
+            log.info("[METADATA] Calling objectLabelService.generateTemplateGuidance");
             Map<String, Object> result = objectLabelService.generateTemplateGuidance(payload);
             log.info("[METADATA] generateTemplateGuidance returned: {}", result != null ? "result with " + result.size() + " keys" : "null");
             if (result == null || result.isEmpty()) {
@@ -428,7 +471,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 for (Scene s : scenes) {
                     Map<String, Object> one = byNum.get(s.getSceneNumber());
                     if (one == null) continue;
-                    // NOTE: scriptLine (提词器) is now extracted via ASR/OCR, not from AI
+                    
                     Object person = one.get("presenceOfPerson"); if (person instanceof Boolean b) s.setPresenceOfPerson(b);
                     Object move = one.get("movementInstructions"); if (move instanceof String v) s.setMovementInstructions(trim60(v));
                     Object bg = one.get("backgroundInstructions"); if (bg instanceof String v) s.setBackgroundInstructions(trim60(v));
@@ -436,6 +479,8 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                     Object audio = one.get("audioNotes"); if (audio instanceof String v) s.setAudioNotes(trim60(v));
                 }
             }
+            
+
             // Device orientation: derive from keyframe and apply to all scenes
             String aspectRatio = deriveDeviceOrientationFromFirstScene(scenes, language);
             if (aspectRatio != null) {
@@ -473,6 +518,21 @@ public class TemplateAIServiceImpl implements TemplateAIService {
      */
     private String trim40(String s) { return s == null ? null : (s.length() > 40 ? s.substring(0,40) : s); }
     private String trim60(String s) { return s == null ? null : (s.length() > 60 ? s.substring(0,60) : s); }
+    
+    /**
+     * Convert ASR segments to Map format for AI processing
+     */
+    private List<Map<String, Object>> convertAsrToMaps(List<com.example.demo.ai.subtitle.SubtitleSegment> asrSegments) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (com.example.demo.ai.subtitle.SubtitleSegment seg : asrSegments) {
+            Map<String, Object> asrObj = new HashMap<>();
+            asrObj.put("startMs", seg.getStartTimeMs());
+            asrObj.put("endMs", seg.getEndTimeMs());
+            asrObj.put("text", seg.getText());
+            result.add(asrObj);
+        }
+        return result;
+    }
 
     /**
      * USED BY: Both AI Template Creation AND Manual Template Creation
@@ -518,31 +578,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     /**
      * Extract script text for a specific scene based on timestamps
      * Matches transcript segments that overlap with the scene time range
-     */
-    private String extractScriptForScene(List<com.example.demo.ai.subtitle.SubtitleSegment> transcript, 
-                                        long sceneStartMs, long sceneEndMs) {
-        if (transcript == null || transcript.isEmpty()) {
-            return null;
-        }
-        
-        StringBuilder scriptBuilder = new StringBuilder();
-        
-        for (com.example.demo.ai.subtitle.SubtitleSegment segment : transcript) {
-            // Check if segment overlaps with scene time range
-            boolean overlaps = segment.getStartTimeMs() < sceneEndMs && 
-                             segment.getEndTimeMs() > sceneStartMs;
-            
-            if (overlaps) {
-                if (scriptBuilder.length() > 0) {
-                    scriptBuilder.append(" ");
-                }
-                scriptBuilder.append(segment.getText());
-            }
-        }
-        
-        return scriptBuilder.toString().trim();
-    }
-    
+     *
     /**
      * Create a fallback template with a single scene when shot detection fails
      */

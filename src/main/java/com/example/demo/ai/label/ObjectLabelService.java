@@ -64,10 +64,37 @@ public interface ObjectLabelService {
     }
 
     /**
-     * Generate Chinese template metadata and per-scene guidance in one call.
+     * Generate Chinese template metadata and per-scene guidance (WITHOUT scriptLine cleaning).
      * Default no-op for backward compatibility (returns null when unimplemented).
+     * 
+     * @param payload Template and scene data
      */
     default Map<String, Object> generateTemplateGuidance(Map<String, Object> payload) {
+        return null;
+    }
+    
+    /**
+     * Clean ASR transcript and assign to scenes based on timing.
+     * For multi-scene videos (AI templates).
+     * 
+     * @param asrSegments All ASR segments with timing
+     * @param scenes Scene timing and analysis data
+     * @return Map with "scriptLines" array matching scene order
+     */
+    default Map<String, Object> cleanScriptLines(List<Map<String, Object>> asrSegments, List<Map<String, Object>> scenes) {
+        return null;
+    }
+    
+    /**
+     * Clean ASR transcript for a single scene (simplified).
+     * For single-scene videos (manual templates).
+     * 
+     * @param asrSegments ASR segments for this scene
+     * @param videoDescription User's video description (context)
+     * @param sceneDescription User's scene description (context)
+     * @return Cleaned scriptLine text
+     */
+    default String cleanSingleScriptLine(List<Map<String, Object>> asrSegments, String videoDescription, String sceneDescription) {
         return null;
     }
 }

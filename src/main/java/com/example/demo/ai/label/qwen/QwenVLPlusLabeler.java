@@ -52,6 +52,154 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
     }
 
     @Override
+    @Override
+    public String cleanSingleScriptLine(List<Map<String, Object>> asrSegments, String videoDescription, String sceneDescription) {
+        try {
+            if (asrSegments == null || asrSegments.isEmpty()) {
+                return "";
+            }
+
+            // Build simple prompt for single scene
+            StringBuilder sb = new StringBuilder();
+            sb.append("你是语音文本清理助手。请清理这段语音识别文本。\n\n");
+            
+            // Add context
+            if (videoDescription != null && !videoDescription.isEmpty()) {
+                sb.append("【视频描述】\n").append(videoDescription).append("\n\n");
+            }
+            if (sceneDescription != null && !sceneDescription.isEmpty()) {
+                sb.append("【场景描述】\n").append(sceneDescription).append("\n\n");
+            }
+            
+            // Add ASR text
+            sb.append("【语音识别原始文本】\n");
+            for (Map<String, Object> seg : asrSegments) {
+                sb.append(seg.get("text")).append(" ");
+            }
+            sb.append("\n\n");
+            
+            sb.append("任务：\n")
+              .append("1. 结合视频和场景描述理解内容\n")
+              .append("2. 清理ASR识别错误（背景音乐、口音、噪音等）\n")
+              .append("3. 移除特殊标记如 <|BGM|>、<|/BGM|> 等\n")
+              .append("4. 合并文本片段，形成完整、合理的句子\n")
+              .append("5. 如果没有有效语音内容，返回空字符串\n\n")
+              .append("只返回清理后的文本，不要任何解释或JSON格式。");
+
+            Map<String, Object> request = new HashMap<>();
+            request.put("model", qwenModel);
+            List<Map<String, Object>> messages = new ArrayList<>();
+            Map<String, Object> message = new HashMap<>();
+            message.put("role", "user");
+
+            List<Map<String, Object>> content = new ArrayList<>();
+            Map<String, Object> textContent = new HashMap<>();
+            textContent.put("type", "text");
+            textContent.put("text", sb.toString());
+            content.add(textContent);
+            message.put("content", content);
+            messages.add(message);
+            request.put("messages", messages);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + qwenApiKey);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+
+            String endpoint = normalizeChatEndpoint(qwenApiBase);
+            ResponseEntity<String> response = restTemplate.exchange(
+                endpoint,
+                HttpMethod.POST,
+                entity,
+                String.class
+            );
+            String body = response.getBody();
+            System.out.println("[QWEN] cleanSingleScriptLine status=" + response.getStatusCodeValue());
+            
+            if (!response.getStatusCode().is2xxSuccessful()) return "";
+            String contentStr = extractContent(body);
+            if (contentStr == null || contentStr.isBlank()) return "";
+
+            return contentStr.trim();
+        } catch (Exception e) {
+            System.err.println("[QWEN] cleanSingleScriptLine failed: " + e.getMessage());
+            return "";
+        }
+    }
+
+    @Override
+    public Map<String, Object> cleanScriptLines(List<Map<String, Object>> asrSegments, List<Map<String, Object>> scenes) {
+        try {
+            if (asrSegments == null || asrSegments.isEmpty() || scenes == null || scenes.isEmpty()) {
+                return null;
+            }
+
+            // Build payload
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("asrSegments", asrSegments);
+            payload.put("scenes", scenes);
+            
+            String payloadJson = objectMapper.writeValueAsString(payload);
+            StringBuilder sb = new StringBuilder();
+            sb.append("你是语音文本清理助手。请根据ASR识别结果和场景时间范围，清理并分配语音文本到每个场景。\n\n")
+              .append("任务：\n")
+              .append("1. 根据每个场景的时间范围（startMs-endMs）和画面分析（sceneAnalysis），将ASR文本分配到对应场景\n")
+              .append("2. 清理ASR识别错误（背景音乐、口音、噪音等导致的错误文本）\n")
+              .append("3. 移除特殊标记如 <|BGM|>、<|/BGM|> 等\n")
+              .append("4. 合并同一场景内的文本片段，形成完整、合理的句子\n")
+              .append("5. 如果某个场景没有语音内容，返回空字符串\n")
+              .append("6. 保持场景顺序，返回与输入场景数量相同的scriptLine数组\n\n")
+              .append("输入（JSON）：\n")
+              .append(payloadJson).append("\n\n")
+              .append("输出格式（仅 JSON，不要任何解释）：\n")
+              .append("{\n")
+              .append("  \"scriptLines\": [\"场景1的清理后文本\", \"场景2的清理后文本\", ...]\n")
+              .append("}\n");
+
+            Map<String, Object> request = new HashMap<>();
+            request.put("model", qwenModel);
+            List<Map<String, Object>> messages = new ArrayList<>();
+            Map<String, Object> message = new HashMap<>();
+            message.put("role", "user");
+
+            List<Map<String, Object>> content = new ArrayList<>();
+            Map<String, Object> textContent = new HashMap<>();
+            textContent.put("type", "text");
+            textContent.put("text", sb.toString());
+            content.add(textContent);
+            message.put("content", content);
+            messages.add(message);
+            request.put("messages", messages);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + qwenApiKey);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+
+            String endpoint = normalizeChatEndpoint(qwenApiBase);
+            ResponseEntity<String> response = restTemplate.exchange(
+                endpoint,
+                HttpMethod.POST,
+                entity,
+                String.class
+            );
+            String body = response.getBody();
+            System.out.println("[QWEN] cleanScriptLines status=" + response.getStatusCodeValue() + 
+                " bodyLen=" + (body == null ? 0 : body.length()));
+            
+            if (!response.getStatusCode().is2xxSuccessful()) return null;
+            String contentStr = extractContent(body);
+            if (contentStr == null || contentStr.isBlank()) return null;
+
+            // Parse JSON object
+            return objectMapper.readValue(contentStr, new TypeReference<Map<String,Object>>(){});
+        } catch (Exception e) {
+            System.err.println("[QWEN] cleanScriptLines failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    @Override
     public Map<String, Object> generateTemplateGuidance(Map<String, Object> payload) {
         try {
             if (payload == null || payload.isEmpty()) return null;
@@ -62,13 +210,9 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             sb.append("你是视频画面理解助手。请基于整段视频信息，生成中文模板“基本信息”和每个场景指导，严格使用JSON输出，不要任何解释文字。\n")
               .append("如果输入中存在 template.userDescription，请参考该描述进行撰写。\n")
 
-              .append("\n")
-              .append("重要：如果场景中包含 asrScriptLine（语音识别文本），请：\n")
-              .append("1. 结合场景的 sceneDescription 和 sceneAnalysis 理解场景内容\n")
-              .append("2. 在输出的 scriptLine 字段中返回 asrScriptLine 的内容\n")
-              .append("3. 移除任何特殊标记如 <|BGM|>、<|/BGM|> 等\n")
-              .append("\n")
-              .append("输入（JSON）：\n")
+              .append("\n");
+            
+            sb.append("输入（JSON）：\n")
               .append(payloadJson).append("\n")
               .append("输出格式（仅 JSON）：\n")
               .append("{\n")
@@ -81,7 +225,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
               .append("  \"scenes\": [\n")
               .append("    {\n")
               .append("      \"sceneNumber\": 1,\n")
-              .append("      \"scriptLine\": \"语音识别文本（如果有asrScriptLine）\",\n")
+
               .append("      \"presenceOfPerson\": false,\n")
               .append("      \"movementInstructions\": \"...\",\n")
               .append("      \"backgroundInstructions\": \"...\",\n")
@@ -138,44 +282,44 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
 
 
     /**
-     * Enhanced labelRegions with subtitle context
-     * This is called by UnifiedSceneAnalysisService when subtitle text is available
+     * Enhanced labelRegions with scriptLine context (optional reference)
+     * This is called by UnifiedSceneAnalysisService when scriptLine is available
      */
     @Override
-    public Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale, String subtitleText) {
+    public Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale, String scriptLineContext) {
         System.out.println("[QWEN] ========================================");
-        System.out.println("[QWEN] labelRegions called (4-param WITH SUBTITLE)");
+        System.out.println("[QWEN] labelRegions called (4-param WITH SCRIPTLINE)");
         System.out.println("[QWEN] keyframeUrl: " + (keyframeUrl != null ? keyframeUrl.substring(0, Math.min(100, keyframeUrl.length())) + "..." : "null"));
         System.out.println("[QWEN] regions count: " + (regions != null ? regions.size() : 0));
         System.out.println("[QWEN] locale: " + locale);
-        System.out.println("[QWEN] subtitleText: " + (subtitleText != null && !subtitleText.isEmpty() ? 
-            "\"" + subtitleText.substring(0, Math.min(50, subtitleText.length())) + (subtitleText.length() > 50 ? "...\"" : "\"") : "null"));
+        System.out.println("[QWEN] scriptLineContext: " + (scriptLineContext != null && !scriptLineContext.isEmpty() ? 
+            "\"" + scriptLineContext.substring(0, Math.min(50, scriptLineContext.length())) + (scriptLineContext.length() > 50 ? "...\"" : "\"") : "null"));
         System.out.println("[QWEN] ========================================");
         
-        // Call the internal implementation with subtitle
-        return labelRegionsInternal(keyframeUrl, regions, locale, subtitleText);
+        // Call the internal implementation with scriptLine context
+        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext);
     }
     
     /**
-     * Backward compatible 3-parameter version (no subtitle)
+     * Backward compatible 3-parameter version (no scriptLine context)
      */
     @Override
     public Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale) {
         System.out.println("[QWEN] ========================================");
-        System.out.println("[QWEN] labelRegions called (3-param NO SUBTITLE)");
+        System.out.println("[QWEN] labelRegions called (3-param NO SCRIPTLINE)");
         System.out.println("[QWEN] keyframeUrl: " + (keyframeUrl != null ? keyframeUrl.substring(0, Math.min(100, keyframeUrl.length())) + "..." : "null"));
         System.out.println("[QWEN] regions count: " + (regions != null ? regions.size() : 0));
         System.out.println("[QWEN] locale: " + locale);
         System.out.println("[QWEN] ========================================");
         
-        // Call the internal implementation without subtitle
+        // Call the internal implementation without scriptLine context
         return labelRegionsInternal(keyframeUrl, regions, locale, null);
     }
     
     /**
-     * Internal implementation that handles both with and without subtitle
+     * Internal implementation that handles both with and without scriptLine context
      */
-    private Map<String, LabelResult> labelRegionsInternal(String keyframeUrl, List<RegionBox> regions, String locale, String subtitleText) {
+    private Map<String, LabelResult> labelRegionsInternal(String keyframeUrl, List<RegionBox> regions, String locale, String scriptLineContext) {
         
         Map<String, LabelResult> out = new HashMap<>();
         if (regions == null || regions.isEmpty() || keyframeUrl == null || keyframeUrl.isBlank()) {
@@ -183,16 +327,15 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             return out;
         }
         try {
-            // Build enhanced prompt with scene analysis, key elements, and scriptLine validation
+            // Build enhanced prompt with scene analysis and key elements
             String regionsJson = objectMapper.writeValueAsString(regions);
             StringBuilder sb = new StringBuilder();
-            sb.append("分析这个场景图片，完成四个任务：\n\n");
+            sb.append("分析这个场景图片，完成三个任务：\n\n");
             
-            // Add subtitle context if available
-            if (subtitleText != null && !subtitleText.isEmpty()) {
-                sb.append("【语音内容（ASR识别）】\n");
-                sb.append(subtitleText).append("\n\n");
-                sb.append("注意：ASR识别可能有错误（背景音乐、口音、噪音等），请结合画面内容验证。\n\n");
+            // Add scriptLine context if available (optional reference)
+            if (scriptLineContext != null && !scriptLineContext.isEmpty()) {
+                sb.append("【场景语音内容（参考）】\n");
+                sb.append(scriptLineContext).append("\n\n");
             }
             
             sb.append("任务1：对指定区域进行标注\n")
@@ -207,45 +350,20 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             .append("3. 色调氛围（主要颜色、情绪）\n")
             .append("4. 主要物体（类型、位置、状态）\n")
             .append("5. 动作活动（如有）\n")
-            .append("6. 拍摄角度（俯视/平视/仰视等）\n");
+            .append("6. 拍摄角度（俯视/平视/仰视等）\n\n")
             
-            if (subtitleText != null && !subtitleText.isEmpty()) {
-                sb.append("7. 语音画面一致性（语音内容是否与画面匹配）\n");
-            }
-            
-            sb.append("\n")
             .append("任务3：提取关键要素\n")
             .append("请提取该场景中最重要的3-5个物体、产品或元素，用于后续视频对比。\n")
             .append("例如：\n")
             .append("- 推销导航的场景：[\"导航屏幕\", \"中控台\", \"CarPlay界面\"]\n")
             .append("- 推销车衣的场景：[\"车身\", \"贴膜过程\", \"防护效果\"]\n")
-            .append("- 餐饮场景：[\"菜品\", \"门店招牌\", \"用餐环境\"]\n");
+            .append("- 餐饮场景：[\"菜品\", \"门店招牌\", \"用餐环境\"]\n\n")
             
-            if (subtitleText != null && !subtitleText.isEmpty()) {
-                sb.append("请基于画面内容和语音内容提取关键要素。\n");
-            }
-            
-            sb.append("\n")
-            .append("任务4：验证并修正语音文本\n");
-            
-            if (subtitleText != null && !subtitleText.isEmpty()) {
-                sb.append("请验证并修正上面的语音内容（ASR识别可能有错误）：\n")
-                .append("1. 结合画面内容和场景分析，检查语音文本是否合理\n")
-                .append("2. 如果发现明显错误（背景音乐、口音、噪音导致的识别错误），根据画面内容修正\n")
-                .append("3. 移除特殊标记如 <|BGM|>、<|/BGM|> 等\n")
-                .append("4. 如果语音内容与画面完全不匹配，可能是识别错误，请修正\n")
-                .append("5. 返回修正后的文本\n");
-            } else {
-                sb.append("无语音内容，返回空字符串。\n");
-            }
-            
-            sb.append("\n")
             .append("返回JSON格式：\n")
             .append("{\n")
             .append("  \"regions\": [{\"id\":\"p1\",\"labelZh\":\"汽车\",\"conf\":0.95}],\n")
             .append("  \"sceneAnalysis\": \"详细的场景分析文字...\",\n")
-            .append("  \"keyElements\": [\"关键要素1\", \"关键要素2\", \"关键要素3\"],\n")
-            .append("  \"scriptLine\": \"清理后的语音文本\"\n")
+            .append("  \"keyElements\": [\"关键要素1\", \"关键要素2\", \"关键要素3\"]\n")
             .append("}");
 
             Map<String, Object> request = new HashMap<>();
@@ -354,7 +472,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                     System.err.println("[QWEN] ⚠️ No 'sceneAnalysis' field in response");
                 }
                 
-                // Extract key elements (NEW)
+                // Extract key elements
                 List<String> keyElements = new ArrayList<>();
                 if (root.has("keyElements") && root.get("keyElements").isArray()) {
                     for (JsonNode element : root.get("keyElements")) {
@@ -363,15 +481,6 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                     System.out.println("[QWEN] ✅ Key elements extracted: " + keyElements);
                 } else {
                     System.err.println("[QWEN] ⚠️ No 'keyElements' field in response");
-                }
-                
-                // Extract cleaned script line (NEW)
-                String cleanedScriptLine = null;
-                if (root.has("scriptLine")) {
-                    cleanedScriptLine = root.get("scriptLine").asText();
-                    System.out.println("[QWEN] ✅ Cleaned script line extracted: \"" + cleanedScriptLine + "\"");
-                } else {
-                    System.err.println("[QWEN] ⚠️ No 'scriptLine' field in response");
                 }
                 
                 if (regionsNode.isArray()) {
@@ -384,8 +493,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                             LabelResult result = new LabelResult(id, label, conf);
                             result.sceneAnalysis = sceneAnalysis;  // Attach scene analysis to all results
                             result.rawResponse = contentStr;  // Store raw response
-                            result.keyElements = keyElements;  // Attach key elements (NEW)
-                            result.scriptLine = cleanedScriptLine;  // Attach cleaned script line (NEW)
+                            result.keyElements = keyElements;  // Attach key elements
                             out.put(id, result);
                             System.out.println("[QWEN] Added region: " + id + " -> " + label + " (conf: " + conf + ")");
                         }

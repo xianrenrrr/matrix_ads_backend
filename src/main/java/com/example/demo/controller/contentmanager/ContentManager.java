@@ -581,7 +581,7 @@ public class ContentManager {
             log.info("✅ Video saved with ID: {}, duration: {} seconds", videoId, videoDurationSeconds);
             
             // 4. Extract speech transcript using ASR (per scene video)
-            String scriptLine = "";
+            List<com.example.demo.ai.subtitle.SubtitleSegment> subtitles = null;
             if (asrSubtitleExtractor != null) {
                 try {
                     log.info("🎤 Extracting speech transcript for scene {} using ASR", metadata.getSceneNumber());
@@ -590,18 +590,10 @@ public class ContentManager {
                     String signedUrl = alibabaOssStorageService.generateSignedUrl(video.getUrl(), 60, java.util.concurrent.TimeUnit.MINUTES);
                     log.info("✅ Generated signed URL for ASR (expires in 1 hour)");
                     
-                    List<com.example.demo.ai.subtitle.SubtitleSegment> transcript = 
-                        asrSubtitleExtractor.extract(signedUrl, language);
+                    subtitles = asrSubtitleExtractor.extract(signedUrl, language);
                     
-                    if (transcript != null && !transcript.isEmpty()) {
-                        // Concatenate all transcript segments into scriptLine
-                        scriptLine = transcript.stream()
-                            .map(com.example.demo.ai.subtitle.SubtitleSegment::getText)
-                            .collect(java.util.stream.Collectors.joining(" "));
-                        log.info("✅ ASR extracted {} segments, total text length: {} chars", 
-                                 transcript.size(), scriptLine.length());
-                        log.info("📝 Scene {} script: {}", metadata.getSceneNumber(), 
-                                 scriptLine.length() > 100 ? scriptLine.substring(0, 100) + "..." : scriptLine);
+                    if (subtitles != null && !subtitles.isEmpty()) {
+                        log.info("✅ ASR extracted {} segments", subtitles.size());
                     } else {
                         log.warn("⚠️ ASR returned empty transcript for scene {}", metadata.getSceneNumber());
                     }
@@ -611,7 +603,41 @@ public class ContentManager {
                     // Continue without transcript
                 }
             } else {
-                log.warn("⚠️ ASR service not available, scene {} will not have script line", metadata.getSceneNumber());
+                log.warn("⚠️ ASR service not available, scene {} will not have scriptLine", metadata.getSceneNumber());
+            }
+            
+            // 4.5. Clean scriptLine BEFORE scene analysis (simplified for single scene)
+            String cleanedScriptLine = null;
+            if (subtitles != null && !subtitles.isEmpty()) {
+                log.info("🎤 Cleaning scriptLine for scene {} BEFORE VL analysis", metadata.getSceneNumber());
+                try {
+                    // Convert ASR segments to Map format
+                    List<Map<String, Object>> asrMaps = new ArrayList<>();
+                    for (com.example.demo.ai.subtitle.SubtitleSegment seg : subtitles) {
+                        Map<String, Object> asrObj = new HashMap<>();
+                        asrObj.put("startMs", seg.getStartTimeMs());
+                        asrObj.put("endMs", seg.getEndTimeMs());
+                        asrObj.put("text", seg.getText());
+                        asrMaps.add(asrObj);
+                    }
+                    
+                    // Call simplified single-scene cleaning (no scene matching needed)
+                    cleanedScriptLine = objectLabelService.cleanSingleScriptLine(
+                        asrMaps,
+                        templateDescription,  // video description
+                        metadata.getSceneDescription()  // scene description
+                    );
+                    
+                    if (cleanedScriptLine != null && !cleanedScriptLine.isEmpty()) {
+                        log.info("✅ Scene {} scriptLine cleaned: \"{}\"", 
+                            metadata.getSceneNumber(), cleanedScriptLine);
+                    } else {
+                        log.warn("⚠️ Scene {} scriptLine cleaning returned empty", metadata.getSceneNumber());
+                    }
+                } catch (Exception e) {
+                    log.error("❌ Failed to clean scriptLine for scene {}: {}", 
+                        metadata.getSceneNumber(), e.getMessage());
+                }
             }
             
             // 5. Analyze as single scene using UnifiedSceneAnalysisService
@@ -623,7 +649,10 @@ public class ContentManager {
             aiScene.setSceneDescription(metadata.getSceneDescription());
             aiScene.setVideoId(videoId);
             aiScene.setSceneDurationInSeconds(videoDurationSeconds); // Set duration from video metadata
-            aiScene.setScriptLine(scriptLine); // Set ASR-extracted script
+            // Set cleaned scriptLine (already cleaned before VL analysis)
+            if (cleanedScriptLine != null) {
+                aiScene.setScriptLine(cleanedScriptLine);
+            }
             log.info("✅ Scene {} duration set to: {} seconds", metadata.getSceneNumber(), videoDurationSeconds);
             
             // 6. Analyze the video for AI metadata (VL analysis, overlays, etc.)
@@ -728,7 +757,8 @@ public class ContentManager {
         
         // 10. Save template (groups are now assigned via push button with TemplateAssignment)
         String templateId = templateDao.createTemplate(template);
-        userDao.addCreatedTemplate(userId, templateId);
+        // Add template to the owner's created_Templates (manager if employee, or user if manager)
+        userDao.addCreatedTemplate(templateOwnerId, templateId);
         
         log.info("Manual template created successfully: {} with {} scenes", templateId, aiAnalyzedScenes.size());
         
@@ -785,9 +815,21 @@ public class ContentManager {
             if (userDescription != null && !userDescription.isBlank()) {
                 tpl.put("userDescription", userDescription);
             }
+            
+            // Combine all scriptLines for AI context
+            String combinedScriptLines = scenes.stream()
+                .map(com.example.demo.model.Scene::getScriptLine)
+                .filter(sl -> sl != null && !sl.isEmpty())
+                .collect(java.util.stream.Collectors.joining(" | "));
+            
+            if (!combinedScriptLines.isEmpty()) {
+                tpl.put("combinedScriptLines", combinedScriptLines);
+                log.info("[MANUAL] Combined scriptLines for AI: \"{}\"", combinedScriptLines);
+            }
+            
             payload.put("template", tpl);
 
-            // Collect scene data with detected objects
+            // Collect scene data with detected objects and raw ASR text
             List<Map<String, Object>> sceneArr = new ArrayList<>();
             for (com.example.demo.model.Scene s : scenes) {
                 Map<String, Object> so = new HashMap<>();
@@ -823,10 +865,7 @@ public class ContentManager {
                     so.put("sceneDescription", s.getSceneDescription());
                 }
                 
-                // Include ASR script line for AI validation/correction
-                if (s.getScriptLine() != null && !s.getScriptLine().isEmpty()) {
-                    so.put("asrScriptLine", s.getScriptLine());
-                }
+                // Note: scriptLine is already set per scene (cleaned by AI during scene creation)
                 
                 // Include VL scene analysis for context
                 if (s.getVlSceneAnalysis() != null && !s.getVlSceneAnalysis().isEmpty()) {
