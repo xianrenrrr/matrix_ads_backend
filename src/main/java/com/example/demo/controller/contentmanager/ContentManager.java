@@ -301,17 +301,12 @@ public class ContentManager {
                     scene.setOverlayType("grid");
                 }
                 
-                // Validate minimum 2-second scene duration for mini app compatibility
+                // Log scene timing info (no validation - mini app will handle minimum duration)
                 Long startMs = scene.getStartTimeMs();
                 Long endMs = scene.getEndTimeMs();
                 if (startMs != null && endMs != null) {
                     long durationMs = endMs - startMs;
-                    if (durationMs < 2000) {
-                        String errorMsg = "Scene " + scene.getSceneNumber() + " (" + scene.getSceneTitle() + 
-                            ") is too short (" + durationMs + "ms). Minimum duration is 2 seconds (2000ms).";
-                        log.error("❌ Validation failed: {}", errorMsg);
-                        throw new IllegalArgumentException(errorMsg);
-                    }
+                    log.info("Scene {} duration: {}ms ({}s)", scene.getSceneNumber(), durationMs, durationMs / 1000.0);
                 } else {
                     log.warn("⚠️ Scene {} missing startTimeMs or endTimeMs (startMs={}, endMs={})", 
                         scene.getSceneNumber(), startMs, endMs);
