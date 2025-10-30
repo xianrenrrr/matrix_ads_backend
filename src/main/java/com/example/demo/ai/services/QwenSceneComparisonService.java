@@ -132,18 +132,20 @@ public class QwenSceneComparisonService {
                 sb.append(templateScene.getScriptLine()).append("\n\n");
             }
             
-            // Evaluation Criteria (weighted, with harsh purpose filtering)
-            sb.append("请按以下顺序评估（权重递减）：\n\n");
+            // Evaluation Criteria (STRICT - purpose and key elements must match)
+            sb.append("请按以下顺序评估（严格模式）：\n\n");
             
-            sb.append("1. 目的匹配度（50分）- 最重要！\n");
+            sb.append("1. 目的匹配度（50分）- 必须匹配！\n");
             sb.append("   用户图片的内容是否符合视频目的？\n");
-            sb.append("   ⚠️ 如果完全不符合（例如：视频目的是推广导航功能，用户却拍摄车衣贴膜），直接给0分！\n");
-            sb.append("   只有当图片内容与视频目的相关时，才继续评估其他项。\n\n");
+            sb.append("   ⚠️⚠️ 如果目的完全不符合，直接给0分并停止评估！\n");
+            sb.append("   例如：视频目的是推广导航功能，用户却拍摄车衣贴膜 → 0分\n");
+            sb.append("   在suggestions中明确说明：\"请在视频中包含[具体要求的内容]，当前拍摄的内容与要求不符。\"\n\n");
             
-            sb.append("2. 关键要素完整度（30分）\n");
+            sb.append("2. 关键要素完整度（30分）- 必须包含！\n");
             sb.append("   用户图片是否包含场景关键要素？\n");
+            sb.append("   ⚠️ 如果关键要素缺失，直接给0分！\n");
             sb.append("   对比关键要素列表，检查用户图片中出现了哪些。\n");
-            sb.append("   缺少重要要素扣分。\n\n");
+            sb.append("   在suggestions中明确列出：\"请在视频中包含以下要素：[缺失的要素列表]\"\n\n");
             
             sb.append("3. 视觉相似度（20分）\n");
             sb.append("   两张图片的构图、角度、内容是否相似？\n");
@@ -271,8 +273,12 @@ public class QwenSceneComparisonService {
         
         org.springframework.http.HttpEntity<String> entity = new org.springframework.http.HttpEntity<>(requestJson, headers);
         
+        // Normalize endpoint to ensure it ends with /chat/completions
+        String endpoint = normalizeChatEndpoint(qwenApiBase);
+        log.info("[DIRECT-COMPARISON] Calling Qwen API endpoint: {}", endpoint);
+        
         org.springframework.http.ResponseEntity<String> response = restTemplate.exchange(
-            qwenApiBase,
+            endpoint,
             org.springframework.http.HttpMethod.POST,
             entity,
             String.class
@@ -371,5 +377,26 @@ public class QwenSceneComparisonService {
             log.warn("[DIRECT-COMPARISON] Failed to extract content: {}", e.getMessage());
         }
         return null;
+    }
+    
+    /**
+     * Normalize Qwen API endpoint to ensure it ends with /chat/completions
+     */
+    private String normalizeChatEndpoint(String base) {
+        String def = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+        if (base == null || base.isBlank()) return def;
+
+        if (base.startsWith("http")) {
+            if (base.endsWith("/chat/completions")) return base;
+            if (base.contains("/compatible-mode/") && base.endsWith("/v1")) return base + "/chat/completions";
+            try {
+                java.net.URI u = java.net.URI.create(base);
+                if (u.getHost() != null && u.getHost().contains("dashscope.aliyuncs.com")) {
+                    return def;
+                }
+            } catch (Exception ignored) {}
+            return base; // assume already a full chat URL
+        }
+        return def;
     }
 }
