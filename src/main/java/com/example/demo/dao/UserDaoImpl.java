@@ -235,7 +235,10 @@ public class UserDaoImpl implements UserDao {
     
     /**
      * Authenticate user and return user with role information
-     * Handles both BCrypt-encoded and plain text passwords for backward compatibility
+     * Handles:
+     * 1. BCrypt-encoded passwords (normal case)
+     * 2. Plain text passwords (backward compatibility)
+     * 3. Direct BCrypt hash input (for testing/debugging)
      */
     public User authenticateUser(String username, String password) {
         try {
@@ -248,13 +251,21 @@ public class UserDaoImpl implements UserDao {
             
             // Check if password is BCrypt encoded (starts with $2a$, $2b$, or $2y$)
             if (storedPassword != null && storedPassword.startsWith("$2")) {
-                // BCrypt encoded password - use BCrypt matcher
+                // Case 1: User provided the BCrypt hash directly (for testing/debugging)
+                if (password.equals(storedPassword)) {
+                    System.out.println("Authentication: Direct BCrypt hash match");
+                    return user;
+                }
+                
+                // Case 2: Normal BCrypt password verification
                 if (passwordEncoder.matches(password, storedPassword)) {
+                    System.out.println("Authentication: BCrypt password match");
                     return user;
                 }
             } else {
-                // Plain text password - direct comparison for backward compatibility
+                // Case 3: Plain text password - direct comparison for backward compatibility
                 if (password.equals(storedPassword)) {
+                    System.out.println("Authentication: Plain text password match");
                     return user;
                 }
             }

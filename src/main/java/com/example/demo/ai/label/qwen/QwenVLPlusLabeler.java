@@ -452,7 +452,8 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             .append("6. 拍摄角度（俯视/平视/仰视等）\n\n")
             
             .append("任务3：提取关键要素\n")
-            .append("请提取该场景中最重要的3-5个物体、产品或元素，用于后续视频对比。\n")
+            .append("请提取该场景中最重要的恰好3个物体、产品或元素。\n")
+            .append("**重要**：必须返回恰好3个关键要素，可以少。\n")
             .append("例如：\n")
             .append("- 推销导航的场景：[\"导航屏幕\", \"中控台\", \"CarPlay界面\"]\n")
             .append("- 推销车衣的场景：[\"车身\", \"贴膜过程\", \"防护效果\"]\n")
@@ -571,12 +572,21 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                     System.err.println("[QWEN] ⚠️ No 'sceneAnalysis' field in response");
                 }
                 
-                // Extract key elements
+                // Extract key elements (limit to 3)
                 List<String> keyElements = new ArrayList<>();
                 if (root.has("keyElements") && root.get("keyElements").isArray()) {
                     for (JsonNode element : root.get("keyElements")) {
                         keyElements.add(element.asText());
                     }
+                    
+                    // Enforce limit of 3 elements
+                    if (keyElements.size() > 3) {
+                        System.out.println("[QWEN] ⚠️ AI returned " + keyElements.size() + " key elements, trimming to 3");
+                        keyElements = keyElements.subList(0, 3);
+                    } else if (keyElements.size() < 3) {
+                        System.out.println("[QWEN] ⚠️ AI returned only " + keyElements.size() + " key elements (expected 3)");
+                    }
+                    
                     System.out.println("[QWEN] ✅ Key elements extracted: " + keyElements);
                 } else {
                     System.err.println("[QWEN] ⚠️ No 'keyElements' field in response");
