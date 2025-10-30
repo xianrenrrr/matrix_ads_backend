@@ -128,9 +128,34 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
 
     @Override
     public Map<String, Object> cleanScriptLines(List<Map<String, Object>> asrSegments, List<Map<String, Object>> scenes) {
+        System.out.println("\n========================================");
+        System.out.println("[QWEN] cleanScriptLines CALLED");
+        System.out.println("========================================");
+        
         try {
             if (asrSegments == null || asrSegments.isEmpty() || scenes == null || scenes.isEmpty()) {
+                System.out.println("[QWEN] ❌ Early return - asrSegments or scenes is null/empty");
                 return null;
+            }
+
+            System.out.println("[QWEN] Input: " + asrSegments.size() + " ASR segments, " + scenes.size() + " scenes");
+            
+            // Log ASR segments summary
+            System.out.println("\n[QWEN] === ASR SEGMENTS ===");
+            for (int i = 0; i < Math.min(asrSegments.size(), 5); i++) {
+                Map<String, Object> seg = asrSegments.get(i);
+                System.out.println("[QWEN] ASR[" + i + "]: " + seg.get("startMs") + "-" + seg.get("endMs") + "ms: \"" + seg.get("text") + "\"");
+            }
+            if (asrSegments.size() > 5) {
+                System.out.println("[QWEN] ... and " + (asrSegments.size() - 5) + " more ASR segments");
+            }
+            
+            // Log scenes summary
+            System.out.println("\n[QWEN] === SCENES ===");
+            for (int i = 0; i < scenes.size(); i++) {
+                Map<String, Object> scene = scenes.get(i);
+                System.out.println("[QWEN] Scene[" + i + "]: sceneNumber=" + scene.get("sceneNumber") + 
+                    ", time=" + scene.get("startMs") + "-" + scene.get("endMs") + "ms");
             }
 
             // Build payload
@@ -147,13 +172,24 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
               .append("3. 移除特殊标记如 <|BGM|>、<|/BGM|> 等\n")
               .append("4. 合并同一场景内的文本片段，形成完整、合理的句子\n")
               .append("5. 如果某个场景没有语音内容，返回空字符串\n")
-              .append("6. 保持场景顺序，返回与输入场景数量相同的scriptLine数组\n\n")
+              .append("6. **重要**：必须返回与输入场景数量完全相同的scriptLine数组，每个场景对应一个scriptLine\n")
+              .append("7. **重要**：按照场景的sceneNumber顺序返回，场景1的文本在数组第0位，场景2的文本在数组第1位，以此类推\n\n")
               .append("输入（JSON）：\n")
               .append(payloadJson).append("\n\n")
               .append("输出格式（仅 JSON，不要任何解释）：\n")
               .append("{\n")
-              .append("  \"scriptLines\": [\"场景1的清理后文本\", \"场景2的清理后文本\", ...]\n")
-              .append("}\n");
+              .append("  \"scriptLines\": [\"场景1的清理后文本\", \"场景2的清理后文本\", \"场景3的清理后文本\", ...]\n")
+              .append("}\n\n")
+              .append("示例：如果有3个场景，必须返回3个scriptLine，即使某些场景没有语音内容也要返回空字符串。\n");
+
+            String promptText = sb.toString();
+            
+            System.out.println("\n[QWEN] === PROMPT TO QWEN ===");
+            System.out.println("[QWEN] Prompt length: " + promptText.length() + " chars");
+            System.out.println("[QWEN] Prompt preview (first 500 chars):");
+            System.out.println(promptText.substring(0, Math.min(500, promptText.length())));
+            System.out.println("[QWEN] ...");
+            System.out.println("[QWEN] Payload JSON length: " + payloadJson.length() + " chars");
 
             Map<String, Object> request = new HashMap<>();
             request.put("model", qwenModel);
@@ -164,7 +200,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             List<Map<String, Object>> content = new ArrayList<>();
             Map<String, Object> textContent = new HashMap<>();
             textContent.put("type", "text");
-            textContent.put("text", sb.toString());
+            textContent.put("text", promptText);
             content.add(textContent);
             message.put("content", content);
             messages.add(message);
@@ -176,6 +212,11 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
 
             String endpoint = normalizeChatEndpoint(qwenApiBase);
+            
+            System.out.println("\n[QWEN] === CALLING QWEN API ===");
+            System.out.println("[QWEN] Endpoint: " + endpoint);
+            System.out.println("[QWEN] Model: " + qwenModel);
+            
             ResponseEntity<String> response = restTemplate.exchange(
                 endpoint,
                 HttpMethod.POST,
@@ -183,17 +224,76 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                 String.class
             );
             String body = response.getBody();
-            System.out.println("[QWEN] cleanScriptLines status=" + response.getStatusCodeValue() + 
-                " bodyLen=" + (body == null ? 0 : body.length()));
             
-            if (!response.getStatusCode().is2xxSuccessful()) return null;
+            System.out.println("\n[QWEN] === RAW RESPONSE FROM QWEN ===");
+            System.out.println("[QWEN] Status: " + response.getStatusCodeValue());
+            System.out.println("[QWEN] Body length: " + (body == null ? 0 : body.length()) + " chars");
+            System.out.println("[QWEN] Full raw response:");
+            System.out.println(body);
+            System.out.println("[QWEN] === END RAW RESPONSE ===");
+            
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                System.err.println("[QWEN] ❌ Non-successful status code");
+                return null;
+            }
+            
             String contentStr = extractContent(body);
-            if (contentStr == null || contentStr.isBlank()) return null;
+            
+            System.out.println("\n[QWEN] === EXTRACTED CONTENT ===");
+            System.out.println("[QWEN] Extracted content length: " + (contentStr == null ? 0 : contentStr.length()) + " chars");
+            System.out.println("[QWEN] Extracted content:");
+            System.out.println(contentStr);
+            System.out.println("[QWEN] === END EXTRACTED CONTENT ===");
+            
+            if (contentStr == null || contentStr.isBlank()) {
+                System.err.println("[QWEN] ❌ Content is null or blank after extraction");
+                return null;
+            }
 
             // Parse JSON object
-            return objectMapper.readValue(contentStr, new TypeReference<Map<String,Object>>(){});
+            Map<String, Object> result = objectMapper.readValue(contentStr, new TypeReference<Map<String,Object>>(){});
+            
+            System.out.println("\n[QWEN] === PARSED RESULT ===");
+            System.out.println("[QWEN] Result keys: " + (result != null ? result.keySet() : "null"));
+            
+            // Validate that we got the correct number of scriptLines
+            if (result != null && result.containsKey("scriptLines")) {
+                @SuppressWarnings("unchecked")
+                List<String> scriptLines = (List<String>) result.get("scriptLines");
+                System.out.println("[QWEN] ✅ Found scriptLines array with " + scriptLines.size() + " elements");
+                System.out.println("[QWEN] Expected " + scenes.size() + " scenes");
+                
+                // Log each scriptLine with its scene number
+                System.out.println("\n[QWEN] === SCRIPT LINES DISTRIBUTION ===");
+                for (int i = 0; i < scriptLines.size(); i++) {
+                    String line = scriptLines.get(i);
+                    System.out.println("[QWEN] ScriptLine[" + i + "] -> Scene " + (i+1) + ":");
+                    System.out.println("[QWEN]   Length: " + line.length() + " chars");
+                    System.out.println("[QWEN]   Content: \"" + 
+                        (line.length() > 150 ? line.substring(0, 150) + "..." : line) + "\"");
+                }
+                
+                if (scriptLines.size() != scenes.size()) {
+                    System.err.println("\n[QWEN] ⚠️⚠️⚠️ WARNING ⚠️⚠️⚠️");
+                    System.err.println("[QWEN] AI returned " + scriptLines.size() + 
+                        " scriptLines but expected " + scenes.size() + " scenes!");
+                    System.err.println("[QWEN] This will cause incorrect scene assignments!");
+                }
+            } else {
+                System.err.println("[QWEN] ❌ Result does not contain 'scriptLines' key");
+            }
+            
+            System.out.println("\n========================================");
+            System.out.println("[QWEN] cleanScriptLines COMPLETED");
+            System.out.println("========================================\n");
+            
+            return result;
         } catch (Exception e) {
-            System.err.println("[QWEN] cleanScriptLines failed: " + e.getMessage());
+            System.err.println("\n[QWEN] ❌❌❌ EXCEPTION ❌❌❌");
+            System.err.println("[QWEN] cleanScriptLines failed: " + e.getClass().getName());
+            System.err.println("[QWEN] Error message: " + e.getMessage());
+            e.printStackTrace();
+            System.err.println("[QWEN] ========================================\n");
             return null;
         }
     }

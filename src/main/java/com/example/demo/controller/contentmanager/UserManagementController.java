@@ -40,6 +40,7 @@ public class UserManagementController {
         @RequestBody CreateEmployeeRequest request
     ) {
         log.info("Creating employee account: manager={}, username={}", managerId, request.getUsername());
+        log.info("Password received (length): {}", request.getPassword() != null ? request.getPassword().length() : 0);
         
         // Check permission
         if (!permissionService.canCreateEmployees(managerId)) {
@@ -82,8 +83,16 @@ public class UserManagementController {
             employee.setEmail(request.getEmail());
         }
         
+        log.info("Creating user with password (before encoding): {}", request.getPassword());
         String employeeId = userDao.createUser(employee);
         employee.setId(employeeId);
+        
+        // Verify the user was created correctly
+        User verifyUser = userDao.findById(employeeId);
+        if (verifyUser != null) {
+            log.info("Employee created - stored password starts with: {}", 
+                verifyUser.getPassword() != null ? verifyUser.getPassword().substring(0, Math.min(10, verifyUser.getPassword().length())) : "null");
+        }
         
         log.info("Employee account created: id={}, username={}, createdBy={}", 
             employeeId, employee.getUsername(), managerId);
@@ -105,11 +114,27 @@ public class UserManagementController {
     public ResponseEntity<?> listEmployees(@RequestParam String managerId) {
         log.info("Listing employees for manager: {}", managerId);
         
+        // Get manager info for debugging
+        User manager = userDao.findById(managerId);
+        if (manager == null) {
+            log.error("Manager not found: {}", managerId);
+            return ResponseEntity.status(404).body(Map.of(
+                "error", "Manager not found",
+                "message", "管理者不存在"
+            ));
+        }
+        
+        log.info("Manager found: id={}, username={}, role={}", 
+            managerId, manager.getUsername(), manager.getRole());
+        
         // Check permission
         if (!permissionService.canCreateEmployees(managerId)) {
+            log.warn("Manager {} does not have permission to list employees (role: {})", 
+                managerId, manager.getRole());
             return ResponseEntity.status(403).body(Map.of(
                 "error", "Permission denied",
-                "message", "没有权限"
+                "message", "没有权限",
+                "role", manager.getRole()
             ));
         }
         
@@ -117,6 +142,12 @@ public class UserManagementController {
         List<User> employees = userDao.findByCreatedBy(managerId);
         
         log.info("Found {} employees for manager {}", employees.size(), managerId);
+        
+        // Log employee details for debugging
+        for (User emp : employees) {
+            log.info("  Employee: id={}, username={}, role={}, createdBy={}", 
+                emp.getId(), emp.getUsername(), emp.getRole(), emp.getCreatedBy());
+        }
         
         return ResponseEntity.ok(Map.of(
             "success", true,
@@ -211,11 +242,22 @@ public class UserManagementController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         log.info("Login attempt for username: {}", request.getUsername());
+        log.info("Password provided (length): {}", request.getPassword() != null ? request.getPassword().length() : 0);
+        
+        // Check if user exists first
+        User existingUser = userDao.findByUsername(request.getUsername());
+        if (existingUser != null) {
+            log.info("User found: id={}, role={}", existingUser.getId(), existingUser.getRole());
+            log.info("Stored password starts with: {}", 
+                existingUser.getPassword() != null ? existingUser.getPassword().substring(0, Math.min(10, existingUser.getPassword().length())) : "null");
+        } else {
+            log.warn("User not found: {}", request.getUsername());
+        }
         
         User user = userDao.authenticateUser(request.getUsername(), request.getPassword());
         
         if (user == null) {
-            log.warn("Login failed for username: {}", request.getUsername());
+            log.warn("Login failed for username: {} - authentication returned null", request.getUsername());
             return ResponseEntity.status(401).body(Map.of(
                 "success", false,
                 "error", "用户名或密码错误"

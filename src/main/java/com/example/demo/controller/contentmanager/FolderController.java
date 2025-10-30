@@ -17,6 +17,8 @@ import java.util.*;
 @CrossOrigin(origins = {"http://localhost:4040", "https://matrix-ads-frontend.onrender.com"})
 public class FolderController {
     
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(FolderController.class);
+    
     @Autowired
     private TemplateFolderDao folderDao;
     
@@ -25,6 +27,9 @@ public class FolderController {
     
     @Autowired
     private I18nService i18nService;
+    
+    @Autowired
+    private com.example.demo.dao.UserDao userDao;
     
     // Create folder
     @PostMapping
@@ -53,7 +58,43 @@ public class FolderController {
             @RequestParam String userId,
             @RequestHeader(value = "Accept-Language", required = false) String lang) throws Exception {
         
-        List<TemplateFolder> folders = folderDao.getFoldersByUser(userId);
+        // Determine the actual user ID to use for fetching folders
+        // If user is an employee, show their manager's folders + their own folders
+        String actualUserId = userId;
+        com.example.demo.model.User user = userDao.findById(userId);
+        
+        List<TemplateFolder> folders = new ArrayList<>();
+        
+        if (user != null && "employee".equals(user.getRole()) && user.getCreatedBy() != null) {
+            // Employee: get both manager's folders and employee's own folders
+            String managerId = user.getCreatedBy();
+            
+            // Get manager's folders
+            List<TemplateFolder> managerFolders = folderDao.getFoldersByUser(managerId);
+            folders.addAll(managerFolders);
+            
+            // Get employee's own folders
+            List<TemplateFolder> employeeFolders = folderDao.getFoldersByUser(userId);
+            folders.addAll(employeeFolders);
+            
+            log.info("Employee {} viewing folders: {} manager folders + {} own folders", 
+                userId, managerFolders.size(), employeeFolders.size());
+        } else {
+            // Manager or other role: get their own folders
+            folders = folderDao.getFoldersByUser(userId);
+            
+            // Also get folders created by their employees
+            if (user != null && "content-manager".equals(user.getRole())) {
+                List<com.example.demo.model.User> employees = userDao.findByCreatedBy(userId);
+                for (com.example.demo.model.User employee : employees) {
+                    List<TemplateFolder> employeeFolders = folderDao.getFoldersByUser(employee.getId());
+                    folders.addAll(employeeFolders);
+                }
+                log.info("Manager {} viewing folders: {} own folders + folders from {} employees", 
+                    userId, folderDao.getFoldersByUser(userId).size(), employees.size());
+            }
+        }
+        
         return ResponseEntity.ok(ApiResponse.ok("Folders retrieved", folders));
     }
     
