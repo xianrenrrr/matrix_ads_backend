@@ -307,11 +307,14 @@ public class ContentManager {
                 if (startMs != null && endMs != null) {
                     long durationMs = endMs - startMs;
                     if (durationMs < 2000) {
-                        throw new IllegalArgumentException(
-                            "Scene " + scene.getSceneNumber() + " (" + scene.getSceneTitle() + 
-                            ") is too short (" + durationMs + "ms). Minimum duration is 2 seconds (2000ms)."
-                        );
+                        String errorMsg = "Scene " + scene.getSceneNumber() + " (" + scene.getSceneTitle() + 
+                            ") is too short (" + durationMs + "ms). Minimum duration is 2 seconds (2000ms).";
+                        log.error("❌ Validation failed: {}", errorMsg);
+                        throw new IllegalArgumentException(errorMsg);
                     }
+                } else {
+                    log.warn("⚠️ Scene {} missing startTimeMs or endTimeMs (startMs={}, endMs={})", 
+                        scene.getSceneNumber(), startMs, endMs);
                 }
             }
             }
