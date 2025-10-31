@@ -123,26 +123,22 @@ public class OCRSubtitleExtractor {
             
             RecognizeVideoCharacterResponseBody body = response.getBody();
             
-            // Check for errors
-            if (body.getCode() != null && !"200".equals(body.getCode())) {
-                throw new RuntimeException("OCR API error: " + body.getCode() + " - " + body.getMessage());
-            }
-            
-            // Get result data
-            String resultData = body.getData();
-            if (resultData == null || resultData.isEmpty()) {
+            // The response body contains a Data object, not a string
+            // We need to serialize it to JSON
+            if (body.getData() == null) {
                 log.warn("No OCR data returned");
                 return "{}";
             }
+            
+            // Convert the Data object to JSON string
+            String resultData = mapper.writeValueAsString(body.getData());
             
             log.info("OCR API call successful, result length: {} chars", resultData.length());
             return resultData;
             
         } finally {
-            // Close client
-            if (client != null) {
-                client.close();
-            }
+            // Client doesn't have close() method in this version
+            // No cleanup needed
         }
     }
     
