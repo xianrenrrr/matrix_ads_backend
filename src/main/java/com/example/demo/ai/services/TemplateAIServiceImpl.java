@@ -48,6 +48,9 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     @Autowired(required = false)
     private com.example.demo.ai.subtitle.ASRSubtitleExtractor asrSubtitleExtractor;
     
+    @Autowired(required = false)
+    private com.example.demo.ai.subtitle.OCRSubtitleExtractor ocrSubtitleExtractor;
+    
     @Autowired
     private com.example.demo.service.AlibabaOssStorageService alibabaOssStorageService;
     
@@ -117,23 +120,54 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 return createFallbackTemplate(video, language);
             }
 
-            // Step 2: Extract speech transcript using ASR
-            log.info("Step 2: Extracting speech transcript using ASR");
-            List<com.example.demo.ai.subtitle.SubtitleSegment> allAsrSegments = new ArrayList<>();
-            if (asrSubtitleExtractor != null) {
+            // Step 2: Extract subtitles - OCR first, ASR fallback
+            log.info("Step 2: Extracting subtitles (OCR first, ASR fallback)");
+            List<com.example.demo.ai.subtitle.SubtitleSegment> allSubtitleSegments = new ArrayList<>();
+            String subtitleSource = "none";
+            
+            // Try OCR first (for burned-in subtitles)
+            if (ocrSubtitleExtractor != null) {
+                try {
+                    // Generate signed URL with 2 hour expiration for OCR processing
+                    String signedUrl = alibabaOssStorageService.generateSignedUrl(videoUrl, 2, java.util.concurrent.TimeUnit.HOURS);
+                    log.info("Attempting OCR subtitle extraction...");
+                    
+                    allSubtitleSegments = ocrSubtitleExtractor.extract(signedUrl);
+                    
+                    if (!allSubtitleSegments.isEmpty()) {
+                        log.info("✅ OCR extracted {} subtitle segments", allSubtitleSegments.size());
+                        subtitleSource = "ocr";
+                    } else {
+                        log.info("OCR returned no subtitles, will try ASR fallback");
+                    }
+                } catch (Exception e) {
+                    log.warn("OCR extraction failed, will try ASR fallback: {}", e.getMessage());
+                }
+            } else {
+                log.info("OCR service not available, will try ASR");
+            }
+            
+            // Fallback to ASR if OCR failed or returned nothing
+            if (allSubtitleSegments.isEmpty() && asrSubtitleExtractor != null) {
                 try {
                     // Generate signed URL with 1 hour expiration for ASR processing
                     String signedUrl = alibabaOssStorageService.generateSignedUrl(videoUrl, 60, java.util.concurrent.TimeUnit.MINUTES);
-                    log.info("Generated signed URL for ASR (expires in 1 hour)");
+                    log.info("Attempting ASR subtitle extraction (fallback)...");
                     
-                    allAsrSegments = asrSubtitleExtractor.extract(signedUrl, language);
-                    log.info("ASR extracted {} transcript segments", allAsrSegments.size());
+                    allSubtitleSegments = asrSubtitleExtractor.extract(signedUrl, language);
+                    
+                    if (!allSubtitleSegments.isEmpty()) {
+                        log.info("✅ ASR extracted {} subtitle segments", allSubtitleSegments.size());
+                        subtitleSource = "asr";
+                    } else {
+                        log.warn("ASR also returned no subtitles");
+                    }
                 } catch (Exception e) {
-                    log.warn("ASR extraction failed, continuing without transcript: {}", e.getMessage());
+                    log.warn("ASR extraction failed: {}", e.getMessage());
                 }
-            } else {
-                log.warn("ASR service not available, scenes will not have script lines");
             }
+            
+            log.info("Subtitle extraction complete: source={}, segments={}", subtitleSource, allSubtitleSegments.size());
 
             // Step 3: Create basic scene objects first
             log.info("Step 3: Creating {} scene objects", sceneSegments.size());
@@ -149,49 +183,84 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 scenes.add(scene);
             }
             
-            // Step 4: Clean scriptLines and set to scenes
-            log.info("Step 4: Cleaning scriptLines with {} ASR segments", allAsrSegments.size());
-            if (!allAsrSegments.isEmpty()) {
+            // Step 4: Assign scriptLines to scenes
+            log.info("Step 4: Assigning scriptLines to scenes (source: {})", subtitleSource);
+            if (!allSubtitleSegments.isEmpty()) {
                 try {
-                    // Build scene data for scriptLine cleaning
-                    List<Map<String, Object>> sceneDataForCleaning = new ArrayList<>();
+                    // Build scene data
+                    List<Map<String, Object>> sceneDataForProcessing = new ArrayList<>();
                     for (Scene scene : scenes) {
                         Map<String, Object> sceneMap = new HashMap<>();
                         sceneMap.put("sceneNumber", scene.getSceneNumber());
                         sceneMap.put("startMs", scene.getStartTimeMs());
                         sceneMap.put("endMs", scene.getEndTimeMs());
-                        // Add video description for context
+                        // Add video description for AI cleaning context
                         if (userDescription != null && !userDescription.isEmpty()) {
                             sceneMap.put("videoDescription", userDescription);
                         }
-                        sceneDataForCleaning.add(sceneMap);
+                        sceneDataForProcessing.add(sceneMap);
                     }
                     
-                    // Convert ASR to Maps
-                    List<Map<String, Object>> asrMaps = new ArrayList<>();
-                    for (com.example.demo.ai.subtitle.SubtitleSegment seg : allAsrSegments) {
-                        Map<String, Object> asrObj = new HashMap<>();
-                        asrObj.put("startMs", seg.getStartTimeMs());
-                        asrObj.put("endMs", seg.getEndTimeMs());
-                        asrObj.put("text", seg.getText());
-                        asrMaps.add(asrObj);
-                    }
-                    
-                    // Call cleanScriptLines
-                    Map<String, Object> scriptResult = objectLabelService.cleanScriptLines(asrMaps, sceneDataForCleaning);
-                    if (scriptResult != null && scriptResult.containsKey("scriptLines")) {
-                        @SuppressWarnings("unchecked")
-                        List<String> lines = (List<String>) scriptResult.get("scriptLines");
+                    if ("ocr".equals(subtitleSource) && ocrSubtitleExtractor != null) {
+                        // OCR: Direct assignment (OCR text is clean)
+                        log.info("Using direct assignment for OCR subtitles (no AI cleaning needed)");
+                        Map<Integer, String> scriptLinesByScene = ocrSubtitleExtractor.groupByScenes(
+                            allSubtitleSegments, 
+                            sceneDataForProcessing
+                        );
                         
-                        // Set scriptLines to scenes immediately
-                        for (int i = 0; i < Math.min(scenes.size(), lines.size()); i++) {
-                            scenes.get(i).setScriptLine(lines.get(i));
-                            log.info("✅ Scene {} scriptLine: \"{}\"", i + 1, lines.get(i));
+                        // Set scriptLines to scenes
+                        for (Map.Entry<Integer, String> entry : scriptLinesByScene.entrySet()) {
+                            int sceneNumber = entry.getKey();
+                            String scriptLine = entry.getValue();
+                            
+                            if (sceneNumber >= 1 && sceneNumber <= scenes.size()) {
+                                scenes.get(sceneNumber - 1).setScriptLine(scriptLine);
+                                if (!scriptLine.isEmpty()) {
+                                    log.info("✅ Scene {} scriptLine: \"{}\"", sceneNumber, 
+                                        scriptLine.length() > 60 ? scriptLine.substring(0, 60) + "..." : scriptLine);
+                                }
+                            }
+                        }
+                        
+                    } else if ("asr".equals(subtitleSource)) {
+                        // ASR: Use AI cleaning (ASR has noise/errors)
+                        log.info("Using AI cleaning for ASR subtitles (removes noise/errors)");
+                        
+                        // Convert subtitles to Maps for AI cleaning
+                        List<Map<String, Object>> subtitleMaps = new ArrayList<>();
+                        for (com.example.demo.ai.subtitle.SubtitleSegment seg : allSubtitleSegments) {
+                            Map<String, Object> segMap = new HashMap<>();
+                            segMap.put("startMs", seg.getStartTimeMs());
+                            segMap.put("endMs", seg.getEndTimeMs());
+                            segMap.put("text", seg.getText());
+                            subtitleMaps.add(segMap);
+                        }
+                        
+                        // Call AI cleaning
+                        Map<String, Object> scriptResult = objectLabelService.cleanScriptLines(
+                            subtitleMaps, 
+                            sceneDataForProcessing
+                        );
+                        
+                        if (scriptResult != null && scriptResult.containsKey("scriptLines")) {
+                            @SuppressWarnings("unchecked")
+                            List<String> lines = (List<String>) scriptResult.get("scriptLines");
+                            
+                            // Set cleaned scriptLines to scenes
+                            for (int i = 0; i < Math.min(scenes.size(), lines.size()); i++) {
+                                scenes.get(i).setScriptLine(lines.get(i));
+                                log.info("✅ Scene {} scriptLine (cleaned): \"{}\"", i + 1, lines.get(i));
+                            }
                         }
                     }
+                    
+                    log.info("ScriptLine assignment complete (source: {})", subtitleSource);
                 } catch (Exception e) {
-                    log.error("❌ ScriptLine cleaning failed: {}", e.getMessage(), e);
+                    log.error("❌ ScriptLine assignment failed: {}", e.getMessage(), e);
                 }
+            } else {
+                log.warn("No subtitles to assign");
             }
 
             // Step 5: Process each scene with VL analysis (scriptLine already set)
