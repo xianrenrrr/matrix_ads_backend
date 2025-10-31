@@ -19,7 +19,7 @@ public class HealthController {
         Map<String, Object> response = new HashMap<>();
         response.put("status", "UP");
         response.put("timestamp", System.currentTimeMillis());
-        response.put("service", "matrix-ads-backend");
+        response.put("service", "xpectra-ai-backend");
         return ResponseEntity.ok(response);
     }
 
