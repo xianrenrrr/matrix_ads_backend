@@ -115,27 +115,55 @@ public class OCRSubtitleExtractor {
             RuntimeOptions runtime = new RuntimeOptions();
             
             // Call API
+            log.info("Sending request to OCR API with URL: {}", videoUrl.substring(0, Math.min(100, videoUrl.length())));
             RecognizeVideoCharacterResponse response = client.recognizeVideoCharacterWithOptions(request, runtime);
             
-            if (response == null || response.getBody() == null) {
-                throw new RuntimeException("Empty response from OCR API");
+            log.info("Received response from OCR API");
+            
+            if (response == null) {
+                log.error("Response is null!");
+                throw new RuntimeException("Null response from OCR API");
+            }
+            
+            if (response.getBody() == null) {
+                log.error("Response body is null!");
+                throw new RuntimeException("Null response body from OCR API");
             }
             
             RecognizeVideoCharacterResponseBody body = response.getBody();
             
+            // Log full response for debugging
+            log.info("=== OCR API RESPONSE ===");
+            log.info("RequestId: {}", body.getRequestId());
+            log.info("Message: {}", body.getMessage());
+            
+            try {
+                String fullBodyJson = mapper.writeValueAsString(body);
+                log.info("Full response body JSON: {}", fullBodyJson);
+            } catch (Exception e) {
+                log.warn("Could not serialize response body: {}", e.getMessage());
+            }
+            
             // The response body contains a Data object, not a string
             // We need to serialize it to JSON
             if (body.getData() == null) {
-                log.warn("No OCR data returned");
+                log.warn("body.getData() is NULL - no OCR data in response");
                 return "{}";
             }
+            
+            log.info("body.getData() is NOT null, converting to JSON...");
             
             // Convert the Data object to JSON string
             String resultData = mapper.writeValueAsString(body.getData());
             
             log.info("OCR API call successful, result length: {} chars", resultData.length());
+            log.info("OCR result preview: {}", 
+                resultData.length() > 300 ? resultData.substring(0, 300) + "..." : resultData);
             return resultData;
             
+        } catch (Exception e) {
+            log.error("Exception in callVideoOCR: {}", e.getMessage(), e);
+            throw e;
         } finally {
             // Client doesn't have close() method in this version
             // No cleanup needed
