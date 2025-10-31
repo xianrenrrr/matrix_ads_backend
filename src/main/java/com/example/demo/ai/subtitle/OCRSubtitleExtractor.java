@@ -144,30 +144,78 @@ public class OCRSubtitleExtractor {
                 log.warn("Could not serialize response body: {}", e.getMessage());
             }
             
-            // The response body contains a Data object, not a string
-            // We need to serialize it to JSON
-            if (body.getData() == null) {
-                log.warn("body.getData() is NULL - no OCR data in response");
-                return "{}";
-            }
+            // OCR API is async - RequestId is the job ID
+            String jobId = body.getRequestId();
+            log.info("OCR job submitted - JobId: {}", jobId);
             
-            log.info("body.getData() is NOT null, converting to JSON...");
+            // Poll for results
+            String resultData = pollForOCRResults(client, jobId);
             
-            // Convert the Data object to JSON string
-            String resultData = mapper.writeValueAsString(body.getData());
-            
-            log.info("OCR API call successful, result length: {} chars", resultData.length());
-            log.info("OCR result preview: {}", 
-                resultData.length() > 300 ? resultData.substring(0, 300) + "..." : resultData);
+            log.info("OCR processing completed, result length: {} chars", resultData.length());
             return resultData;
             
         } catch (Exception e) {
             log.error("Exception in callVideoOCR: {}", e.getMessage(), e);
             throw e;
-        } finally {
-            // Client doesn't have close() method in this version
-            // No cleanup needed
         }
+    }
+    
+    /**
+     * Poll for OCR async job results
+     */
+    private String pollForOCRResults(Client client, String jobId) throws Exception {
+        int maxAttempts = 60; // Max 5 minutes
+        int pollInterval = 5000; // 5 seconds
+        
+        log.info("Polling for OCR results (jobId: {})", jobId);
+        
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                // Query job status
+                GetAsyncJobResultRequest request = new GetAsyncJobResultRequest()
+                    .setJobId(jobId);
+                
+                RuntimeOptions runtime = new RuntimeOptions();
+                GetAsyncJobResultResponse response = client.getAsyncJobResultWithOptions(request, runtime);
+                
+                if (response == null || response.getBody() == null) {
+                    log.warn("Empty response (attempt {}/{})", attempt, maxAttempts);
+                    Thread.sleep(pollInterval);
+                    continue;
+                }
+                
+                GetAsyncJobResultResponseBody body = response.getBody();
+                
+                if (body.getData() == null) {
+                    log.info("Job processing (attempt {}/{})", attempt, maxAttempts);
+                    Thread.sleep(pollInterval);
+                    continue;
+                }
+                
+                GetAsyncJobResultResponseBody.GetAsyncJobResultResponseBodyData data = body.getData();
+                String status = data.getStatus();
+                
+                if ("PROCESS_FAILED".equals(status)) {
+                    log.error("OCR failed: {}", data.getErrorMessage());
+                    return "{}";
+                }
+                
+                if ("PROCESS_SUCCESS".equals(status)) {
+                    String result = data.getResult();
+                    log.info("OCR completed successfully");
+                    return result != null ? result : "{}";
+                }
+                
+                Thread.sleep(pollInterval);
+                
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Polling interrupted", e);
+            }
+        }
+        
+        log.error("OCR timed out after {} attempts", maxAttempts);
+        return "{}";
     }
     
     /**
