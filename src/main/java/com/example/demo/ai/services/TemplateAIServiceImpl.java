@@ -314,20 +314,51 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     }
     
     /**
-     * Assign scriptLines to scenes by combining transcript + OCR
+     * Assign scriptLines to scenes by intelligently choosing between transcript and OCR
      * 
-     * Azure provides clean, accurate text - no AI cleaning needed!
-     * Simply group by scene timing using midpoint assignment.
+     * Strategy:
+     * 1. If transcript confidence < 0.5 (50%), prefer OCR only
+     * 2. If transcript confidence >= 0.5, use transcript + OCR combined
+     * 3. Always log which source was used for debugging
+     * 
+     * TODO (OPTIONAL - FUTURE): Add Qwen subtitle cleaning
+     * - If OCR has errors or needs punctuation, send to Qwen for correction
+     * - Prompt: "Clean and correct these subtitles, maintain timing"
+     * - Only implement if current quality is insufficient
+     * 
+     * Current status: Using raw Azure text (transcript or OCR)
+     * - Works well for most videos
+     * - OCR-only mode solves low-confidence transcript issues
      */
     private void assignScriptLines(
         List<Scene> scenes,
         List<SubtitleSegment> transcript,
         List<SubtitleSegment> ocr
     ) {
-        // Combine transcript and OCR
+        // Calculate average transcript confidence
+        double avgConfidence = transcript.stream()
+            .mapToDouble(SubtitleSegment::getConfidence)
+            .average()
+            .orElse(0.0);
+        
+        boolean useOcrOnly = avgConfidence < 0.5;
+        
+        log.info("📝 Subtitle Strategy: Transcript confidence = {}, Using: {}", 
+            String.format("%.1f%%", avgConfidence * 100),
+            useOcrOnly ? "OCR ONLY (low transcript confidence)" : "TRANSCRIPT + OCR");
+        
+        // Choose subtitle source
         List<SubtitleSegment> allText = new ArrayList<>();
-        allText.addAll(transcript);
-        allText.addAll(ocr);
+        if (useOcrOnly) {
+            // Low confidence transcript - use OCR only
+            allText.addAll(ocr);
+            log.info("   ⚠️  Transcript confidence too low, using OCR only for better accuracy");
+        } else {
+            // Good transcript - combine both
+            allText.addAll(transcript);
+            allText.addAll(ocr);
+            log.info("   ✅ Good transcript confidence, combining transcript + OCR");
+        }
         
         // Sort by start time
         allText.sort(Comparator.comparingLong(SubtitleSegment::getStartTimeMs));

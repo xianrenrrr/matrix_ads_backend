@@ -74,6 +74,21 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
         }
     }
 
+    // TODO: Add subtitle burning to compiled video
+    // 
+    // Steps to implement:
+    // 1. Fetch template to get all scenes with subtitleSegments
+    // 2. Generate SRT file from subtitleSegments (use SubtitleSegment.toSrt())
+    // 3. Add FFmpeg subtitle filter: -vf "subtitles=subtitles.srt:force_style='FontSize=24,PrimaryColour=&HFFFFFF&'"
+    // 4. Consider: Make subtitle burning optional (manager toggle in UI?)
+    //
+    // Example FFmpeg command with subtitles:
+    // ffmpeg -f concat -i list.txt -vf "subtitles=subtitles.srt" -c:a copy output.mp4
+    //
+    // Benefits:
+    // - Final video has burned-in subtitles for social media
+    // - Viewers can read along with the video
+    // - Better accessibility
     private String ffmpegConcatAndUpload(List<String> sourceUrls, String destObject) throws Exception {
         // Resolve each source URL via GCS client (authenticated) to avoid 403s
         List<java.io.File> tempFiles = new ArrayList<>();
