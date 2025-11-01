@@ -38,7 +38,7 @@ public class VideoController {
     private ManualTemplate generateAITemplate(Video video, String language, String userDescription) {
         // Use AI template generator to create template with user description
         System.out.println("Generating AI template for video ID: " + video.getId() + " in language: " + language + 
-                          " with user description: " + (userDescription != null ? "provided" : "none");
+                          " with user description: " + (userDescription != null ? "provided" : "none"));
         return aiTemplateGenerator.generateTemplate(video, language, userDescription);
     }
     
