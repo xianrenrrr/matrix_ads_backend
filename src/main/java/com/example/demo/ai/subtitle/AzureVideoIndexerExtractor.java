@@ -358,10 +358,14 @@ public class AzureVideoIndexerExtractor {
             API_BASE, location, accountId, accessToken, videoName, 
             java.net.URLEncoder.encode(videoUrl, "UTF-8"));
         
+        // Use empty JSON body with proper Content-Length
+        String emptyBody = "{}";
+        
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.noBody())
+            .header("Content-Length", String.valueOf(emptyBody.length()))
+            .POST(HttpRequest.BodyPublishers.ofString(emptyBody))
             .build();
         
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
