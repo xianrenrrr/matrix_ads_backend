@@ -41,13 +41,13 @@ public class AzureVideoIndexerExtractor {
         .build();
     
     @Value("${AZURE_VIDEO_INDEXER_ACCOUNT_ID:}")
-    private String accountId;
+    private String accountId;  // GUID from Azure Video Indexer resource Properties
     
     @Value("${AZURE_VIDEO_INDEXER_SUBSCRIPTION_KEY:}")
-    private String subscriptionKey;
+    private String subscriptionKey;  // Primary/Secondary key from VI Developer Portal
     
-    @Value("${AZURE_VIDEO_INDEXER_LOCATION:trial}")
-    private String location; // e.g., "trial", "eastus", "westus2"
+    @Value("${AZURE_VIDEO_INDEXER_LOCATION:eastasia}")
+    private String location;  // Region code: eastasia, southeastasia, eastus, westus2, etc.
     
     private static final String API_BASE = "https://api.videoindexer.ai";
     
@@ -178,14 +178,18 @@ public class AzureVideoIndexerExtractor {
     
     /**
      * Get access token for Video Indexer API
+     * 
+     * Uses classic gateway authentication with Primary/Secondary key
+     * NOTE: "Auth" must be CAPITALIZED (not "auth")
      */
     private String getAccessToken() throws Exception {
-        String url = String.format("%s/auth/%s/Accounts/%s/AccessToken?allowEdit=true",
+        // IMPORTANT: Auth is CAPITALIZED for classic gateway
+        String url = String.format("%s/Auth/%s/Accounts/%s/AccessToken?allowEdit=true",
             API_BASE, location, accountId);
         
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(url))
-            .header("Ocp-Apim-Subscription-Key", subscriptionKey)
+            .header("Ocp-Apim-Subscription-Key", subscriptionKey)  // Primary key from VI Developer Portal
             .GET()
             .build();
         
