@@ -275,13 +275,27 @@ public class AzureVideoIndexerExtractor {
             throw new RuntimeException("ARM generateAccessToken failed: " + response.body());
         }
         
-        JsonNode json = mapper.readTree(response.body());
+        String responseBody = response.body();
+        log.info("ARM generateAccessToken response: {}", responseBody);
+        
+        JsonNode json = mapper.readTree(responseBody);
+        
+        // Check if accessToken exists
+        if (!json.has("accessToken")) {
+            throw new RuntimeException("ARM response missing 'accessToken' field. Response: " + responseBody);
+        }
+        
         String viAccessToken = json.get("accessToken").asText();
         
         // Handle both schemas: 2024-01-01 uses "expiresOn", newer versions use "expiry"
-        String expiryIso = json.has("expiry") 
-            ? json.get("expiry").asText() 
-            : json.get("expiresOn").asText();
+        String expiryIso;
+        if (json.has("expiry")) {
+            expiryIso = json.get("expiry").asText();
+        } else if (json.has("expiresOn")) {
+            expiryIso = json.get("expiresOn").asText();
+        } else {
+            throw new RuntimeException("ARM response missing expiry field. Response: " + responseBody);
+        }
         
         long expiryMs = java.time.Instant.parse(expiryIso).toEpochMilli();
         
