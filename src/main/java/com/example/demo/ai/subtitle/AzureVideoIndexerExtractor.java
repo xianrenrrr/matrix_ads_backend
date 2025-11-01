@@ -1,5 +1,9 @@
 package com.example.demo.ai.subtitle;
 
+import com.azure.core.credential.AccessToken;
+import com.azure.core.credential.TokenCredential;
+import com.azure.core.credential.TokenRequestContext;
+import com.azure.identity.ClientSecretCredentialBuilder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -13,6 +17,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Extracts subtitles using Azure Video Indexer
@@ -40,16 +45,38 @@ public class AzureVideoIndexerExtractor {
         .connectTimeout(Duration.ofSeconds(30))
         .build();
     
+    // ARM authentication (new method - recommended)
+    @Value("${AZURE_TENANT_ID:}")
+    private String tenantId;
+    
+    @Value("${AZURE_CLIENT_ID:}")
+    private String clientId;
+    
+    @Value("${AZURE_CLIENT_SECRET:}")
+    private String clientSecret;
+    
+    @Value("${AZURE_SUBSCRIPTION_ID:}")
+    private String subscriptionId;
+    
+    @Value("${AZURE_RESOURCE_GROUP:}")
+    private String resourceGroup;
+    
+    @Value("${AZURE_VIDEO_INDEXER_ACCOUNT_NAME:}")
+    private String accountName;
+    
+    // Video Indexer operations API
     @Value("${AZURE_VIDEO_INDEXER_ACCOUNT_ID:}")
     private String accountId;  // GUID from Azure Video Indexer resource Properties
-    
-    @Value("${AZURE_VIDEO_INDEXER_SUBSCRIPTION_KEY:}")
-    private String subscriptionKey;  // Primary/Secondary key from VI Developer Portal
     
     @Value("${AZURE_VIDEO_INDEXER_LOCATION:eastasia}")
     private String location;  // Region code: eastasia, southeastasia, eastus, westus2, etc.
     
     private static final String API_BASE = "https://api.videoindexer.ai";
+    private static final String ARM_API_VERSION = "2025-04-01";
+    
+    // Token cache for ARM authentication
+    private final AtomicReference<String> cachedViToken = new AtomicReference<>();
+    private volatile long viTokenExpiryEpochMs = 0L;
     
     /**
      * Extract subtitles from video using Azure Video Indexer
@@ -61,18 +88,26 @@ public class AzureVideoIndexerExtractor {
         log.info("Starting Azure Video Indexer subtitle extraction for video: {}", videoUrl);
         
         try {
-            // Check credentials
-            if (subscriptionKey == null || subscriptionKey.isEmpty()) {
-                throw new IllegalStateException("Azure Video Indexer subscription key not configured");
+            // Check ARM credentials
+            if (isBlank(tenantId) || isBlank(clientId) || isBlank(clientSecret)) {
+                throw new IllegalStateException("Missing AAD credentials (AZURE_TENANT_ID/CLIENT_ID/CLIENT_SECRET)");
+            }
+            if (isBlank(subscriptionId) || isBlank(resourceGroup) || isBlank(accountName)) {
+                throw new IllegalStateException("Missing VI ARM resource info (SUBSCRIPTION_ID/RESOURCE_GROUP/ACCOUNT_NAME)");
+            }
+            if (isBlank(accountId) || isBlank(location)) {
+                throw new IllegalStateException("Missing VI ops info (ACCOUNT_ID/LOCATION)");
             }
             
-            if (accountId == null || accountId.isEmpty()) {
-                throw new IllegalStateException("Azure Video Indexer account ID not configured");
+            // Validate location format
+            location = location.trim().toLowerCase(java.util.Locale.ROOT);
+            if (!location.matches("^[a-z0-9]+$")) {
+                throw new IllegalStateException("Invalid VI location code: " + location);
             }
             
-            // Step 1: Get access token
-            String accessToken = getAccessToken();
-            log.info("✅ Got access token");
+            // Step 1: Get ARM access token
+            String accessToken = getViAccessTokenArm();
+            log.info("✅ Got access token via ARM");
             
             // Step 2: Upload video and start indexing
             String videoId = uploadVideo(videoUrl, accessToken);
@@ -107,18 +142,26 @@ public class AzureVideoIndexerExtractor {
         AzureVideoIndexerResult result = new AzureVideoIndexerResult();
         
         try {
-            // Check credentials
-            if (subscriptionKey == null || subscriptionKey.isEmpty()) {
-                throw new IllegalStateException("Azure Video Indexer subscription key not configured");
+            // Check ARM credentials
+            if (isBlank(tenantId) || isBlank(clientId) || isBlank(clientSecret)) {
+                throw new IllegalStateException("Missing AAD credentials (AZURE_TENANT_ID/CLIENT_ID/CLIENT_SECRET)");
+            }
+            if (isBlank(subscriptionId) || isBlank(resourceGroup) || isBlank(accountName)) {
+                throw new IllegalStateException("Missing VI ARM resource info (SUBSCRIPTION_ID/RESOURCE_GROUP/ACCOUNT_NAME)");
+            }
+            if (isBlank(accountId) || isBlank(location)) {
+                throw new IllegalStateException("Missing VI ops info (ACCOUNT_ID/LOCATION)");
             }
             
-            if (accountId == null || accountId.isEmpty()) {
-                throw new IllegalStateException("Azure Video Indexer account ID not configured");
+            // Validate location format
+            location = location.trim().toLowerCase(java.util.Locale.ROOT);
+            if (!location.matches("^[a-z0-9]+$")) {
+                throw new IllegalStateException("Invalid VI location code: " + location);
             }
             
-            // Step 1: Get access token
-            String accessToken = getAccessToken();
-            log.info("✅ Got access token");
+            // Step 1: Get ARM access token
+            String accessToken = getViAccessTokenArm();
+            log.info("✅ Got access token via ARM");
             
             // Step 2: Upload video and start indexing
             String videoId = uploadVideo(videoUrl, accessToken);
@@ -177,30 +220,80 @@ public class AzureVideoIndexerExtractor {
     }
     
     /**
-     * Get access token for Video Indexer API
-     * 
-     * Uses classic gateway authentication with Primary/Secondary key
-     * NOTE: "Auth" must be CAPITALIZED (not "auth")
+     * Get Video Indexer access token via ARM (cached)
+     * Uses Azure AD service principal authentication with ARM API 2025-04-01
      */
-    private String getAccessToken() throws Exception {
-        // IMPORTANT: Auth is CAPITALIZED for classic gateway
-        String url = String.format("%s/Auth/%s/Accounts/%s/AccessToken?allowEdit=true",
-            API_BASE, location, accountId);
+    private synchronized String getViAccessTokenArm() throws Exception {
+        long skewMs = 5 * 60_000; // refresh 5 min before expiry
+        long now = System.currentTimeMillis();
+        
+        // Return cached token if still valid
+        if (cachedViToken.get() != null && (now + skewMs) < viTokenExpiryEpochMs) {
+            log.debug("Using cached VI access token");
+            return cachedViToken.get();
+        }
+        
+        log.info("Obtaining new VI access token via ARM...");
+        
+        // Step 1: Get ARM bearer token from Azure AD
+        TokenCredential credential = new ClientSecretCredentialBuilder()
+            .tenantId(tenantId)
+            .clientId(clientId)
+            .clientSecret(clientSecret)
+            .build();
+        
+        AccessToken armToken = credential.getToken(
+            new TokenRequestContext().addScopes("https://management.azure.com/.default")
+        ).block();
+        
+        if (armToken == null) {
+            throw new RuntimeException("Failed to get ARM token from Azure AD");
+        }
+        
+        String bearer = "Bearer " + armToken.getToken();
+        
+        // Step 2: Call ARM generateAccessToken API (2025-04-01)
+        String armUrl = String.format(
+            "https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.VideoIndexer/accounts/%s/generateAccessToken?api-version=%s",
+            subscriptionId, resourceGroup, accountName, ARM_API_VERSION
+        );
+        
+        // Note: API 2025-04-01 uses "permission" and "scope" (not "permissionType")
+        String body = "{ \"permission\": \"Contributor\", \"scope\": \"Account\" }";
         
         HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Ocp-Apim-Subscription-Key", subscriptionKey)  // Primary key from VI Developer Portal
-            .GET()
+            .uri(URI.create(armUrl))
+            .header("Authorization", bearer)
+            .header("Content-Type", "application/json")
+            .timeout(Duration.ofSeconds(30))
+            .POST(HttpRequest.BodyPublishers.ofString(body))
             .build();
         
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         
         if (response.statusCode() != 200) {
-            throw new RuntimeException("Failed to get access token: " + response.body());
+            throw new RuntimeException("ARM generateAccessToken failed: " + response.body());
         }
         
-        // Response is just the token string (with quotes)
-        return response.body().replace("\"", "");
+        JsonNode json = mapper.readTree(response.body());
+        String viAccessToken = json.get("accessToken").asText();
+        String expiryIso = json.get("expiry").asText(); // Note: "expiry" field in 2025-04-01 API
+        
+        long expiryMs = java.time.Instant.parse(expiryIso).toEpochMilli();
+        
+        cachedViToken.set(viAccessToken);
+        viTokenExpiryEpochMs = expiryMs;
+        
+        log.info("Obtained VI access token via ARM. Expires at {}", expiryIso);
+        
+        return viAccessToken;
+    }
+    
+    /**
+     * Helper method to check if string is blank
+     */
+    private boolean isBlank(String str) {
+        return str == null || str.trim().isEmpty();
     }
     
     /**
