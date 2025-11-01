@@ -447,8 +447,8 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             .append("6. 拍摄角度（俯视/平视/仰视等）\n\n")
             
             .append("任务3：提取关键要素\n")
-            .append("请提取该场景中最重要的恰好3个物体、产品或元素。\n")
-            .append("**重要**：必须返回恰好3个关键要素，可以少。\n")
+            .append("请提取该场景中最重要的恰好3个物体、产品或元素，并提供它们的边界框坐标。\n")
+            .append("**重要**：必须返回恰好3个关键要素（可以少），每个要素必须包含边界框坐标 [x, y, width, height]，坐标范围 0-1000。\n")
             .append("例如：\n")
             .append("- 推销导航的场景：[\"导航屏幕\", \"中控台\", \"CarPlay界面\"]\n")
             .append("- 推销车衣的场景：[\"车身\", \"贴膜过程\", \"防护效果\"]\n")
@@ -456,10 +456,13 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             
             .append("返回JSON格式：\n")
             .append("{\n")
-            .append("  \"regions\": [{\"id\":\"p1\",\"labelZh\":\"汽车\",\"conf\":0.95}],\n")
+            .append("  \"regions\": [\n")
+            .append("    {\"id\":\"p1\",\"labelZh\":\"汽车\",\"conf\":0.95,\"box\":[100,150,600,400]}\n")
+            .append("  ],\n")
             .append("  \"sceneAnalysis\": \"详细的场景分析文字...\",\n")
             .append("  \"keyElements\": [\"关键要素1\", \"关键要素2\", \"关键要素3\"]\n")
-            .append("}");
+            .append("}\n\n")
+            .append("注意：box 格式为 [x, y, width, height]，坐标系统：左上角为原点，x向右，y向下，范围0-1000。");
 
             Map<String, Object> request = new HashMap<>();
             request.put("model", qwenModel);
@@ -593,11 +596,27 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                         String id = node.path("id").asText(null);
                         String label = sanitize(node.path("labelZh").asText(""));
                         double conf = clamp(node.path("conf").asDouble(0.0));
+                        
+                        // Extract bounding box if present
+                        int[] box = null;
+                        if (node.has("box") && node.get("box").isArray()) {
+                            JsonNode boxNode = node.get("box");
+                            if (boxNode.size() == 4) {
+                                box = new int[4];
+                                box[0] = boxNode.get(0).asInt();
+                                box[1] = boxNode.get(1).asInt();
+                                box[2] = boxNode.get(2).asInt();
+                                box[3] = boxNode.get(3).asInt();
+                                System.out.println("[QWEN] Extracted bounding box for " + id + ": [" + box[0] + "," + box[1] + "," + box[2] + "," + box[3] + "]");
+                            }
+                        }
+                        
                         if (id != null && !label.isEmpty()) {
                             LabelResult result = new LabelResult(id, label, conf);
                             result.sceneAnalysis = sceneAnalysis;  // Attach scene analysis to all results
                             result.rawResponse = contentStr;  // Store raw response
                             result.keyElements = keyElements;  // Attach key elements
+                            result.box = box;  // Attach bounding box
                             out.put(id, result);
                             System.out.println("[QWEN] Added region: " + id + " -> " + label + " (conf: " + conf + ")");
                         }

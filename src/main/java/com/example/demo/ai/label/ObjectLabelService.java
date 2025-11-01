@@ -57,6 +57,7 @@ public interface ObjectLabelService {
         public String rawResponse;    // Raw VL response for debugging
         public List<String> keyElements;  // NEW - Key visual elements (3-5 items)
         public String scriptLine;  // NEW - Cleaned/validated ASR text
+        public int[] box;  // NEW - Bounding box [x, y, width, height] in 0-1000 range
         public LabelResult() {}
         public LabelResult(String id, String labelZh, double conf) {
             this.id = id; this.labelZh = labelZh; this.conf = conf;

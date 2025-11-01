@@ -216,7 +216,14 @@ public class AzureVideoIndexerExtractor {
             throw new RuntimeException("Failed to get insights: " + response.body());
         }
         
-        return mapper.readTree(response.body());
+        String responseBody = response.body();
+        
+        // Log the full Azure response for debugging subtitle handling
+        log.info("========== AZURE VIDEO INDEXER FULL RESPONSE ==========");
+        log.info(responseBody);
+        log.info("========== END AZURE RESPONSE ==========");
+        
+        return mapper.readTree(responseBody);
     }
     
     /**

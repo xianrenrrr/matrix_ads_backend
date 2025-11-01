@@ -144,9 +144,12 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             log.info("[STEP 5] Generating template metadata with Qwen...");
             generateMetadata(template, scenes, userDescription, video);
             
+            // Set locale used for template creation
+            template.setLocaleUsed(language);
+            
             template.setScenes(scenes);
             log.info("=== AI Template Creation Complete ===");
-            log.info("Template: {} scenes, purpose: {}", scenes.size(), template.getVideoPurpose());
+            log.info("Template: {} scenes, purpose: {}, locale: {}", scenes.size(), template.getVideoPurpose(), language);
             
         } catch (Exception e) {
             log.error("AI template creation failed", e);
@@ -559,6 +562,11 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             String videoPurpose = template.getVideoPurpose() != null ? template.getVideoPurpose() : "通用视频";
             template.setTemplateTitle("AI 模版 - " + videoPurpose + " " + today);
             template.setTemplateDescription("Automatically generated template for " + videoPurpose);
+            
+            // Calculate total video length from scenes
+            int totalSeconds = calculateTotalDuration(scenes);
+            template.setTotalVideoLength(totalSeconds);
+            log.info("[METADATA] Set totalVideoLength: {} seconds", totalSeconds);
             
             // Derive device orientation from first scene
             String aspectRatio = deriveDeviceOrientationFromFirstScene(scenes);

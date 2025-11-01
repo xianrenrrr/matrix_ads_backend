@@ -136,44 +136,25 @@ public class UnifiedSceneAnalysisService {
                 log.warn("[UNIFIED] Failed to detect aspect ratio: {}", e.getMessage());
             }
             
-            // Step 2: Get regions (either provided or auto-detect)
-            List<ObjectLabelService.RegionBox> regions = new ArrayList<>();
-            List<OverlayShape> detectedShapes = new ArrayList<>();
-            
-            if (providedRegions != null && !providedRegions.isEmpty()) {
-                // Use provided regions (for comparison)
-                log.info("[UNIFIED] Using {} provided regions", providedRegions.size());
-                regions = convertOverlaysToRegions(providedRegions);
-            } else {
-                // Auto-detect with YOLO
-                log.info("[UNIFIED] Auto-detecting objects with YOLO");
-                detectedShapes = segmentationService.detect(keyframeUrl);
-                log.info("[UNIFIED] YOLO detected {} shapes", detectedShapes.size());
-                
-                if (!detectedShapes.isEmpty()) {
-                    regions = convertShapesToRegions(detectedShapes);
-                }
-            }
-            
-            // Step 3: Qwen VL analysis
-            if (regions.isEmpty()) {
-                // Create dummy region for scene analysis only
-                log.info("[UNIFIED] No regions, creating full-frame region for scene analysis");
-                regions.add(new ObjectLabelService.RegionBox("full", 0.0, 0.0, 1.0, 1.0));
-            }
-            
-            log.info("[UNIFIED] Calling Qwen VL with {} regions", regions.size());
+            // Step 2: Call Qwen VL for scene analysis with object grounding (bounding boxes)
+            log.info("[UNIFIED] Calling Qwen VL for scene analysis with object grounding");
             if (subtitleText != null && !subtitleText.isEmpty()) {
                 log.info("[UNIFIED] Including subtitle context: \"{}\"", 
                     subtitleText.substring(0, Math.min(50, subtitleText.length())) + 
                     (subtitleText.length() > 50 ? "..." : ""));
             }
+            
+            // Create a dummy full-frame region for Qwen VL (it will detect objects and return bounding boxes)
+            List<ObjectLabelService.RegionBox> dummyRegion = new ArrayList<>();
+            dummyRegion.add(new ObjectLabelService.RegionBox("full", 0.0, 0.0, 1.0, 1.0));
+            
             Map<String, ObjectLabelService.LabelResult> vlResults = new java.util.HashMap<>();
             
             try {
+                // Call Qwen VL - it will detect objects and return bounding boxes
                 vlResults = objectLabelService.labelRegions(
                     keyframeUrl, 
-                    regions, 
+                    dummyRegion,
                     language != null ? language : "zh-CN",
                     subtitleText  // Pass subtitle context to VL
                 );
@@ -211,42 +192,41 @@ public class UnifiedSceneAnalysisService {
                 // Continue without VL data - will default to grid overlay below
             }
             
-            // Step 5: Build overlay objects/polygons
-            if (!detectedShapes.isEmpty()) {
-                buildOverlays(result, detectedShapes, vlResults);
-            } else if (providedRegions != null && !providedRegions.isEmpty() && !vlResults.isEmpty()) {
-                // Comparison mode: build overlays from VL results on provided regions
-                log.info("[UNIFIED] Building overlays from VL results on provided regions");
+            // Step 3: Build overlay objects from Qwen VL bounding boxes
+            if (!vlResults.isEmpty()) {
                 List<Scene.ObjectOverlay> objects = new ArrayList<>();
-                int counter = 1;
-                for (Scene.ObjectOverlay providedOverlay : providedRegions) {
-                    String id = "p" + counter++;
-                    if (vlResults.containsKey(id)) {
-                        ObjectLabelService.LabelResult lr = vlResults.get(id);
+                
+                for (ObjectLabelService.LabelResult lr : vlResults.values()) {
+                    if (lr.box != null && lr.box.length == 4) {
+                        // Convert from 0-1000 range to 0-1 normalized coordinates
                         Scene.ObjectOverlay obj = new Scene.ObjectOverlay();
                         obj.setLabelZh(lr.labelZh != null ? lr.labelZh : "未知");
                         obj.setLabelLocalized(lr.labelZh != null ? lr.labelZh : "未知");
                         obj.setLabel(lr.labelZh != null ? lr.labelZh : "unknown");
                         obj.setConfidence((float) lr.conf);
-                        obj.setX(providedOverlay.getX());
-                        obj.setY(providedOverlay.getY());
-                        obj.setWidth(providedOverlay.getWidth());
-                        obj.setHeight(providedOverlay.getHeight());
+                        obj.setX((float) lr.box[0] / 1000.0f);
+                        obj.setY((float) lr.box[1] / 1000.0f);
+                        obj.setWidth((float) lr.box[2] / 1000.0f);
+                        obj.setHeight((float) lr.box[3] / 1000.0f);
                         objects.add(obj);
+                        log.info("[UNIFIED] Created overlay object: {} at [{},{},{},{}]", 
+                            lr.labelZh, obj.getX(), obj.getY(), obj.getWidth(), obj.getHeight());
                     }
                 }
-                result.setOverlayObjects(objects);
-                result.setOverlayType("objects");
+                
                 if (!objects.isEmpty()) {
+                    result.setOverlayObjects(objects);
+                    result.setOverlayType("objects");
                     result.setShortLabelZh(objects.get(0).getLabelZh());
+                    log.info("[UNIFIED] Built {} overlay objects from Qwen VL bounding boxes", objects.size());
+                } else {
+                    log.info("[UNIFIED] No bounding boxes returned by Qwen VL");
                 }
-                log.info("[UNIFIED] Built {} overlay objects from VL results", objects.size());
             }
             
-            // Ensure overlay type is always set (fallback to grid if not set)
+            // Don't set overlay type if not detected (leave null since we're not using YOLO/grid anymore)
             if (result.getOverlayType() == null) {
-                result.setOverlayType("grid");
-                log.info("[UNIFIED] No overlay type set, defaulting to grid");
+                log.info("[UNIFIED] No overlay type set (YOLO disabled, using VL scene analysis only)");
             }
             
             log.info("[UNIFIED] Analysis complete - overlayType: {}", result.getOverlayType());
