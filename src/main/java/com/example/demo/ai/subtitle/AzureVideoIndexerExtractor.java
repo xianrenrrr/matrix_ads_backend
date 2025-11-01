@@ -72,7 +72,7 @@ public class AzureVideoIndexerExtractor {
     private String location;  // Region code: eastasia, southeastasia, eastus, westus2, etc.
     
     private static final String API_BASE = "https://api.videoindexer.ai";
-    private static final String ARM_API_VERSION = "2025-04-01";
+    private static final String ARM_API_VERSION = "2024-01-01";
     
     // Token cache for ARM authentication
     private final AtomicReference<String> cachedViToken = new AtomicReference<>();
@@ -221,7 +221,7 @@ public class AzureVideoIndexerExtractor {
     
     /**
      * Get Video Indexer access token via ARM (cached)
-     * Uses Azure AD service principal authentication with ARM API 2025-04-01
+     * Uses Azure AD service principal authentication with ARM API 2024-01-01
      */
     private synchronized String getViAccessTokenArm() throws Exception {
         long skewMs = 5 * 60_000; // refresh 5 min before expiry
@@ -252,14 +252,14 @@ public class AzureVideoIndexerExtractor {
         
         String bearer = "Bearer " + armToken.getToken();
         
-        // Step 2: Call ARM generateAccessToken API (2025-04-01)
+        // Step 2: Call ARM generateAccessToken API (2024-01-01)
         String armUrl = String.format(
             "https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.VideoIndexer/accounts/%s/generateAccessToken?api-version=%s",
             subscriptionId, resourceGroup, accountName, ARM_API_VERSION
         );
         
-        // Note: API 2025-04-01 uses "permission" and "scope" (not "permissionType")
-        String body = "{ \"permission\": \"Contributor\", \"scope\": \"Account\" }";
+        // Note: API 2024-01-01 uses "permissionType" (not "permission")
+        String body = "{ \"permissionType\": \"Contributor\", \"scope\": \"Account\" }";
         
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(armUrl))
@@ -277,7 +277,11 @@ public class AzureVideoIndexerExtractor {
         
         JsonNode json = mapper.readTree(response.body());
         String viAccessToken = json.get("accessToken").asText();
-        String expiryIso = json.get("expiry").asText(); // Note: "expiry" field in 2025-04-01 API
+        
+        // Handle both schemas: 2024-01-01 uses "expiresOn", newer versions use "expiry"
+        String expiryIso = json.has("expiry") 
+            ? json.get("expiry").asText() 
+            : json.get("expiresOn").asText();
         
         long expiryMs = java.time.Instant.parse(expiryIso).toEpochMilli();
         
