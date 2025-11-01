@@ -155,15 +155,25 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         return template;
     }
     
+    @Autowired(required = false)
+    private com.example.demo.service.AlibabaOssStorageService ossStorageService;
+    
     /**
      * Index video with Azure Video Indexer
      * Returns comprehensive video insights in one call
      */
     private AzureVideoIndexerResult indexVideoWithAzure(String videoUrl) {
         try {
+            // Generate signed URL for Azure Video Indexer (2 hours expiration for long videos)
+            String signedUrl = videoUrl;
+            if (ossStorageService != null && videoUrl.contains("aliyuncs.com")) {
+                signedUrl = ossStorageService.generateSignedUrl(videoUrl, 2, java.util.concurrent.TimeUnit.HOURS);
+                log.info("Generated signed URL for Azure Video Indexer (expires in 2 hours)");
+            }
+            
             // Use the enhanced AzureVideoIndexerExtractor to get FULL insights
             AzureVideoIndexerExtractor.AzureVideoIndexerResult azureResult = 
-                azureExtractor.extractFullInsights(videoUrl);
+                azureExtractor.extractFullInsights(signedUrl);
             
             // Convert to our internal format
             AzureVideoIndexerResult result = new AzureVideoIndexerResult();
