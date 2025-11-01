@@ -361,7 +361,8 @@ public class AzureVideoIndexerExtractor {
     private String uploadVideo(String videoUrl, String accessToken) throws Exception {
         String videoName = "video_" + System.currentTimeMillis();
         
-        String url = String.format("%s/%s/Accounts/%s/Videos?accessToken=%s&name=%s&videoUrl=%s",
+        // Add language parameter for better Chinese recognition
+        String url = String.format("%s/%s/Accounts/%s/Videos?accessToken=%s&name=%s&videoUrl=%s&language=zh-CN",
             API_BASE, location, accountId, accessToken, videoName, 
             java.net.URLEncoder.encode(videoUrl, "UTF-8"));
         
