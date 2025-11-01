@@ -16,6 +16,12 @@ public class SubtitleSegment {
     private String text;       // Subtitle text
     private double confidence; // Recognition confidence (0.0-1.0)
     
+    // Position data (for OCR filtering)
+    private Integer top;       // Y position (pixels from top)
+    private Integer left;      // X position (pixels from left)
+    private Integer width;     // Width in pixels
+    private Integer height;    // Height in pixels
+    
     public SubtitleSegment() {}
     
     public SubtitleSegment(long startTimeMs, long endTimeMs, String text) {
