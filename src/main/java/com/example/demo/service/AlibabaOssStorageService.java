@@ -187,10 +187,17 @@ public class AlibabaOssStorageService {
             
             URL signedUrl = ossClient.generatePresignedUrl(request);
             
+            // Ensure HTTPS (Azure Video Indexer requires HTTPS)
+            String signedUrlStr = signedUrl.toString();
+            if (signedUrlStr.startsWith("http://")) {
+                signedUrlStr = signedUrlStr.replace("http://", "https://");
+                System.out.println("Converted signed URL to HTTPS for Azure compatibility");
+            }
+            
             System.out.println("Generated OSS signed URL for: " + objectKey + 
                              " (expires in " + duration + " " + unit + ")");
             
-            return signedUrl.toString();
+            return signedUrlStr;
         } catch (Exception e) {
             System.err.println("Error generating OSS signed URL: " + e.getMessage());
             return ossUrl;
