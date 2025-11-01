@@ -41,8 +41,17 @@ public class FolderController {
         String name = (String) request.get("name");
         String parentId = (String) request.get("parentId");
         
+        // SIMPLIFIED: If user is employee, create folder under manager's account
+        // This way folders are always owned by manager, employees just use them
+        String folderOwnerId = userId;
+        com.example.demo.model.User user = userDao.findById(userId);
+        if (user != null && "employee".equals(user.getRole()) && user.getCreatedBy() != null) {
+            folderOwnerId = user.getCreatedBy(); // Use manager's ID
+            log.info("Employee {} creating folder under manager {}", userId, folderOwnerId);
+        }
+        
         TemplateFolder folder = new TemplateFolder();
-        folder.setUserId(userId);
+        folder.setUserId(folderOwnerId);
         folder.setName(name);
         folder.setParentId(parentId);
         
@@ -58,42 +67,19 @@ public class FolderController {
             @RequestParam String userId,
             @RequestHeader(value = "Accept-Language", required = false) String lang) throws Exception {
         
-        // Determine the actual user ID to use for fetching folders
-        // If user is an employee, show their manager's folders + their own folders
-        String actualUserId = userId;
+        // SIMPLIFIED: If user is employee, query manager's folders
+        // If user is manager, query their own folders
+        // Folders are always owned by manager, employees just use them
+        String queryUserId = userId;
         com.example.demo.model.User user = userDao.findById(userId);
         
-        List<TemplateFolder> folders = new ArrayList<>();
-        
         if (user != null && "employee".equals(user.getRole()) && user.getCreatedBy() != null) {
-            // Employee: get both manager's folders and employee's own folders
-            String managerId = user.getCreatedBy();
-            
-            // Get manager's folders
-            List<TemplateFolder> managerFolders = folderDao.getFoldersByUser(managerId);
-            folders.addAll(managerFolders);
-            
-            // Get employee's own folders
-            List<TemplateFolder> employeeFolders = folderDao.getFoldersByUser(userId);
-            folders.addAll(employeeFolders);
-            
-            log.info("Employee {} viewing folders: {} manager folders + {} own folders", 
-                userId, managerFolders.size(), employeeFolders.size());
-        } else {
-            // Manager or other role: get their own folders
-            folders = folderDao.getFoldersByUser(userId);
-            
-            // Also get folders created by their employees
-            if (user != null && "content-manager".equals(user.getRole())) {
-                List<com.example.demo.model.User> employees = userDao.findByCreatedBy(userId);
-                for (com.example.demo.model.User employee : employees) {
-                    List<TemplateFolder> employeeFolders = folderDao.getFoldersByUser(employee.getId());
-                    folders.addAll(employeeFolders);
-                }
-                log.info("Manager {} viewing folders: {} own folders + folders from {} employees", 
-                    userId, folderDao.getFoldersByUser(userId).size(), employees.size());
-            }
+            queryUserId = user.getCreatedBy(); // Query manager's folders
+            log.info("Employee {} querying manager {} folders", userId, queryUserId);
         }
+        
+        List<TemplateFolder> folders = folderDao.getFoldersByUser(queryUserId);
+        log.info("Returning {} folders for user {} (query userId: {})", folders.size(), userId, queryUserId);
         
         return ResponseEntity.ok(ApiResponse.ok("Folders retrieved", folders));
     }
