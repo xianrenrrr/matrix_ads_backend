@@ -672,13 +672,21 @@ public class AzureVideoIndexerExtractor {
     
     /**
      * Group Azure subtitles by scene timing
+     * Returns subtitle segments for each scene (with timing for KTV display and video compilation)
+     * 
+     * @param subtitles List of subtitle segments from Azure (transcript + OCR)
+     * @param scenes List of scene data with timing
+     * @return Map of scene number to List of SubtitleSegment
      */
-    public Map<Integer, String> groupByScenes(List<SubtitleSegment> subtitles, List<Map<String, Object>> scenes) {
-        Map<Integer, String> scriptLinesByScene = new HashMap<>();
+    public Map<Integer, List<SubtitleSegment>> groupSubtitlesByScenes(
+        List<SubtitleSegment> subtitles, 
+        List<Map<String, Object>> scenes
+    ) {
+        Map<Integer, List<SubtitleSegment>> result = new HashMap<>();
         
         if (subtitles == null || subtitles.isEmpty() || scenes == null || scenes.isEmpty()) {
             log.warn("Empty subtitles or scenes, returning empty map");
-            return scriptLinesByScene;
+            return result;
         }
         
         log.info("Grouping {} Azure subtitles into {} scenes", subtitles.size(), scenes.size());
@@ -688,30 +696,31 @@ public class AzureVideoIndexerExtractor {
             long sceneStart = ((Number) scene.get("startMs")).longValue();
             long sceneEnd = ((Number) scene.get("endMs")).longValue();
             
-            StringBuilder sceneText = new StringBuilder();
+            List<SubtitleSegment> sceneSegments = new ArrayList<>();
             
             // Find subtitles that overlap with this scene
             for (SubtitleSegment subtitle : subtitles) {
                 long subtitleMid = (subtitle.getStartTimeMs() + subtitle.getEndTimeMs()) / 2;
                 
                 if (subtitleMid >= sceneStart && subtitleMid < sceneEnd) {
-                    if (sceneText.length() > 0) {
-                        sceneText.append(" ");
-                    }
-                    sceneText.append(subtitle.getText());
+                    sceneSegments.add(subtitle);
                 }
             }
             
-            String scriptLine = sceneText.toString().trim();
-            scriptLinesByScene.put(sceneNumber, scriptLine);
+            result.put(sceneNumber, sceneSegments);
             
-            if (!scriptLine.isEmpty()) {
-                log.info("Scene {}: \"{}\"", sceneNumber, 
-                    scriptLine.length() > 60 ? scriptLine.substring(0, 60) + "..." : scriptLine);
+            if (!sceneSegments.isEmpty()) {
+                String preview = sceneSegments.stream()
+                    .map(SubtitleSegment::getText)
+                    .collect(java.util.stream.Collectors.joining(" "));
+                log.info("Scene {}: {} segments - \"{}\"", 
+                    sceneNumber,
+                    sceneSegments.size(),
+                    preview.length() > 60 ? preview.substring(0, 60) + "..." : preview);
             }
         }
         
-        return scriptLinesByScene;
+        return result;
     }
     
     // ========== Result Classes ==========

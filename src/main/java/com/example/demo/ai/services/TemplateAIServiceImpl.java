@@ -325,19 +325,23 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             long sceneEnd = scene.getEndTimeMs();
             
             StringBuilder scriptLine = new StringBuilder();
+            List<SubtitleSegment> sceneSegments = new ArrayList<>();
             
             for (SubtitleSegment segment : allText) {
                 long midpoint = (segment.getStartTimeMs() + segment.getEndTimeMs()) / 2;
                 
                 if (midpoint >= sceneStart && midpoint < sceneEnd) {
+                    // Add to scriptLine (combined text for backward compatibility)
                     if (scriptLine.length() > 0) {
                         scriptLine.append(" ");
                     }
                     scriptLine.append(segment.getText());
+                    sceneSegments.add(segment);
                 }
             }
             
             scene.setScriptLine(scriptLine.toString().trim());
+            scene.setSubtitleSegments(sceneSegments);  // NEW: Store segments with timing!
         }
     }
     

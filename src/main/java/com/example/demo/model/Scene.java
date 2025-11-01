@@ -44,6 +44,9 @@ public class Scene {
     // Key elements for this scene (for purpose-driven comparison)
     private List<String> keyElements;
     
+    // Subtitle segments for KTV-style display and video compilation
+    private List<SubtitleSegment> subtitleSegments;
+    
     // Inner class for object overlay data
     public static class ObjectOverlay {
         private String label;
@@ -323,6 +326,14 @@ public class Scene {
     
     public void setKeyElements(List<String> keyElements) {
         this.keyElements = keyElements;
+    }
+    
+    public List<SubtitleSegment> getSubtitleSegments() {
+        return subtitleSegments;
+    }
+    
+    public void setSubtitleSegments(List<SubtitleSegment> subtitleSegments) {
+        this.subtitleSegments = subtitleSegments;
     }
     
 }

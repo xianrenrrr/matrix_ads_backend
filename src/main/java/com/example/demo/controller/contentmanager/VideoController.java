@@ -38,8 +38,7 @@ public class VideoController {
     private ManualTemplate generateAITemplate(Video video, String language, String userDescription) {
         // Use AI template generator to create template with user description
         System.out.println("Generating AI template for video ID: " + video.getId() + " in language: " + language + 
-                          " with user description: " + (userDescription != null ? "provided" : "none") +
-                          " using Alibaba Cloud AI scene detection");
+                          " with user description: " + (userDescription != null ? "provided" : "none");
         return aiTemplateGenerator.generateTemplate(video, language, userDescription);
     }
     
@@ -163,8 +162,6 @@ public class VideoController {
         System.out.println("Template ID: " + templateId);
         System.out.println("Group IDs: " + groupIdsStr);
         System.out.println("Folder ID: " + folderId);
-        System.out.println("Scene Detection: Alibaba Cloud AI (automatic)");
-        System.out.println("Subtitle Extraction: ASR (Speech-to-Text) only");
         System.out.println("=============================");
         
         // DAO handles upload and save
