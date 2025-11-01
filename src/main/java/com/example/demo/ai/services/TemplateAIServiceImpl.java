@@ -390,6 +390,41 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     }
     
     /**
+     * Parse overlay objects from vlRawResponse JSON
+     * Extracts regions with bounding boxes from the VL response
+     */
+    private List<Scene.ObjectOverlay> parseOverlayObjectsFromVlResponse(String vlRawResponse) {
+        List<Scene.ObjectOverlay> objects = new ArrayList<>();
+        try {
+            JsonNode root = mapper.readTree(vlRawResponse);
+            if (root.has("regions") && root.get("regions").isArray()) {
+                JsonNode regions = root.get("regions");
+                for (JsonNode region : regions) {
+                    if (region.has("box") && region.get("box").isArray()) {
+                        JsonNode boxNode = region.get("box");
+                        if (boxNode.size() == 4) {
+                            Scene.ObjectOverlay obj = new Scene.ObjectOverlay();
+                            obj.setLabelZh(region.path("labelZh").asText("未知"));
+                            obj.setLabelLocalized(region.path("labelZh").asText("未知"));
+                            obj.setLabel(region.path("labelZh").asText("unknown"));
+                            obj.setConfidence((float) region.path("conf").asDouble(0.0));
+                            // Convert from pixel coordinates to normalized 0-1
+                            obj.setX((float) boxNode.get(0).asInt() / 1000.0f);
+                            obj.setY((float) boxNode.get(1).asInt() / 1000.0f);
+                            obj.setWidth((float) boxNode.get(2).asInt() / 1000.0f);
+                            obj.setHeight((float) boxNode.get(3).asInt() / 1000.0f);
+                            objects.add(obj);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to parse vlRawResponse: {}", e.getMessage());
+        }
+        return objects;
+    }
+    
+    /**
      * Analyze each scene with Qwen VL
      * 
      * For each scene:
@@ -436,6 +471,18 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 scene.setVlRawResponse(analysis.getVlRawResponse());
                 scene.setVlSceneAnalysis(analysis.getVlSceneAnalysis());
                 scene.setKeyElements(analysis.getKeyElements());
+                
+                // IMPORTANT: If overlayObjects is null but vlRawResponse has regions, parse them
+                if ((scene.getOverlayObjects() == null || scene.getOverlayObjects().isEmpty()) 
+                    && scene.getVlRawResponse() != null) {
+                    List<Scene.ObjectOverlay> parsedObjects = parseOverlayObjectsFromVlResponse(scene.getVlRawResponse());
+                    if (!parsedObjects.isEmpty()) {
+                        scene.setOverlayObjects(parsedObjects);
+                        scene.setOverlayType("objects");
+                        log.info("✅ Parsed {} overlay objects from vlRawResponse for scene {}", 
+                            parsedObjects.size(), scene.getSceneNumber());
+                    }
+                }
                 
                 log.info("✅ Scene {} analyzed: overlayType={}, keyElements={}",
                     scene.getSceneNumber(),

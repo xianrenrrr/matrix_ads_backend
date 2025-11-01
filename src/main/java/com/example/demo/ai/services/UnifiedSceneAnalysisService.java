@@ -218,9 +218,13 @@ public class UnifiedSceneAnalysisService {
                     result.setOverlayObjects(objects);
                     result.setOverlayType("objects");
                     result.setShortLabelZh(objects.get(0).getLabelZh());
-                    log.info("[UNIFIED] Built {} overlay objects from Qwen VL bounding boxes", objects.size());
+                    log.info("[UNIFIED] ✅ Built {} overlay objects from Qwen VL bounding boxes", objects.size());
+                    for (Scene.ObjectOverlay obj : objects) {
+                        log.info("[UNIFIED]    - {} at [{},{},{},{}] conf:{}", 
+                            obj.getLabelZh(), obj.getX(), obj.getY(), obj.getWidth(), obj.getHeight(), obj.getConfidence());
+                    }
                 } else {
-                    log.info("[UNIFIED] No bounding boxes returned by Qwen VL");
+                    log.warn("[UNIFIED] ⚠️  No bounding boxes returned by Qwen VL - vlResults had {} entries but no valid boxes", vlResults.size());
                 }
             }
             
