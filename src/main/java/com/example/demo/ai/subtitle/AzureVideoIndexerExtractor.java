@@ -534,6 +534,12 @@ public class AzureVideoIndexerExtractor {
                 String text = line.get("text").asText();
                 double confidence = line.get("confidence").asDouble();
                 
+                // Get position data (for filtering)
+                Integer top = line.has("top") ? line.get("top").asInt() : null;
+                Integer left = line.has("left") ? line.get("left").asInt() : null;
+                Integer width = line.has("width") ? line.get("width").asInt() : null;
+                Integer height = line.has("height") ? line.get("height").asInt() : null;
+                
                 // Get timing from instances
                 JsonNode instances = line.get("instances");
                 if (instances != null && instances.isArray() && instances.size() > 0) {
@@ -545,7 +551,12 @@ public class AzureVideoIndexerExtractor {
                     long startMs = parseTime(startStr);
                     long endMs = parseTime(endStr);
                     
-                    ocrSegments.add(new SubtitleSegment(startMs, endMs, text, confidence));
+                    SubtitleSegment segment = new SubtitleSegment(startMs, endMs, text, confidence);
+                    segment.setTop(top);
+                    segment.setLeft(left);
+                    segment.setWidth(width);
+                    segment.setHeight(height);
+                    ocrSegments.add(segment);
                 }
             }
             

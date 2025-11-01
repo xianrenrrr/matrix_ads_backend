@@ -350,9 +350,11 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         // Choose subtitle source
         List<SubtitleSegment> allText = new ArrayList<>();
         if (useOcrOnly) {
-            // Low confidence transcript - use OCR only
-            allText.addAll(ocr);
-            log.info("   ⚠️  Transcript confidence too low, using OCR only for better accuracy");
+            // Low confidence transcript - use OCR only, filtered by continuous position
+            List<SubtitleSegment> filteredOcr = filterContinuousSubtitleLine(ocr);
+            allText.addAll(filteredOcr);
+            log.info("   ⚠️  Transcript confidence too low, using {} filtered OCR segments (from {} total)", 
+                filteredOcr.size(), ocr.size());
         } else {
             // Good transcript - combine both
             allText.addAll(transcript);
@@ -387,6 +389,45 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             scene.setScriptLine(scriptLine.toString().trim());
             scene.setSubtitleSegments(sceneSegments);  // NEW: Store segments with timing!
         }
+    }
+    
+    /**
+     * Filter OCR to find the continuous subtitle line
+     * Finds OCR segments that appear consistently at similar vertical position
+     */
+    private List<SubtitleSegment> filterContinuousSubtitleLine(List<SubtitleSegment> ocr) {
+        if (ocr.isEmpty()) return ocr;
+        
+        // Sort by time
+        List<SubtitleSegment> sorted = new ArrayList<>(ocr);
+        sorted.sort(Comparator.comparingLong(SubtitleSegment::getStartTimeMs));
+        
+        // Find continuous sequences at similar vertical positions
+        List<List<SubtitleSegment>> sequences = new ArrayList<>();
+        List<SubtitleSegment> currentSeq = new ArrayList<>();
+        Integer currentBand = null;
+        
+        for (SubtitleSegment seg : sorted) {
+            if (seg.getTop() == null) continue;
+            
+            int band = seg.getTop() / 50; // 50px bands
+            
+            if (currentBand == null || Math.abs(band - currentBand) <= 1) {
+                currentSeq.add(seg);
+                currentBand = band;
+            } else {
+                if (!currentSeq.isEmpty()) sequences.add(new ArrayList<>(currentSeq));
+                currentSeq.clear();
+                currentSeq.add(seg);
+                currentBand = band;
+            }
+        }
+        if (!currentSeq.isEmpty()) sequences.add(currentSeq);
+        
+        // Return longest sequence (most text)
+        return sequences.stream()
+            .max(Comparator.comparingInt(seq -> seq.stream().mapToInt(s -> s.getText().length()).sum()))
+            .orElse(ocr);
     }
     
     /**
