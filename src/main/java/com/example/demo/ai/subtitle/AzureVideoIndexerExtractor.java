@@ -276,7 +276,7 @@ public class AzureVideoIndexerExtractor {
         }
         
         String responseBody = response.body();
-        log.info("ARM generateAccessToken response: {}", responseBody);
+        log.info("ARM generateAccessToken response received");
         
         JsonNode json = mapper.readTree(responseBody);
         
@@ -287,22 +287,26 @@ public class AzureVideoIndexerExtractor {
         
         String viAccessToken = json.get("accessToken").asText();
         
-        // Handle both schemas: 2024-01-01 uses "expiresOn", newer versions use "expiry"
-        String expiryIso;
+        // Extract expiry from JWT token (it's in the payload as "exp" claim)
+        long expiryMs;
         if (json.has("expiry")) {
-            expiryIso = json.get("expiry").asText();
+            // Newer API versions include expiry field
+            String expiryIso = json.get("expiry").asText();
+            expiryMs = java.time.Instant.parse(expiryIso).toEpochMilli();
         } else if (json.has("expiresOn")) {
-            expiryIso = json.get("expiresOn").asText();
+            // 2024-01-01 API uses expiresOn
+            String expiryIso = json.get("expiresOn").asText();
+            expiryMs = java.time.Instant.parse(expiryIso).toEpochMilli();
         } else {
-            throw new RuntimeException("ARM response missing expiry field. Response: " + responseBody);
+            // No expiry field - extract from JWT token itself
+            expiryMs = extractExpiryFromJwt(viAccessToken);
         }
-        
-        long expiryMs = java.time.Instant.parse(expiryIso).toEpochMilli();
         
         cachedViToken.set(viAccessToken);
         viTokenExpiryEpochMs = expiryMs;
         
-        log.info("Obtained VI access token via ARM. Expires at {}", expiryIso);
+        log.info("Obtained VI access token via ARM. Expires at {}", 
+            java.time.Instant.ofEpochMilli(expiryMs).toString());
         
         return viAccessToken;
     }
@@ -312,6 +316,36 @@ public class AzureVideoIndexerExtractor {
      */
     private boolean isBlank(String str) {
         return str == null || str.trim().isEmpty();
+    }
+    
+    /**
+     * Extract expiry timestamp from JWT token
+     * JWT format: header.payload.signature (all base64 encoded)
+     */
+    private long extractExpiryFromJwt(String jwt) {
+        try {
+            String[] parts = jwt.split("\\.");
+            if (parts.length < 2) {
+                throw new RuntimeException("Invalid JWT format");
+            }
+            
+            // Decode the payload (second part)
+            String payload = new String(java.util.Base64.getUrlDecoder().decode(parts[1]));
+            JsonNode payloadJson = mapper.readTree(payload);
+            
+            // Get "exp" claim (Unix timestamp in seconds)
+            if (!payloadJson.has("exp")) {
+                throw new RuntimeException("JWT missing 'exp' claim");
+            }
+            
+            long expSeconds = payloadJson.get("exp").asLong();
+            return expSeconds * 1000; // Convert to milliseconds
+            
+        } catch (Exception e) {
+            log.error("Failed to extract expiry from JWT", e);
+            // Default to 55 minutes from now if we can't parse
+            return System.currentTimeMillis() + (55 * 60 * 1000);
+        }
     }
     
     /**
