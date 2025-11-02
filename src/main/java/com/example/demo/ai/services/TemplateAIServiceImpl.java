@@ -392,42 +392,74 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     }
     
     /**
-     * Filter OCR to find the continuous subtitle line
-     * Finds OCR segments that appear consistently at similar vertical position
+     * Filter OCR to find the continuous subtitle line at bottom of screen
+     * 
+     * Strategy: Group all OCR by vertical position, return the largest group
+     * This finds subtitle tracks that stay at consistent position (e.g. top ~300)
      */
     private List<SubtitleSegment> filterContinuousSubtitleLine(List<SubtitleSegment> ocr) {
         if (ocr.isEmpty()) return ocr;
         
-        // Sort by time
-        List<SubtitleSegment> sorted = new ArrayList<>(ocr);
-        sorted.sort(Comparator.comparingLong(SubtitleSegment::getStartTimeMs));
+        // Group by vertical position (±10px tolerance)
+        Map<Integer, List<SubtitleSegment>> positionGroups = new HashMap<>();
+        List<SubtitleSegment> withoutPosition = new ArrayList<>();
         
-        // Find continuous sequences at similar vertical positions
-        List<List<SubtitleSegment>> sequences = new ArrayList<>();
-        List<SubtitleSegment> currentSeq = new ArrayList<>();
-        Integer currentBand = null;
+        for (SubtitleSegment seg : ocr) {
+            if (seg.getTop() == null) {
+                withoutPosition.add(seg);
+                continue;
+            }
+            
+            // Round to nearest 10px for grouping (e.g. 297-301 → 300)
+            int roundedTop = Math.round(seg.getTop() / 10.0f) * 10;
+            positionGroups.computeIfAbsent(roundedTop, k -> new ArrayList<>()).add(seg);
+        }
         
-        for (SubtitleSegment seg : sorted) {
-            if (seg.getTop() == null) continue;
+        // If no position data, return all
+        if (positionGroups.isEmpty()) {
+            log.info("   📍 No position data, keeping all {} OCR segments", ocr.size());
+            return ocr;
+        }
+        
+        // Find the position with most segments
+        int totalWithPosition = ocr.size() - withoutPosition.size();
+        Map.Entry<Integer, List<SubtitleSegment>> largestGroup = positionGroups.entrySet().stream()
+            .max(Comparator.comparingInt(e -> e.getValue().size()))
+            .orElse(null);
+        
+        if (largestGroup != null) {
+            double ratio = (double) largestGroup.getValue().size() / totalWithPosition;
             
-            int band = seg.getTop() / 50; // 50px bands
+            // Log top 3 positions for debugging
+            log.info("   📍 OCR position distribution:");
+            positionGroups.entrySet().stream()
+                .sorted(Comparator.comparingInt(e -> -e.getValue().size()))
+                .limit(3)
+                .forEach(e -> {
+                    String preview = e.getValue().stream()
+                        .limit(2)
+                        .map(SubtitleSegment::getText)
+                        .collect(java.util.stream.Collectors.joining(", "));
+                    log.info("      top ~{}: {} segments ({}%) - \"{}...\"", 
+                        e.getKey(), e.getValue().size(), 
+                        (int)(e.getValue().size() * 100.0 / totalWithPosition),
+                        preview.length() > 40 ? preview.substring(0, 40) : preview);
+                });
             
-            if (currentBand == null || Math.abs(band - currentBand) <= 1) {
-                currentSeq.add(seg);
-                currentBand = band;
+            if (ratio > 0.25) {
+                // Found dominant position (>25% of segments at same position)
+                log.info("   ✅ Using subtitle track at top ~{} ({} segments, {}%)", 
+                    largestGroup.getKey(), largestGroup.getValue().size(), (int)(ratio * 100));
+                return largestGroup.getValue();
             } else {
-                if (!currentSeq.isEmpty()) sequences.add(new ArrayList<>(currentSeq));
-                currentSeq.clear();
-                currentSeq.add(seg);
-                currentBand = band;
+                // No clear subtitle track - keep all OCR
+                log.info("   ⚠️  No dominant position (max {}%), keeping all {} OCR segments", 
+                    (int)(ratio * 100), ocr.size());
+                return ocr;
             }
         }
-        if (!currentSeq.isEmpty()) sequences.add(currentSeq);
         
-        // Return longest sequence (most text)
-        return sequences.stream()
-            .max(Comparator.comparingInt(seq -> seq.stream().mapToInt(s -> s.getText().length()).sum()))
-            .orElse(ocr);
+        return ocr;
     }
     
     /**
