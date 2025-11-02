@@ -415,6 +415,12 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
      */
     private Map<String, LabelResult> labelRegionsInternal(String keyframeUrl, List<RegionBox> regions, String locale, String scriptLineContext) {
         
+        System.out.println("[QWEN-KEYELEMENTS] 🎯 Starting Qwen VL call for keyElements extraction");
+        System.out.println("[QWEN-KEYELEMENTS]    Keyframe: " + (keyframeUrl != null ? keyframeUrl.substring(0, Math.min(80, keyframeUrl.length())) + "..." : "null"));
+        System.out.println("[QWEN-KEYELEMENTS]    Regions: " + (regions != null ? regions.size() : 0));
+        System.out.println("[QWEN-KEYELEMENTS]    Locale: " + locale);
+        System.out.println("[QWEN-KEYELEMENTS]    ScriptLine provided: " + (scriptLineContext != null && !scriptLineContext.isEmpty() ? "YES" : "NO"));
+        
         Map<String, LabelResult> out = new HashMap<>();
         if (regions == null || regions.isEmpty() || keyframeUrl == null || keyframeUrl.isBlank()) {
             System.err.println("[QWEN] ❌ Early return - regions or keyframeUrl is null/empty");
@@ -430,6 +436,10 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             if (scriptLineContext != null && !scriptLineContext.isEmpty()) {
                 sb.append("【场景语音内容（参考）】\n");
                 sb.append(scriptLineContext).append("\n\n");
+                System.out.println("[QWEN-KEYELEMENTS] ✅ ScriptLine context included: \"" + 
+                    (scriptLineContext.length() > 100 ? scriptLineContext.substring(0, 100) + "..." : scriptLineContext) + "\"");
+            } else {
+                System.out.println("[QWEN-KEYELEMENTS] ⚠️ No scriptLine context provided");
             }
             
             sb.append("任务1：对指定区域进行标注\n")
@@ -579,15 +589,15 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                     
                     // Enforce limit of 3 elements
                     if (keyElements.size() > 3) {
-                        System.out.println("[QWEN] ⚠️ AI returned " + keyElements.size() + " key elements, trimming to 3");
+                        System.out.println("[QWEN-KEYELEMENTS] ⚠️ AI returned " + keyElements.size() + " key elements, trimming to 3");
                         keyElements = keyElements.subList(0, 3);
                     } else if (keyElements.size() < 3) {
-                        System.out.println("[QWEN] ⚠️ AI returned only " + keyElements.size() + " key elements (expected 3)");
+                        System.out.println("[QWEN-KEYELEMENTS] ⚠️ AI returned only " + keyElements.size() + " key elements (expected 3)");
                     }
                     
-                    System.out.println("[QWEN] ✅ Key elements extracted: " + keyElements);
+                    System.out.println("[QWEN-KEYELEMENTS] ✅ Key elements extracted: " + keyElements);
                 } else {
-                    System.err.println("[QWEN] ⚠️ No 'keyElements' field in response");
+                    System.err.println("[QWEN-KEYELEMENTS] ⚠️ No 'keyElements' field in response");
                 }
                 
                 if (regionsNode.isArray()) {

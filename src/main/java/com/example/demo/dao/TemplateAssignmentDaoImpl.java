@@ -176,17 +176,46 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
         Object templateSnapshotData = doc.get("templateSnapshot");
         if (templateSnapshotData != null) {
             try {
-                // Use Gson to convert the nested object
-                com.google.gson.Gson gson = new com.google.gson.Gson();
+                // Use Gson with proper configuration for nested objects
+                com.google.gson.GsonBuilder gsonBuilder = new com.google.gson.GsonBuilder();
+                gsonBuilder.setDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+                com.google.gson.Gson gson = gsonBuilder.create();
+                
                 String json = gson.toJson(templateSnapshotData);
+                
+                // Log for debugging
+                System.out.println("=== DESERIALIZING TEMPLATE SNAPSHOT ===");
+                System.out.println("Assignment ID: " + doc.getId());
+                System.out.println("JSON length: " + json.length());
+                System.out.println("JSON preview: " + (json.length() > 200 ? json.substring(0, 200) + "..." : json));
+                
                 com.example.demo.model.ManualTemplate snapshot = 
                     gson.fromJson(json, com.example.demo.model.ManualTemplate.class);
+                
+                if (snapshot != null) {
+                    System.out.println("✅ Snapshot deserialized successfully");
+                    System.out.println("   - Template ID: " + snapshot.getId());
+                    System.out.println("   - Title: " + snapshot.getTemplateTitle());
+                    System.out.println("   - Scenes: " + (snapshot.getScenes() != null ? snapshot.getScenes().size() : "null"));
+                    System.out.println("   - Total duration: " + snapshot.getTotalVideoLength());
+                    
+                    if (snapshot.getScenes() != null && !snapshot.getScenes().isEmpty()) {
+                        System.out.println("   - First scene: " + snapshot.getScenes().get(0).getSceneTitle());
+                        System.out.println("   - First scene duration: " + snapshot.getScenes().get(0).getSceneDurationInSeconds());
+                    }
+                } else {
+                    System.err.println("❌ Snapshot is null after deserialization");
+                }
+                
                 assignment.setTemplateSnapshot(snapshot);
             } catch (Exception e) {
-                System.err.println("Error converting templateSnapshot: " + e.getMessage());
+                System.err.println("❌ Error converting templateSnapshot: " + e.getMessage());
+                e.printStackTrace();
                 // Set null if conversion fails
                 assignment.setTemplateSnapshot(null);
             }
+        } else {
+            System.err.println("⚠️  templateSnapshot field is null in Firestore document: " + doc.getId());
         }
         
         assignment.setPushedAt(doc.getDate("pushedAt"));

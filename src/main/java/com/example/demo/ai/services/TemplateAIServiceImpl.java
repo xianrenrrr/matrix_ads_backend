@@ -525,13 +525,20 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 // - Extract keyframe
                 // - Detect objects (YOLO for now, will be replaced with Qwen VL grounding)
                 // - Qwen VL analysis
+                String scriptLine = scene.getScriptLine();
+                log.info("🎬 Analyzing scene {} - ScriptLine: \"{}\"", 
+                    scene.getSceneNumber(),
+                    scriptLine != null && !scriptLine.isEmpty() 
+                        ? (scriptLine.length() > 80 ? scriptLine.substring(0, 80) + "..." : scriptLine)
+                        : "(empty)");
+                
                 SceneAnalysisResult analysis = sceneAnalysisService.analyzeScene(
                     videoUrl,
                     null, // No provided regions - auto-detect
                     language,
                     startTime,
                     endTime,
-                    scene.getScriptLine() // Pass scriptLine for context
+                    scriptLine // Pass scriptLine for context
                 );
                 
                 // Apply analysis results to scene

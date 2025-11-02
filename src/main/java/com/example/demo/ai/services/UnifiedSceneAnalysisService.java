@@ -139,9 +139,11 @@ public class UnifiedSceneAnalysisService {
             // Step 2: Call Qwen VL for scene analysis with object grounding (bounding boxes)
             log.info("[UNIFIED] Calling Qwen VL for scene analysis with object grounding");
             if (subtitleText != null && !subtitleText.isEmpty()) {
-                log.info("[UNIFIED] Including subtitle context: \"{}\"", 
+                log.info("[UNIFIED] ✅ Including scriptLine context for keyElements extraction: \"{}\"", 
                     subtitleText.substring(0, Math.min(50, subtitleText.length())) + 
                     (subtitleText.length() > 50 ? "..." : ""));
+            } else {
+                log.warn("[UNIFIED] ⚠️ No scriptLine context - keyElements extraction will be based on visual only");
             }
             
             // Create a dummy full-frame region for Qwen VL (it will detect objects and return bounding boxes)

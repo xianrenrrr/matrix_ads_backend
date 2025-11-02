@@ -1098,9 +1098,47 @@ public class ContentManager {
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }
     
-    // Removed getTemplateAssignments - unused endpoint (0 references)
-    
-    // Removed renewAssignment - unused endpoint (0 references)
+    /**
+     * Get all assignments for a template
+     * GET /content-manager/templates/{templateId}/assignments
+     */
+    @GetMapping("/{templateId}/assignments")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getTemplateAssignments(
+            @PathVariable String templateId,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        List<com.example.demo.model.TemplateAssignment> assignments = 
+            templateAssignmentDao.getAssignmentsByTemplate(templateId);
+        
+        // Convert to response format
+        List<Map<String, Object>> results = new ArrayList<>();
+        for (com.example.demo.model.TemplateAssignment assignment : assignments) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("id", assignment.getId());
+            result.put("groupId", assignment.getGroupId());
+            result.put("pushedAt", assignment.getPushedAt());
+            result.put("expiresAt", assignment.getExpiresAt());
+            result.put("durationDays", assignment.getDurationDays());
+            result.put("daysUntilExpiry", assignment.getDaysUntilExpiry());
+            result.put("isExpired", assignment.isExpired());
+            
+            // Get group name
+            try {
+                com.example.demo.model.Group group = groupDao.findById(assignment.getGroupId());
+                if (group != null) {
+                    result.put("groupName", group.getGroupName());
+                }
+            } catch (Exception e) {
+                // Continue without group name
+            }
+            
+            results.add(result);
+        }
+        
+        String message = i18nService.getMessage("operation.success", language);
+        return ResponseEntity.ok(ApiResponse.ok(message, results));
+    }
     
     /**
      * Delete an assignment
