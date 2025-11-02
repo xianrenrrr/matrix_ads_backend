@@ -1,6 +1,5 @@
 package com.example.demo.ai.services;
 
-import com.example.demo.ai.seg.SegmentationService;
 import com.example.demo.ai.seg.dto.*;
 import com.example.demo.ai.label.ObjectLabelService;
 import com.example.demo.model.Scene;
@@ -35,9 +34,6 @@ public class UnifiedSceneAnalysisService {
     
     @Autowired
     private KeyframeExtractionService keyframeService;
-    
-    @Autowired
-    private SegmentationService segmentationService;
     
     @Autowired
     private ObjectLabelService objectLabelService;
