@@ -72,6 +72,8 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
                 assignments.add(assignment);
             }
         }
+        
+        System.out.println("✅ Loaded " + assignments.size() + " active assignments for group: " + groupId);
         return assignments;
     }
     
@@ -176,9 +178,36 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
         Object templateSnapshotData = doc.get("templateSnapshot");
         if (templateSnapshotData != null) {
             try {
-                // Use Gson with proper configuration for nested objects
+                // Use Gson with proper configuration for Firestore Timestamp objects
                 com.google.gson.GsonBuilder gsonBuilder = new com.google.gson.GsonBuilder();
-                gsonBuilder.setDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+                
+                // Register custom deserializer for Date fields (handles Firestore Timestamps)
+                gsonBuilder.registerTypeAdapter(java.util.Date.class, new com.google.gson.JsonDeserializer<java.util.Date>() {
+                    @Override
+                    public java.util.Date deserialize(com.google.gson.JsonElement json, java.lang.reflect.Type typeOfT, 
+                                                      com.google.gson.JsonDeserializationContext context) {
+                        if (json.isJsonPrimitive() && json.getAsJsonPrimitive().isString()) {
+                            // Handle string dates
+                            try {
+                                return new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ").parse(json.getAsString());
+                            } catch (Exception e) {
+                                return null;
+                            }
+                        } else if (json.isJsonObject()) {
+                            // Handle Firestore Timestamp objects {seconds: ..., nanoseconds: ...}
+                            com.google.gson.JsonObject obj = json.getAsJsonObject();
+                            if (obj.has("seconds")) {
+                                long seconds = obj.get("seconds").getAsLong();
+                                return new java.util.Date(seconds * 1000);
+                            }
+                        } else if (json.isJsonPrimitive() && json.getAsJsonPrimitive().isNumber()) {
+                            // Handle epoch milliseconds
+                            return new java.util.Date(json.getAsLong());
+                        }
+                        return null;
+                    }
+                });
+                
                 com.google.gson.Gson gson = gsonBuilder.create();
                 
                 String json = gson.toJson(templateSnapshotData);
@@ -187,7 +216,7 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
                 System.out.println("=== DESERIALIZING TEMPLATE SNAPSHOT ===");
                 System.out.println("Assignment ID: " + doc.getId());
                 System.out.println("JSON length: " + json.length());
-                System.out.println("JSON preview: " + (json.length() > 200 ? json.substring(0, 200) + "..." : json));
+                System.out.println("JSON preview: " + (json.length() > 300 ? json.substring(0, 300) + "..." : json));
                 
                 com.example.demo.model.ManualTemplate snapshot = 
                     gson.fromJson(json, com.example.demo.model.ManualTemplate.class);

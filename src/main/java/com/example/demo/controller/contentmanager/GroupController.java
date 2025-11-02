@@ -469,6 +469,7 @@ public class GroupController {
     
     /**
      * Get active template assignments for a group (for mini program)
+     * Returns SUMMARY data only - not full template with scenes
      * GET /content-manager/groups/{groupId}/templates
      */
     @GetMapping("/{groupId}/templates")
@@ -477,7 +478,7 @@ public class GroupController {
             @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
-        // Get active assignments for this group
+        // Get active assignments for this group (without full template deserialization)
         List<com.example.demo.model.TemplateAssignment> assignments = 
             templateAssignmentDao.getAssignmentsByGroup(groupId);
         
@@ -488,6 +489,7 @@ public class GroupController {
                 continue;
             }
             
+            // Get ONLY summary fields from snapshot (avoid deserializing full template)
             ManualTemplate snapshot = assignment.getTemplateSnapshot();
             
             Map<String, Object> templateData = new HashMap<>();
@@ -495,7 +497,7 @@ public class GroupController {
             templateData.put("id", assignment.getId());
             templateData.put("masterTemplateId", assignment.getMasterTemplateId());
             
-            // Handle null snapshot gracefully - EXACT SAME LOGIC AS UserController
+            // Extract only essential fields (no scenes, no AI metadata)
             if (snapshot != null) {
                 templateData.put("templateTitle", snapshot.getTemplateTitle());
                 templateData.put("templateDescription", snapshot.getTemplateDescription());
@@ -510,6 +512,8 @@ public class GroupController {
                     thumbnailUrl = convertToProxyUrl(thumbnailUrl);
                 }
                 templateData.put("thumbnailUrl", thumbnailUrl);
+                
+                // Count scenes without including scene data
                 templateData.put("sceneCount", snapshot.getScenes() != null ? snapshot.getScenes().size() : 0);
             } else {
                 // Fallback values if snapshot is null
