@@ -174,7 +174,15 @@ public class AzureVideoIndexerExtractor {
             // Step 4: Get full insights JSON
             JsonNode insightsJson = getFullInsights(videoId, accessToken);
             
-            // Step 5: Parse all insights
+            // Step 5: Extract duration from top-level response
+            if (insightsJson.has("durationInSeconds")) {
+                result.durationInSeconds = insightsJson.get("durationInSeconds").asLong();
+                log.info("✅ Video duration: {} seconds", result.durationInSeconds);
+            } else {
+                log.warn("⚠️ No durationInSeconds field in Azure response");
+            }
+            
+            // Step 6: Parse all insights
             result.transcript = parseTranscript(insightsJson);
             result.ocr = parseOCR(insightsJson);
             result.scenes = parseScenes(insightsJson);
@@ -183,6 +191,7 @@ public class AzureVideoIndexerExtractor {
             result.detectedObjects = parseDetectedObjects(insightsJson);
             
             log.info("✅ Full extraction complete:");
+            log.info("  - Duration: {} seconds", result.durationInSeconds);
             log.info("  - Transcript: {} segments", result.transcript.size());
             log.info("  - OCR: {} segments", result.ocr.size());
             log.info("  - Scenes: {}", result.scenes.size());
@@ -900,6 +909,7 @@ public class AzureVideoIndexerExtractor {
      * Complete Azure Video Indexer result with all insights
      */
     public static class AzureVideoIndexerResult {
+        public long durationInSeconds = 0; // Video duration from Azure
         public List<SubtitleSegment> transcript = new ArrayList<>();
         public List<SubtitleSegment> ocr = new ArrayList<>();
         public List<AzureScene> scenes = new ArrayList<>();

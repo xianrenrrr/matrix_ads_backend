@@ -486,11 +486,14 @@ public class ContentManager {
     @Autowired
     private com.example.demo.ai.label.ObjectLabelService objectLabelService;
     
-    @Autowired(required = false)
-    private com.example.demo.ai.subtitle.ASRSubtitleExtractor asrSubtitleExtractor;
-    
     @Autowired
     private com.example.demo.service.AlibabaOssStorageService alibabaOssStorageService;
+    
+    @Autowired
+    private com.example.demo.ai.subtitle.AzureVideoIndexerExtractor azureExtractor;
+    
+    @Autowired
+    private com.example.demo.ai.services.TemplateAIServiceImpl templateAIService;
     
     /**
      * Create manual template with AI analysis for each scene video.
@@ -539,126 +542,47 @@ public class ContentManager {
             
             log.info("Processing scene {}: {}", metadata.getSceneNumber(), metadata.getSceneTitle());
             
-            // 1. Get video duration using FFmpeg (MUST BE BEFORE UPLOAD!)
-            log.info("🎬 Extracting duration for scene {} video file: {}", metadata.getSceneNumber(), videoFile.getOriginalFilename());
-            long videoDurationSeconds = 0;
-            try {
-                // Save video to temp file for duration extraction (copy bytes, don't use transferTo)
-                java.io.File tempVideo = java.io.File.createTempFile("duration-", ".mp4");
-                log.info("📁 Created temp file: {}", tempVideo.getAbsolutePath());
-                
-                // Copy bytes from multipart file to temp file
-                try (java.io.InputStream is = videoFile.getInputStream();
-                     java.io.FileOutputStream fos = new java.io.FileOutputStream(tempVideo)) {
-                    byte[] buffer = new byte[8192];
-                    int bytesRead;
-                    while ((bytesRead = is.read(buffer)) != -1) {
-                        fos.write(buffer, 0, bytesRead);
-                    }
-                }
-                log.info("✅ Video file copied to temp location, size: {} bytes", tempVideo.length());
-                
-                // Use FFprobe to get duration
-                ProcessBuilder pb = new ProcessBuilder(
-                    "ffprobe", "-v", "error", "-show_entries", "format=duration",
-                    "-of", "default=noprint_wrappers=1:nokey=1", tempVideo.getAbsolutePath()
-                );
-                log.info("🔧 Running FFprobe command...");
-                Process proc = pb.start();
-                java.io.BufferedReader reader = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(proc.getInputStream())
-                );
-                String durationStr = reader.readLine();
-                int exitCode = proc.waitFor();
-                tempVideo.delete();
-                
-                log.info("FFprobe exit code: {}, output: '{}'", exitCode, durationStr);
-                
-                if (durationStr != null && !durationStr.isEmpty()) {
-                    videoDurationSeconds = (long) Double.parseDouble(durationStr);
-                    log.info("✅ SUCCESS: Video duration for scene {}: {} seconds", metadata.getSceneNumber(), videoDurationSeconds);
-                } else {
-                    log.error("❌ FAILED: FFprobe returned empty duration for scene {}", metadata.getSceneNumber());
-                }
-            } catch (Exception e) {
-                log.error("❌ EXCEPTION: Failed to extract video duration for scene {}: {} - {}", 
-                    metadata.getSceneNumber(), e.getClass().getSimpleName(), e.getMessage());
-                e.printStackTrace();
-                // Continue without duration - will default to 0
-            }
-            
-            // 2. Upload video to OSS (AFTER duration extraction)
+            // 1. Upload video to OSS
             String videoId = java.util.UUID.randomUUID().toString();
             com.example.demo.model.Video video = videoDao.uploadAndSaveVideo(videoFile, userId, videoId);
             log.info("✅ Video uploaded to OSS: {}", video.getUrl());
             
-            // 3. Update video with duration
-            log.info("💾 Updating Video object with duration: {} seconds", videoDurationSeconds);
-            video.setDurationSeconds(videoDurationSeconds);
-            videoDao.updateVideo(video);
-            log.info("✅ Video saved with ID: {}, duration: {} seconds", videoId, videoDurationSeconds);
+            // 2. Extract full insights using Azure Video Indexer
+            log.info("🎬 Extracting full insights for scene {} using Azure Video Indexer", metadata.getSceneNumber());
+            com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureVideoIndexerResult azureResult = null;
+            long videoDurationSeconds = 0;
             
-            // 4. Extract speech transcript using ASR (per scene video)
-            List<com.example.demo.ai.subtitle.SubtitleSegment> subtitles = null;
-            if (asrSubtitleExtractor != null) {
-                try {
-                    log.info("🎤 Extracting speech transcript for scene {} using ASR", metadata.getSceneNumber());
+            try {
+                // Generate signed URL with 2 hours expiration for Azure processing
+                String signedUrl = alibabaOssStorageService.generateSignedUrl(video.getUrl(), 2, java.util.concurrent.TimeUnit.HOURS);
+                log.info("✅ Generated signed URL for Azure (expires in 2 hours)");
+                
+                azureResult = azureExtractor.extractFullInsights(signedUrl);
+                
+                if (azureResult != null) {
+                    // Extract duration from Azure result
+                    videoDurationSeconds = azureResult.durationInSeconds;
                     
-                    // Generate signed URL with 1 hour expiration for ASR processing
-                    String signedUrl = alibabaOssStorageService.generateSignedUrl(video.getUrl(), 60, java.util.concurrent.TimeUnit.MINUTES);
-                    log.info("✅ Generated signed URL for ASR (expires in 1 hour)");
+                    log.info("✅ Azure extracted: {} transcript, {} OCR, {} objects, duration: {}s", 
+                        azureResult.transcript.size(),
+                        azureResult.ocr.size(),
+                        azureResult.detectedObjects.size(),
+                        videoDurationSeconds);
                     
-                    subtitles = asrSubtitleExtractor.extract(signedUrl, language);
-                    
-                    if (subtitles != null && !subtitles.isEmpty()) {
-                        log.info("✅ ASR extracted {} segments", subtitles.size());
-                    } else {
-                        log.warn("⚠️ ASR returned empty transcript for scene {}", metadata.getSceneNumber());
-                    }
-                } catch (Exception e) {
-                    log.warn("⚠️ ASR extraction failed for scene {}: {} - {}", 
-                             metadata.getSceneNumber(), e.getClass().getSimpleName(), e.getMessage());
-                    // Continue without transcript
+                    // Update video with duration from Azure
+                    video.setDurationSeconds(videoDurationSeconds);
+                    videoDao.updateVideo(video);
+                    log.info("✅ Video duration updated: {} seconds", videoDurationSeconds);
+                } else {
+                    log.warn("⚠️ Azure returned null result for scene {}", metadata.getSceneNumber());
                 }
-            } else {
-                log.warn("⚠️ ASR service not available, scene {} will not have scriptLine", metadata.getSceneNumber());
+            } catch (Exception e) {
+                log.error("❌ Azure extraction failed for scene {}: {} - {}", 
+                         metadata.getSceneNumber(), e.getClass().getSimpleName(), e.getMessage());
+                // Continue without Azure data
             }
             
-            // 4.5. Clean scriptLine BEFORE scene analysis (simplified for single scene)
-            String cleanedScriptLine = null;
-            if (subtitles != null && !subtitles.isEmpty()) {
-                log.info("🎤 Cleaning scriptLine for scene {} BEFORE VL analysis", metadata.getSceneNumber());
-                try {
-                    // Convert ASR segments to Map format
-                    List<Map<String, Object>> asrMaps = new ArrayList<>();
-                    for (com.example.demo.ai.subtitle.SubtitleSegment seg : subtitles) {
-                        Map<String, Object> asrObj = new HashMap<>();
-                        asrObj.put("startMs", seg.getStartTimeMs());
-                        asrObj.put("endMs", seg.getEndTimeMs());
-                        asrObj.put("text", seg.getText());
-                        asrMaps.add(asrObj);
-                    }
-                    
-                    // Call simplified single-scene cleaning (no scene matching needed)
-                    cleanedScriptLine = objectLabelService.cleanSingleScriptLine(
-                        asrMaps,
-                        templateDescription,  // video description
-                        metadata.getSceneDescription()  // scene description
-                    );
-                    
-                    if (cleanedScriptLine != null && !cleanedScriptLine.isEmpty()) {
-                        log.info("✅ Scene {} scriptLine cleaned: \"{}\"", 
-                            metadata.getSceneNumber(), cleanedScriptLine);
-                    } else {
-                        log.warn("⚠️ Scene {} scriptLine cleaning returned empty", metadata.getSceneNumber());
-                    }
-                } catch (Exception e) {
-                    log.error("❌ Failed to clean scriptLine for scene {}: {}", 
-                        metadata.getSceneNumber(), e.getMessage());
-                }
-            }
-            
-            // 5. Analyze as single scene using UnifiedSceneAnalysisService
+            // 5. Create Scene object
             log.info("🎬 Creating Scene object for scene {}", metadata.getSceneNumber());
             com.example.demo.model.Scene aiScene = new com.example.demo.model.Scene();
             aiScene.setSceneSource("manual");
@@ -666,38 +590,34 @@ public class ContentManager {
             aiScene.setSceneTitle(metadata.getSceneTitle());
             aiScene.setSceneDescription(metadata.getSceneDescription());
             aiScene.setVideoId(videoId);
-            aiScene.setSceneDurationInSeconds(videoDurationSeconds); // Set duration from video metadata
-            // Set cleaned scriptLine (already cleaned before VL analysis)
-            if (cleanedScriptLine != null) {
-                aiScene.setScriptLine(cleanedScriptLine);
-            }
+            aiScene.setStartTimeMs(0); // Entire video = 1 scene
+            aiScene.setEndTimeMs(videoDurationSeconds * 1000); // Convert to ms
+            aiScene.setSceneDurationInSeconds(videoDurationSeconds);
             log.info("✅ Scene {} duration set to: {} seconds", metadata.getSceneNumber(), videoDurationSeconds);
             
-            // 6. Analyze the video for AI metadata (VL analysis, overlays, etc.)
-            try {
-                if (unifiedSceneAnalysisService == null) {
-                    log.error("❌ UnifiedSceneAnalysisService is NULL - service not autowired!");
-                } else {
-                    log.info("✅ Calling UnifiedSceneAnalysisService for scene {} with videoUrl: {}", 
-                        metadata.getSceneNumber(), 
-                        video.getUrl() != null ? video.getUrl().substring(0, Math.min(80, video.getUrl().length())) : "null");
-                    
-                    com.example.demo.ai.services.SceneAnalysisResult analysisResult = 
-                        unifiedSceneAnalysisService.analyzeScene(video.getUrl(), language, null, null);
-                    
-                    log.info("✅ UnifiedSceneAnalysisService returned result for scene {}", metadata.getSceneNumber());
-                    
-                    if (analysisResult == null) {
-                        log.warn("⚠️ Analysis result is NULL for scene {}", metadata.getSceneNumber());
-                    } else {
-                        analysisResult.applyToScene(aiScene);
-                        log.info("✅ Applied analysis result to scene {}", metadata.getSceneNumber());
-                    }
+            // 6. Process scene with Azure data (REUSE AI template method)
+            if (azureResult != null) {
+                try {
+                    log.info("✅ Processing scene {} with Azure data using shared method", metadata.getSceneNumber());
+                    templateAIService.processSingleSceneWithAzure(aiScene, video.getUrl(), azureResult, language);
+                    log.info("✅ Scene {} processed successfully", metadata.getSceneNumber());
+                } catch (Exception e) {
+                    log.error("❌ Scene processing failed for scene {}: {} - {}", 
+                        metadata.getSceneNumber(), e.getClass().getSimpleName(), e.getMessage(), e);
+                    // Continue with basic scene
                 }
-            } catch (Exception e) {
-                log.error("❌ Scene analysis failed for scene {}: {} - {}", 
-                    metadata.getSceneNumber(), e.getClass().getSimpleName(), e.getMessage(), e);
-                // Continue with basic scene
+            } else {
+                log.warn("⚠️ Skipping scene processing for scene {} (no Azure data)", metadata.getSceneNumber());
+            }
+            
+            // 7. Override keyElements with user-provided values (PM requirement)
+            // For manual templates, users provide keyElements, not AI
+            if (metadata.getKeyElements() != null && !metadata.getKeyElements().isEmpty()) {
+                aiScene.setKeyElements(metadata.getKeyElements());
+                log.info("✅ Set user-provided keyElements for scene {}: {}", 
+                    metadata.getSceneNumber(), metadata.getKeyElements());
+            } else {
+                log.warn("⚠️ No keyElements provided by user for scene {}", metadata.getSceneNumber());
             }
             
             // Fallback to grid if no overlay type set
@@ -802,6 +722,7 @@ public class ContentManager {
         private int sceneNumber;
         private String sceneTitle;
         private String sceneDescription;
+        private List<String> keyElements; // User-provided key elements (3 items)
         
         public SceneMetadata() {}
         
@@ -814,6 +735,11 @@ public class ContentManager {
         public String getSceneDescription() { return sceneDescription; }
         public void setSceneDescription(String sceneDescription) { 
             this.sceneDescription = sceneDescription; 
+        }
+        
+        public List<String> getKeyElements() { return keyElements; }
+        public void setKeyElements(List<String> keyElements) { 
+            this.keyElements = keyElements; 
         }
     }
     

@@ -938,6 +938,76 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         List<AzureInstance> instances = new ArrayList<>();
     }
     
+    /**
+     * Process a single scene video with Azure Video Indexer
+     * REUSABLE by both AI and Manual template creation
+     * 
+     * @param scene Scene object to populate
+     * @param videoUrl Video URL to analyze
+     * @param azureResult Azure Video Indexer result for this video
+     * @param language Language for analysis
+     */
+    public void processSingleSceneWithAzure(
+        Scene scene,
+        String videoUrl,
+        AzureVideoIndexerResult azureResult,
+        String language
+    ) {
+        log.info("[PROCESS-SCENE] Processing scene {} with Azure data", scene.getSceneNumber());
+        
+        // Step 1: Assign scriptLine (combine transcript + filtered OCR)
+        List<Scene> singleSceneList = Arrays.asList(scene);
+        assignScriptLines(singleSceneList, azureResult.transcript, azureResult.ocr);
+        log.info("[PROCESS-SCENE] ScriptLine assigned: \"{}\"", 
+            scene.getScriptLine() != null ? 
+                (scene.getScriptLine().length() > 80 ? scene.getScriptLine().substring(0, 80) + "..." : scene.getScriptLine()) 
+                : "(empty)");
+        
+        // Step 2: Get Azure object hints (all objects since entire video = 1 scene)
+        List<String> azureObjectHints = new ArrayList<>();
+        for (AzureDetectedObject obj : azureResult.detectedObjects) {
+            if (obj.displayName != null && !obj.displayName.isEmpty()) {
+                azureObjectHints.add(obj.displayName);
+            }
+        }
+        
+        if (!azureObjectHints.isEmpty()) {
+            log.info("[PROCESS-SCENE] Azure object hints: {}", azureObjectHints);
+        }
+        
+        // Step 3: Analyze scene with Qwen VL (using Azure hints)
+        try {
+            SceneAnalysisResult analysis = sceneAnalysisService.analyzeScene(
+                videoUrl,
+                null, // No provided regions - auto-detect
+                language,
+                Duration.ofMillis(scene.getStartTimeMs()),
+                Duration.ofMillis(scene.getEndTimeMs()),
+                scene.getScriptLine(), // Pass scriptLine for context
+                azureObjectHints // Pass Azure detected objects as hints
+            );
+            
+            // Apply analysis results to scene
+            scene.setKeyframeUrl(analysis.getKeyframeUrl());
+            scene.setOverlayType(analysis.getOverlayType());
+            scene.setOverlayObjects(analysis.getOverlayObjects());
+            scene.setOverlayPolygons(analysis.getOverlayPolygons());
+            scene.setSourceAspect(analysis.getSourceAspect());
+            scene.setShortLabelZh(analysis.getShortLabelZh());
+            scene.setVlRawResponse(analysis.getVlRawResponse());
+            scene.setVlSceneAnalysis(analysis.getVlSceneAnalysis());
+            scene.setKeyElements(analysis.getKeyElements());
+            
+            log.info("[PROCESS-SCENE] ✅ Scene {} analyzed: overlayType={}, keyElements={}",
+                scene.getSceneNumber(),
+                scene.getOverlayType(),
+                scene.getKeyElements() != null ? scene.getKeyElements().size() : 0);
+                
+        } catch (Exception e) {
+            log.error("[PROCESS-SCENE] Failed to analyze scene {}", scene.getSceneNumber(), e);
+        }
+    }
+    
     private static class AzureDetectedObject {
         int id;
         String type;
