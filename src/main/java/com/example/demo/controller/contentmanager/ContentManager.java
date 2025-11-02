@@ -590,9 +590,9 @@ public class ContentManager {
             aiScene.setSceneTitle(metadata.getSceneTitle());
             aiScene.setSceneDescription(metadata.getSceneDescription());
             aiScene.setVideoId(videoId);
-            aiScene.setStartTimeMs(0); // Entire video = 1 scene
-            aiScene.setEndTimeMs(videoDurationSeconds * 1000); // Convert to ms
-            aiScene.setSceneDurationInSeconds(videoDurationSeconds);
+            aiScene.setStartTimeMs(0L); // Entire video = 1 scene
+            aiScene.setEndTimeMs(videoDurationSeconds * 1000L); // Convert to ms
+            aiScene.setSceneDurationInSeconds((int) videoDurationSeconds);
             log.info("✅ Scene {} duration set to: {} seconds", metadata.getSceneNumber(), videoDurationSeconds);
             
             // 6. Process scene with Azure data (REUSE AI template method)

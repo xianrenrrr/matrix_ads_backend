@@ -23,8 +23,7 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
     @Autowired
     private SceneSubmissionDao sceneSubmissionDao;
 
-    @Autowired
-    private com.example.demo.ai.shared.GcsFileResolver gcsFileResolver;
+    // GcsFileResolver removed - now using OSS signed URLs directly
 
     @Override
     public String compileVideo(String templateId, String userId, String compiledBy) {
@@ -90,26 +89,20 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
     // - Viewers can read along with the video
     // - Better accessibility
     private String ffmpegConcatAndUpload(List<String> sourceUrls, String destObject) throws Exception {
-        // Resolve each source URL via GCS client (authenticated) to avoid 403s
-        List<java.io.File> tempFiles = new ArrayList<>();
-        List<com.example.demo.ai.shared.GcsFileResolver.ResolvedFile> resolvedHandles = new ArrayList<>();
+        // Generate signed URLs for OSS videos to avoid 403s
+        List<String> signedUrls = new ArrayList<>();
         java.io.File listFile = null;
         try {
             for (String url : sourceUrls) {
-                // Use GcsFileResolver for gs:// or https://storage.googleapis.com URLs
-                com.example.demo.ai.shared.GcsFileResolver.ResolvedFile resolved = gcsFileResolver.resolve(url);
-                resolvedHandles.add(resolved);
-                java.io.File f = new java.io.File(resolved.getPathAsString());
-                if (!f.exists() || f.length() == 0) {
-                    throw new IllegalStateException("Resolved file missing or empty for URL: " + url);
-                }
-                tempFiles.add(f);
+                // Generate signed URL for OSS video (2 hours expiration)
+                String signedUrl = ossStorageService.generateSignedUrl(url, 2, java.util.concurrent.TimeUnit.HOURS);
+                signedUrls.add(signedUrl);
             }
-            // Create concat list file for ffmpeg
+            // Create concat list file for ffmpeg with signed URLs
             listFile = java.io.File.createTempFile("concat-", ".txt");
             try (java.io.PrintWriter pw = new java.io.PrintWriter(listFile, java.nio.charset.StandardCharsets.UTF_8)) {
-                for (java.io.File f : tempFiles) {
-                    pw.println("file '" + f.getAbsolutePath().replace("'", "\\'") + "'");
+                for (String signedUrl : signedUrls) {
+                    pw.println("file '" + signedUrl + "'");
                 }
             }
             // Run ffmpeg concat demuxer
@@ -145,10 +138,7 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             outFile.delete();
             return url;
         } finally {
-            // Close resolved handles (will delete temp files they created)
-            for (com.example.demo.ai.shared.GcsFileResolver.ResolvedFile rf : resolvedHandles) {
-                try { if (rf != null) rf.close(); } catch (Exception ignored) {}
-            }
+            // Clean up temp files
             if (listFile != null) try { listFile.delete(); } catch (Exception ignored) {}
         }
     }
@@ -164,31 +154,28 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                 return videoUrl;
             }
             
-            // Download compiled video
-            com.example.demo.ai.shared.GcsFileResolver.ResolvedFile videoFile = gcsFileResolver.resolve(videoUrl);
+            // Generate signed URLs for video and BGM files
+            String videoSignedUrl = ossStorageService.generateSignedUrl(videoUrl, 2, java.util.concurrent.TimeUnit.HOURS);
             
-            // Download BGM files
-            List<java.io.File> bgmFiles = new ArrayList<>();
-            List<com.example.demo.ai.shared.GcsFileResolver.ResolvedFile> bgmHandles = new ArrayList<>();
+            List<String> bgmSignedUrls = new ArrayList<>();
+            for (String bgmUrl : bgmUrls) {
+                String bgmSignedUrl = ossStorageService.generateSignedUrl(bgmUrl, 2, java.util.concurrent.TimeUnit.HOURS);
+                bgmSignedUrls.add(bgmSignedUrl);
+            }
             
             try {
-                for (String bgmUrl : bgmUrls) {
-                    com.example.demo.ai.shared.GcsFileResolver.ResolvedFile bgmHandle = gcsFileResolver.resolve(bgmUrl);
-                    bgmHandles.add(bgmHandle);
-                    bgmFiles.add(bgmHandle.getPath().toFile());
-                }
                 
-                // Get video duration
-                double videoDuration = getVideoDuration(videoFile.getPath().toFile());
+                // Get video duration using signed URL
+                double videoDuration = getVideoDurationFromUrl(videoSignedUrl);
                 
-                // Create BGM concat file (loop if needed)
-                java.io.File bgmConcatFile = createBGMConcatFile(bgmFiles, videoDuration);
+                // Create BGM concat file (loop if needed) using signed URLs
+                java.io.File bgmConcatFile = createBGMConcatFileFromUrls(bgmSignedUrls, videoDuration);
                 
                 // Mix video with BGM
                 java.io.File outputFile = java.io.File.createTempFile("compiled-bgm-", ".mp4");
                 
                 try {
-                    mixVideoWithBGM(videoFile.getPath().toFile(), bgmConcatFile, outputFile, bgmVolume);
+                    mixVideoWithBGMFromUrl(videoSignedUrl, bgmConcatFile, outputFile, bgmVolume);
                     
                     // Upload final video
                     String compositeVideoId = userId + "_" + templateId;
@@ -202,10 +189,7 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                 }
                 
             } finally {
-                videoFile.close();
-                for (com.example.demo.ai.shared.GcsFileResolver.ResolvedFile handle : bgmHandles) {
-                    try { handle.close(); } catch (Exception ignored) {}
-                }
+                // No cleanup needed for signed URLs
             }
             
         } catch (Exception e) {
@@ -214,12 +198,12 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
     }
     
     /**
-     * Get video duration in seconds
+     * Get video duration in seconds from URL
      */
-    private double getVideoDuration(java.io.File videoFile) throws Exception {
+    private double getVideoDurationFromUrl(String videoUrl) throws Exception {
         ProcessBuilder pb = new ProcessBuilder(
             "ffprobe", "-v", "error", "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1", videoFile.getAbsolutePath()
+            "-of", "default=noprint_wrappers=1:nokey=1", videoUrl
         );
         Process proc = pb.start();
         java.io.BufferedReader reader = new java.io.BufferedReader(
@@ -231,13 +215,13 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
     }
     
     /**
-     * Create concatenated BGM file that loops to match video duration
+     * Create concatenated BGM file that loops to match video duration using signed URLs
      */
-    private java.io.File createBGMConcatFile(List<java.io.File> bgmFiles, double videoDuration) throws Exception {
+    private java.io.File createBGMConcatFileFromUrls(List<String> bgmUrls, double videoDuration) throws Exception {
         // Calculate total BGM duration
         double totalBGMDuration = 0;
-        for (java.io.File bgmFile : bgmFiles) {
-            totalBGMDuration += getVideoDuration(bgmFile);
+        for (String bgmUrl : bgmUrls) {
+            totalBGMDuration += getVideoDurationFromUrl(bgmUrl);
         }
         
         // Create concat list with looping
@@ -245,9 +229,9 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
         try (java.io.PrintWriter pw = new java.io.PrintWriter(concatList, java.nio.charset.StandardCharsets.UTF_8)) {
             double currentDuration = 0;
             while (currentDuration < videoDuration) {
-                for (java.io.File bgmFile : bgmFiles) {
-                    pw.println("file '" + bgmFile.getAbsolutePath().replace("'", "'\\''") + "'");
-                    currentDuration += getVideoDuration(bgmFile);
+                for (String bgmUrl : bgmUrls) {
+                    pw.println("file '" + bgmUrl + "'");
+                    currentDuration += getVideoDurationFromUrl(bgmUrl);
                     if (currentDuration >= videoDuration) break;
                 }
             }
@@ -272,14 +256,14 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
     }
     
     /**
-     * Mix video with background music
+     * Mix video with background music using signed URL
      */
-    private void mixVideoWithBGM(java.io.File videoFile, java.io.File bgmFile, java.io.File outputFile, double bgmVolume) throws Exception {
+    private void mixVideoWithBGMFromUrl(String videoUrl, java.io.File bgmFile, java.io.File outputFile, double bgmVolume) throws Exception {
         // Use FFmpeg to mix video with BGM
         // -filter_complex "[1:a]volume=<volume>[a1];[0:a][a1]amix=inputs=2:duration=shortest[aout]"
         ProcessBuilder pb = new ProcessBuilder(
             "ffmpeg", "-y",
-            "-i", videoFile.getAbsolutePath(),
+            "-i", videoUrl,
             "-i", bgmFile.getAbsolutePath(),
             "-filter_complex", String.format("[1:a]volume=%.2f[a1];[0:a][a1]amix=inputs=2:duration=shortest[aout]", bgmVolume),
             "-map", "0:v",

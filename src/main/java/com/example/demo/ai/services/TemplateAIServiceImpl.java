@@ -111,7 +111,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             
             // Step 1: Azure Video Indexer - Single comprehensive call
             log.info("[STEP 1] Calling Azure Video Indexer...");
-            AzureVideoIndexerResult azureResult = indexVideoWithAzure(videoUrl);
+            com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureVideoIndexerResult azureResult = indexVideoWithAzure(videoUrl);
             
             if (azureResult == null) {
                 log.error("Azure Video Indexer failed");
@@ -165,7 +165,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
      * Index video with Azure Video Indexer
      * Returns comprehensive video insights in one call
      */
-    private AzureVideoIndexerResult indexVideoWithAzure(String videoUrl) {
+    private com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureVideoIndexerResult indexVideoWithAzure(String videoUrl) {
         try {
             // Generate signed URL for Azure Video Indexer (2 hours expiration for long videos)
             String signedUrl = videoUrl;
@@ -178,85 +178,13 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             AzureVideoIndexerExtractor.AzureVideoIndexerResult azureResult = 
                 azureExtractor.extractFullInsights(signedUrl);
             
-            // Convert to our internal format
-            AzureVideoIndexerResult result = new AzureVideoIndexerResult();
-            result.transcript = azureResult.transcript;
-            result.ocr = azureResult.ocr;
-            
-            // Convert Azure scenes
-            for (AzureVideoIndexerExtractor.AzureScene azScene : azureResult.scenes) {
-                AzureScene scene = new AzureScene();
-                scene.id = azScene.id;
-                scene.startMs = azScene.startMs;
-                scene.endMs = azScene.endMs;
-                result.scenes.add(scene);
-            }
-            
-            // Convert Azure shots
-            for (AzureVideoIndexerExtractor.AzureShot azShot : azureResult.shots) {
-                AzureShot shot = new AzureShot();
-                shot.id = azShot.id;
-                shot.startMs = azShot.startMs;
-                shot.endMs = azShot.endMs;
-                shot.keyframes = new ArrayList<>();
-                
-                for (AzureVideoIndexerExtractor.AzureKeyframe azKf : azShot.keyframes) {
-                    AzureKeyframe kf = new AzureKeyframe();
-                    kf.id = azKf.id;
-                    kf.thumbnailId = azKf.thumbnailId;
-                    kf.startMs = azKf.startMs;
-                    shot.keyframes.add(kf);
-                }
-                
-                result.shots.add(shot);
-            }
-            
-            // Convert Azure labels
-            for (AzureVideoIndexerExtractor.AzureLabel azLabel : azureResult.labels) {
-                AzureLabel label = new AzureLabel();
-                label.id = azLabel.id;
-                label.name = azLabel.name;
-                label.confidence = azLabel.confidence;
-                label.instances = new ArrayList<>();
-                
-                for (AzureVideoIndexerExtractor.AzureInstance azInst : azLabel.instances) {
-                    AzureInstance inst = new AzureInstance();
-                    inst.confidence = azInst.confidence;
-                    inst.startMs = azInst.startMs;
-                    inst.endMs = azInst.endMs;
-                    label.instances.add(inst);
-                }
-                
-                result.labels.add(label);
-            }
-            
-            // Convert Azure detected objects
-            for (AzureVideoIndexerExtractor.AzureDetectedObject azObj : azureResult.detectedObjects) {
-                AzureDetectedObject obj = new AzureDetectedObject();
-                obj.id = azObj.id;
-                obj.type = azObj.type;
-                obj.displayName = azObj.displayName;
-                obj.thumbnailId = azObj.thumbnailId;
-                obj.instances = new ArrayList<>();
-                
-                for (AzureVideoIndexerExtractor.AzureInstance azInst : azObj.instances) {
-                    AzureInstance inst = new AzureInstance();
-                    inst.confidence = azInst.confidence;
-                    inst.startMs = azInst.startMs;
-                    inst.endMs = azInst.endMs;
-                    obj.instances.add(inst);
-                }
-                
-                result.detectedObjects.add(obj);
-            }
-            
             // Fallback: If no scenes from Azure, create default scenes
-            if (result.scenes.isEmpty() && !result.transcript.isEmpty()) {
+            if (azureResult.scenes.isEmpty() && !azureResult.transcript.isEmpty()) {
                 log.warn("No scenes from Azure, creating default 10-second scenes");
-                result.scenes = createDefaultScenes(result.transcript);
+                azureResult.scenes = createDefaultScenes(azureResult.transcript);
             }
             
-            return result;
+            return azureResult;
             
         } catch (Exception e) {
             log.error("Azure indexing failed", e);
@@ -267,8 +195,8 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     /**
      * Create default scenes from subtitles (temporary until full Azure integration)
      */
-    private List<AzureScene> createDefaultScenes(List<SubtitleSegment> subtitles) {
-        List<AzureScene> scenes = new ArrayList<>();
+    private List<com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureScene> createDefaultScenes(List<SubtitleSegment> subtitles) {
+        List<com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureScene> scenes = new ArrayList<>();
         
         if (subtitles.isEmpty()) {
             return scenes;
@@ -281,7 +209,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         
         int sceneId = 1;
         for (long start = videoStart; start < videoEnd; start += sceneDuration) {
-            AzureScene scene = new AzureScene();
+            com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureScene scene = new com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureScene();
             scene.id = sceneId++;
             scene.startMs = start;
             scene.endMs = Math.min(start + sceneDuration, videoEnd);
@@ -294,11 +222,11 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     /**
      * Create Scene objects from Azure scene boundaries
      */
-    private List<Scene> createScenesFromAzure(List<AzureScene> azureScenes) {
+    private List<Scene> createScenesFromAzure(List<com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureScene> azureScenes) {
         List<Scene> scenes = new ArrayList<>();
         
         for (int i = 0; i < azureScenes.size(); i++) {
-            AzureScene azureScene = azureScenes.get(i);
+            com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureScene azureScene = azureScenes.get(i);
             
             Scene scene = new Scene();
             scene.setSceneNumber(i + 1);
@@ -509,7 +437,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     private void analyzeScenes(
         List<Scene> scenes,
         String videoUrl,
-        AzureVideoIndexerResult azureResult,
+        com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureVideoIndexerResult azureResult,
         String language
     ) {
         for (Scene scene : scenes) {
@@ -595,7 +523,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
      * Returns list of object display names that appear in this scene
      */
     private List<String> filterAzureObjectsForScene(
-        List<AzureDetectedObject> detectedObjects,
+        List<com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureDetectedObject> detectedObjects,
         long sceneStartMs,
         long sceneEndMs
     ) {
@@ -605,10 +533,10 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             return hints;
         }
         
-        for (AzureDetectedObject obj : detectedObjects) {
+        for (com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureDetectedObject obj : detectedObjects) {
             // Check if any instance of this object overlaps with the scene
             boolean overlaps = false;
-            for (AzureInstance inst : obj.instances) {
+            for (com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureInstance inst : obj.instances) {
                 // Check if instance overlaps with scene
                 if (inst.startMs < sceneEndMs && inst.endMs > sceneStartMs) {
                     overlaps = true;
@@ -898,45 +826,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         }
     }
     
-    // ========== Data Classes ==========
-    
-    /**
-     * Azure Video Indexer complete result
-     */
-    private static class AzureVideoIndexerResult {
-        List<SubtitleSegment> transcript = new ArrayList<>();
-        List<SubtitleSegment> ocr = new ArrayList<>();
-        List<AzureScene> scenes = new ArrayList<>();
-        List<AzureShot> shots = new ArrayList<>();
-        List<AzureLabel> labels = new ArrayList<>();
-        List<AzureDetectedObject> detectedObjects = new ArrayList<>();
-    }
-    
-    private static class AzureScene {
-        int id;
-        long startMs;
-        long endMs;
-    }
-    
-    private static class AzureShot {
-        int id;
-        long startMs;
-        long endMs;
-        List<AzureKeyframe> keyframes = new ArrayList<>();
-    }
-    
-    private static class AzureKeyframe {
-        int id;
-        String thumbnailId;
-        long startMs;
-    }
-    
-    private static class AzureLabel {
-        int id;
-        String name;
-        double confidence;
-        List<AzureInstance> instances = new ArrayList<>();
-    }
+    // ========== Reusable Methods ==========
     
     /**
      * Process a single scene video with Azure Video Indexer
@@ -950,7 +840,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
     public void processSingleSceneWithAzure(
         Scene scene,
         String videoUrl,
-        AzureVideoIndexerResult azureResult,
+        com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureVideoIndexerResult azureResult,
         String language
     ) {
         log.info("[PROCESS-SCENE] Processing scene {} with Azure data", scene.getSceneNumber());
@@ -965,7 +855,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         
         // Step 2: Get Azure object hints (all objects since entire video = 1 scene)
         List<String> azureObjectHints = new ArrayList<>();
-        for (AzureDetectedObject obj : azureResult.detectedObjects) {
+        for (com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureDetectedObject obj : azureResult.detectedObjects) {
             if (obj.displayName != null && !obj.displayName.isEmpty()) {
                 azureObjectHints.add(obj.displayName);
             }
@@ -1006,19 +896,5 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         } catch (Exception e) {
             log.error("[PROCESS-SCENE] Failed to analyze scene {}", scene.getSceneNumber(), e);
         }
-    }
-    
-    private static class AzureDetectedObject {
-        int id;
-        String type;
-        String displayName;
-        String thumbnailId;
-        List<AzureInstance> instances = new ArrayList<>();
-    }
-    
-    private static class AzureInstance {
-        double confidence;
-        long startMs;
-        long endMs;
     }
 }
