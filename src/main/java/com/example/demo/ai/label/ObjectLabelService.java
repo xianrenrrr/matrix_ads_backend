@@ -33,6 +33,11 @@ public interface ObjectLabelService {
     
     // Enhanced API with subtitle context for better scene understanding
     default Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale, String subtitleText) {
+        return labelRegions(keyframeUrl, regions, locale, subtitleText, null);
+    }
+    
+    // Enhanced API with Azure object hints for targeted grounding
+    default Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale, String subtitleText, List<String> azureObjectHints) {
         return Collections.emptyMap();
     }
 

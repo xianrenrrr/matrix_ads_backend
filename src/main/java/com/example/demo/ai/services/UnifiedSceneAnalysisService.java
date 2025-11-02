@@ -80,11 +80,11 @@ public class UnifiedSceneAnalysisService {
         Duration startTime,
         Duration endTime
     ) {
-        return analyzeScene(videoUrl, providedRegions, language, startTime, endTime, null);
+        return analyzeScene(videoUrl, providedRegions, language, startTime, endTime, null, null);
     }
     
     /**
-     * Analyze a scene video with subtitle context
+     * Analyze a scene video with subtitle context (backward compatible)
      * 
      * @param videoUrl Video URL to analyze
      * @param providedRegions Optional regions (null = auto-detect with YOLO)
@@ -102,11 +102,36 @@ public class UnifiedSceneAnalysisService {
         Duration endTime,
         String subtitleText
     ) {
-        log.info("[UNIFIED] Analyzing scene: videoUrl={}, hasProvidedRegions={}, language={}, hasSubtitles={}", 
+        return analyzeScene(videoUrl, providedRegions, language, startTime, endTime, subtitleText, null);
+    }
+    
+    /**
+     * Analyze a scene video with subtitle context and Azure object hints
+     * 
+     * @param videoUrl Video URL to analyze
+     * @param providedRegions Optional regions (null = auto-detect with YOLO)
+     * @param language Language for analysis (zh-CN, en, etc.)
+     * @param startTime Optional start time for keyframe extraction
+     * @param endTime Optional end time for keyframe extraction
+     * @param subtitleText Optional subtitle text for this scene (enhances VL analysis)
+     * @param azureObjectHints Optional list of object names detected by Azure (for targeted grounding)
+     * @return SceneAnalysisResult with VL data
+     */
+    public SceneAnalysisResult analyzeScene(
+        String videoUrl,
+        List<Scene.ObjectOverlay> providedRegions,
+        String language,
+        Duration startTime,
+        Duration endTime,
+        String subtitleText,
+        List<String> azureObjectHints
+    ) {
+        log.info("[UNIFIED] Analyzing scene: videoUrl={}, hasProvidedRegions={}, language={}, hasSubtitles={}, azureHints={}", 
             videoUrl != null ? videoUrl.substring(0, Math.min(50, videoUrl.length())) + "..." : "null",
             providedRegions != null && !providedRegions.isEmpty(),
             language,
-            subtitleText != null && !subtitleText.isEmpty());
+            subtitleText != null && !subtitleText.isEmpty(),
+            azureObjectHints != null ? azureObjectHints : "none");
         
         SceneAnalysisResult result = new SceneAnalysisResult();
         
@@ -146,6 +171,12 @@ public class UnifiedSceneAnalysisService {
                 log.warn("[UNIFIED] ⚠️ No scriptLine context - keyElements extraction will be based on visual only");
             }
             
+            if (azureObjectHints != null && !azureObjectHints.isEmpty()) {
+                log.info("[UNIFIED] 🎯 Using Azure object hints for targeted grounding: {}", azureObjectHints);
+            } else {
+                log.info("[UNIFIED] No Azure object hints - Qwen VL will detect objects from scratch");
+            }
+            
             // Create a dummy full-frame region for Qwen VL (it will detect objects and return bounding boxes)
             List<ObjectLabelService.RegionBox> dummyRegion = new ArrayList<>();
             dummyRegion.add(new ObjectLabelService.RegionBox("full", 0.0, 0.0, 1.0, 1.0));
@@ -154,11 +185,13 @@ public class UnifiedSceneAnalysisService {
             
             try {
                 // Call Qwen VL - it will detect objects and return bounding boxes
+                // Pass Azure object hints for targeted grounding
                 vlResults = objectLabelService.labelRegions(
                     keyframeUrl, 
                     dummyRegion,
                     language != null ? language : "zh-CN",
-                    subtitleText  // Pass subtitle context to VL
+                    subtitleText,  // Pass subtitle context to VL
+                    azureObjectHints  // Pass Azure detected objects as hints
                 );
                 
                 // Step 4: Extract VL data
@@ -200,6 +233,10 @@ public class UnifiedSceneAnalysisService {
                 
                 for (ObjectLabelService.LabelResult lr : vlResults.values()) {
                     if (lr.box != null && lr.box.length == 4) {
+                        // Log raw box values from Qwen VL (0-1000 range)
+                        log.info("[UNIFIED-BOX-DEBUG] Raw box from Qwen VL: {} -> [{}, {}, {}, {}]", 
+                            lr.labelZh, lr.box[0], lr.box[1], lr.box[2], lr.box[3]);
+                        
                         // Convert from 0-1000 range to 0-1 normalized coordinates
                         Scene.ObjectOverlay obj = new Scene.ObjectOverlay();
                         obj.setLabelZh(lr.labelZh != null ? lr.labelZh : "未知");
@@ -210,9 +247,18 @@ public class UnifiedSceneAnalysisService {
                         obj.setY((float) lr.box[1] / 1000.0f);
                         obj.setWidth((float) lr.box[2] / 1000.0f);
                         obj.setHeight((float) lr.box[3] / 1000.0f);
-                        objects.add(obj);
-                        log.info("[UNIFIED] Created overlay object: {} at [{},{},{},{}]", 
+                        
+                        // Log normalized coordinates
+                        log.info("[UNIFIED-BOX-DEBUG] Normalized box: {} at [x:{}, y:{}, w:{}, h:{}] (0-1 range)", 
                             lr.labelZh, obj.getX(), obj.getY(), obj.getWidth(), obj.getHeight());
+                        
+                        // Check if box is too large (>40% of frame in either dimension)
+                        if (obj.getWidth() > 0.4f || obj.getHeight() > 0.4f) {
+                            log.warn("[UNIFIED-BOX-DEBUG] ⚠️ Large bounding box detected for {}: w={}, h={}", 
+                                lr.labelZh, obj.getWidth(), obj.getHeight());
+                        }
+                        
+                        objects.add(obj);
                     }
                 }
                 

@@ -520,10 +520,24 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 Duration startTime = Duration.ofMillis(scene.getStartTimeMs());
                 Duration endTime = Duration.ofMillis(scene.getEndTimeMs());
                 
+                // Filter Azure detected objects for this scene's time range
+                List<String> azureObjectHints = filterAzureObjectsForScene(
+                    azureResult.detectedObjects, 
+                    scene.getStartTimeMs(), 
+                    scene.getEndTimeMs()
+                );
+                
+                if (!azureObjectHints.isEmpty()) {
+                    log.info("🎯 Scene {} has {} Azure object hints: {}", 
+                        scene.getSceneNumber(), azureObjectHints.size(), azureObjectHints);
+                } else {
+                    log.info("⚠️ Scene {} has no Azure object hints", scene.getSceneNumber());
+                }
+                
                 // Analyze with UnifiedSceneAnalysisService
                 // This will:
                 // - Extract keyframe
-                // - Detect objects (YOLO for now, will be replaced with Qwen VL grounding)
+                // - Use Azure object hints for targeted Qwen VL grounding
                 // - Qwen VL analysis
                 String scriptLine = scene.getScriptLine();
                 log.info("🎬 Analyzing scene {} - ScriptLine: \"{}\"", 
@@ -538,7 +552,8 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                     language,
                     startTime,
                     endTime,
-                    scriptLine // Pass scriptLine for context
+                    scriptLine, // Pass scriptLine for context
+                    azureObjectHints // Pass Azure detected objects as hints
                 );
                 
                 // Apply analysis results to scene
@@ -575,7 +590,45 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         }
     }
     
-
+    /**
+     * Filter Azure detected objects for a specific scene time range
+     * Returns list of object display names that appear in this scene
+     */
+    private List<String> filterAzureObjectsForScene(
+        List<AzureDetectedObject> detectedObjects,
+        long sceneStartMs,
+        long sceneEndMs
+    ) {
+        List<String> hints = new ArrayList<>();
+        
+        if (detectedObjects == null || detectedObjects.isEmpty()) {
+            return hints;
+        }
+        
+        for (AzureDetectedObject obj : detectedObjects) {
+            // Check if any instance of this object overlaps with the scene
+            boolean overlaps = false;
+            for (AzureInstance inst : obj.instances) {
+                // Check if instance overlaps with scene
+                if (inst.startMs < sceneEndMs && inst.endMs > sceneStartMs) {
+                    overlaps = true;
+                    break;
+                }
+            }
+            
+            if (overlaps && obj.displayName != null && !obj.displayName.isEmpty()) {
+                hints.add(obj.displayName);
+            }
+        }
+        
+        // Limit to top 5 objects to avoid overwhelming Qwen VL
+        if (hints.size() > 5) {
+            log.info("Limiting Azure hints from {} to 5 objects", hints.size());
+            hints = hints.subList(0, 5);
+        }
+        
+        return hints;
+    }
     
     /**
      * Generate template metadata using Qwen reasoning

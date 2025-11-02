@@ -391,7 +391,27 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         System.out.println("[QWEN] ========================================");
         
         // Call the internal implementation with scriptLine context
-        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext);
+        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, null);
+    }
+    
+    /**
+     * Enhanced labelRegions with Azure object hints for targeted grounding
+     * This is the most advanced version with both scriptLine and Azure hints
+     */
+    @Override
+    public Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale, String scriptLineContext, List<String> azureObjectHints) {
+        System.out.println("[QWEN] ========================================");
+        System.out.println("[QWEN] labelRegions called (5-param WITH AZURE HINTS)");
+        System.out.println("[QWEN] keyframeUrl: " + (keyframeUrl != null ? keyframeUrl.substring(0, Math.min(100, keyframeUrl.length())) + "..." : "null"));
+        System.out.println("[QWEN] regions count: " + (regions != null ? regions.size() : 0));
+        System.out.println("[QWEN] locale: " + locale);
+        System.out.println("[QWEN] scriptLineContext: " + (scriptLineContext != null && !scriptLineContext.isEmpty() ? 
+            "\"" + scriptLineContext.substring(0, Math.min(50, scriptLineContext.length())) + (scriptLineContext.length() > 50 ? "...\"" : "\"") : "null"));
+        System.out.println("[QWEN] azureObjectHints: " + (azureObjectHints != null ? azureObjectHints : "null"));
+        System.out.println("[QWEN] ========================================");
+        
+        // Call the internal implementation with both scriptLine and Azure hints
+        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, azureObjectHints);
     }
     
     /**
@@ -406,14 +426,14 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         System.out.println("[QWEN] locale: " + locale);
         System.out.println("[QWEN] ========================================");
         
-        // Call the internal implementation without scriptLine context
-        return labelRegionsInternal(keyframeUrl, regions, locale, null);
+        // Call the internal implementation without scriptLine context or Azure hints
+        return labelRegionsInternal(keyframeUrl, regions, locale, null, null);
     }
     
     /**
-     * Internal implementation that handles both with and without scriptLine context
+     * Internal implementation that handles scriptLine context and Azure object hints
      */
-    private Map<String, LabelResult> labelRegionsInternal(String keyframeUrl, List<RegionBox> regions, String locale, String scriptLineContext) {
+    private Map<String, LabelResult> labelRegionsInternal(String keyframeUrl, List<RegionBox> regions, String locale, String scriptLineContext, List<String> azureObjectHints) {
         
         System.out.println("[QWEN-KEYELEMENTS] 🎯 Starting Qwen VL call for keyElements extraction");
         System.out.println("[QWEN-KEYELEMENTS]    Keyframe: " + (keyframeUrl != null ? keyframeUrl.substring(0, Math.min(80, keyframeUrl.length())) + "..." : "null"));
@@ -442,6 +462,18 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                 System.out.println("[QWEN-KEYELEMENTS] ⚠️ No scriptLine context provided");
             }
             
+            // Add Azure object hints if available (for targeted grounding)
+            if (azureObjectHints != null && !azureObjectHints.isEmpty()) {
+                sb.append("【Azure检测到的物体（请在图中定位这些物体）】\n");
+                for (String hint : azureObjectHints) {
+                    sb.append("- ").append(hint).append("\n");
+                }
+                sb.append("\n");
+                System.out.println("[QWEN-AZURE-HINTS] ✅ Azure object hints included: " + azureObjectHints);
+            } else {
+                System.out.println("[QWEN-AZURE-HINTS] ⚠️ No Azure object hints provided");
+            }
+            
             sb.append("任务1：对指定区域进行标注\n")
             .append("区域坐标（归一化0~1）：\n")
             .append(regionsJson).append("\n")
@@ -467,7 +499,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             .append("返回JSON格式：\n")
             .append("{\n")
             .append("  \"regions\": [\n")
-            .append("    {\"id\":\"p1\",\"labelZh\":\"汽车\",\"conf\":0.95,\"box\":[100,150,600,400]}\n")
+            .append("    {\"id\":\"p1\",\"labelZh\":\"汽车\",\"conf\":0.95,\"box\":[100,150,300,200]}\n")
             .append("  ],\n")
             .append("  \"sceneAnalysis\": \"详细的场景分析文字...\",\n")
             .append("  \"keyElements\": [\"关键要素1\", \"关键要素2\", \"关键要素3\"]\n")
@@ -617,7 +649,23 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                                 box[1] = boxNode.get(1).asInt();
                                 box[2] = boxNode.get(2).asInt();
                                 box[3] = boxNode.get(3).asInt();
-                                System.out.println("[QWEN] Extracted bounding box for " + id + ": [" + box[0] + "," + box[1] + "," + box[2] + "," + box[3] + "]");
+                                
+                                System.out.println("[QWEN-BOX-DEBUG] ========================================");
+                                System.out.println("[QWEN-BOX-DEBUG] Object: " + label);
+                                System.out.println("[QWEN-BOX-DEBUG] Raw box from Qwen: [" + box[0] + ", " + box[1] + ", " + box[2] + ", " + box[3] + "]");
+                                System.out.println("[QWEN-BOX-DEBUG] Normalized (÷1000): [" + (box[0]/1000.0) + ", " + (box[1]/1000.0) + ", " + (box[2]/1000.0) + ", " + (box[3]/1000.0) + "]");
+                                
+                                // Check if this looks like [x, y, width, height] or [x1, y1, x2, y2]
+                                if (box[2] > 500 || box[3] > 500) {
+                                    System.out.println("[QWEN-BOX-DEBUG] ⚠️ WARNING: Box values [2] or [3] > 500, might be absolute coordinates instead of dimensions!");
+                                    System.out.println("[QWEN-BOX-DEBUG] If [x1,y1,x2,y2]: width=" + (box[2]-box[0]) + ", height=" + (box[3]-box[1]));
+                                }
+                                
+                                // Check if box is too large (>40% of frame)
+                                if (box[2] > 400 || box[3] > 400) {
+                                    System.out.println("[QWEN-BOX-DEBUG] ⚠️ WARNING: Large bounding box detected! w=" + box[2] + ", h=" + box[3]);
+                                }
+                                System.out.println("[QWEN-BOX-DEBUG] ========================================");
                             }
                         }
                         
