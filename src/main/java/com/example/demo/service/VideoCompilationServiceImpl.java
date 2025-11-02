@@ -281,4 +281,231 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             throw new RuntimeException("Failed to mix video with BGM");
         }
     }
+    
+    @Autowired
+    private SubtitleBurningService subtitleBurningService;
+    
+    @Autowired
+    private com.example.demo.dao.TemplateDao templateDao;
+    
+    @Override
+    public String compileVideoWithSubtitles(String templateId, String userId, String compiledBy, SubtitleBurningService.SubtitleOptions subtitleOptions) {
+        return compileVideoWithBGMAndSubtitles(templateId, userId, compiledBy, null, 0.0, subtitleOptions);
+    }
+    
+    @Override
+    public String compileVideoWithBGMAndSubtitles(String templateId, String userId, String compiledBy, List<String> bgmUrls, double bgmVolume, SubtitleBurningService.SubtitleOptions subtitleOptions) {
+        try {
+            String compositeVideoId = userId + "_" + templateId;
+            DocumentSnapshot videoSnap = db.collection("submittedVideos").document(compositeVideoId).get().get();
+            if (!videoSnap.exists()) {
+                throw new NoSuchElementException("submittedVideos not found: " + compositeVideoId);
+            }
+
+            // Gather sceneIds in numeric order from submittedVideos.scenes
+            Map<String, Object> scenesMap = (Map<String, Object>) videoSnap.get("scenes");
+            if (scenesMap == null || scenesMap.isEmpty()) {
+                throw new IllegalStateException("No scenes to compile for: " + compositeVideoId);
+            }
+            List<Integer> sceneNumbers = new ArrayList<>();
+            for (String key : scenesMap.keySet()) {
+                try { sceneNumbers.add(Integer.parseInt(key)); } catch (NumberFormatException ignore) {}
+            }
+            Collections.sort(sceneNumbers);
+
+            List<String> sourceUrls = new ArrayList<>();
+            for (Integer num : sceneNumbers) {
+                Object val = scenesMap.get(String.valueOf(num));
+                if (val instanceof Map) {
+                    String sceneId = (String) ((Map<String, Object>) val).get("sceneId");
+                    if (sceneId != null) {
+                        var sub = sceneSubmissionDao.findById(sceneId);
+                        if (sub != null && sub.getVideoUrl() != null) {
+                            sourceUrls.add(sub.getVideoUrl());
+                        }
+                    }
+                }
+            }
+            if (sourceUrls.isEmpty()) {
+                throw new IllegalStateException("No source scene videos with URLs for: " + compositeVideoId);
+            }
+
+            // Get template to extract subtitleSegments
+            com.example.demo.model.ManualTemplate template = templateDao.findById(templateId);
+            if (template == null) {
+                throw new NoSuchElementException("Template not found: " + templateId);
+            }
+            
+            String destObject = String.format("videos/%s/%s/compiled_subtitled.mp4", userId, compositeVideoId);
+            
+            // Compile with subtitles and optional BGM
+            return ffmpegConcatWithSubtitlesAndBGM(sourceUrls, template.getScenes(), bgmUrls, bgmVolume, subtitleOptions, destObject);
+            
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to compile video with subtitles: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Concatenate videos with subtitles and optional BGM
+     */
+    private String ffmpegConcatWithSubtitlesAndBGM(
+        List<String> sourceUrls, 
+        List<com.example.demo.model.Scene> scenes,
+        List<String> bgmUrls,
+        double bgmVolume,
+        SubtitleBurningService.SubtitleOptions subtitleOptions,
+        String destObject
+    ) throws Exception {
+        
+        // Generate signed URLs for OSS videos
+        List<String> signedUrls = new ArrayList<>();
+        for (String url : sourceUrls) {
+            String signedUrl = ossStorageService.generateSignedUrl(url, 2, java.util.concurrent.TimeUnit.HOURS);
+            signedUrls.add(signedUrl);
+        }
+        
+        java.io.File listFile = null;
+        java.io.File srtFile = null;
+        java.io.File bgmFile = null;
+        java.io.File outFile = null;
+        
+        try {
+            // Create concat list file
+            listFile = java.io.File.createTempFile("concat-", ".txt");
+            try (java.io.PrintWriter pw = new java.io.PrintWriter(listFile, java.nio.charset.StandardCharsets.UTF_8)) {
+                for (String signedUrl : signedUrls) {
+                    pw.println("file '" + signedUrl + "'");
+                }
+            }
+            
+            // Generate SRT file from subtitleSegments
+            String srtPath = null;
+            if (subtitleOptions != null && scenes != null && !scenes.isEmpty()) {
+                srtPath = subtitleBurningService.generateSrtFile(scenes);
+                srtFile = new java.io.File(srtPath);
+                System.out.println("[Compile] Generated SRT file: " + srtPath);
+            }
+            
+            // Build FFmpeg command
+            List<String> ffmpegCmd = new ArrayList<>();
+            ffmpegCmd.add("ffmpeg");
+            ffmpegCmd.add("-y");
+            ffmpegCmd.add("-f");
+            ffmpegCmd.add("concat");
+            ffmpegCmd.add("-safe");
+            ffmpegCmd.add("0");
+            ffmpegCmd.add("-i");
+            ffmpegCmd.add(listFile.getAbsolutePath());
+            
+            // Add BGM input if specified
+            if (bgmUrls != null && !bgmUrls.isEmpty()) {
+                // Get video duration first
+                double videoDuration = getVideoDurationFromUrl(signedUrls.get(0));
+                for (int i = 1; i < signedUrls.size(); i++) {
+                    videoDuration += getVideoDurationFromUrl(signedUrls.get(i));
+                }
+                
+                // Generate signed URLs for BGM
+                List<String> bgmSignedUrls = new ArrayList<>();
+                for (String bgmUrl : bgmUrls) {
+                    bgmSignedUrls.add(ossStorageService.generateSignedUrl(bgmUrl, 2, java.util.concurrent.TimeUnit.HOURS));
+                }
+                
+                // Create BGM concat file
+                bgmFile = createBGMConcatFileFromUrls(bgmSignedUrls, videoDuration);
+                ffmpegCmd.add("-i");
+                ffmpegCmd.add(bgmFile.getAbsolutePath());
+            }
+            
+            // Build filter complex
+            StringBuilder filterComplex = new StringBuilder();
+            boolean hasFilters = false;
+            
+            // Add subtitle filter if SRT exists
+            if (srtPath != null) {
+                String subtitleFilter = subtitleBurningService.buildSubtitleFilter(srtPath, subtitleOptions);
+                filterComplex.append("[0:v]").append(subtitleFilter).append("[v]");
+                hasFilters = true;
+            }
+            
+            // Add audio mixing if BGM exists
+            if (bgmFile != null) {
+                if (hasFilters) filterComplex.append(";");
+                filterComplex.append(String.format("[1:a]volume=%.2f[a1];[0:a][a1]amix=inputs=2:duration=shortest[a]", bgmVolume));
+                hasFilters = true;
+            }
+            
+            // Add filter complex if we have any filters
+            if (hasFilters) {
+                ffmpegCmd.add("-filter_complex");
+                ffmpegCmd.add(filterComplex.toString());
+                
+                // Map outputs
+                if (srtPath != null) {
+                    ffmpegCmd.add("-map");
+                    ffmpegCmd.add("[v]");
+                } else {
+                    ffmpegCmd.add("-map");
+                    ffmpegCmd.add("0:v");
+                }
+                
+                if (bgmFile != null) {
+                    ffmpegCmd.add("-map");
+                    ffmpegCmd.add("[a]");
+                } else {
+                    ffmpegCmd.add("-map");
+                    ffmpegCmd.add("0:a");
+                }
+                
+                // Encoding settings
+                ffmpegCmd.add("-c:v");
+                ffmpegCmd.add("libx264");
+                ffmpegCmd.add("-preset");
+                ffmpegCmd.add("veryfast");
+                ffmpegCmd.add("-crf");
+                ffmpegCmd.add("23");
+                ffmpegCmd.add("-c:a");
+                ffmpegCmd.add("aac");
+                ffmpegCmd.add("-b:a");
+                ffmpegCmd.add("192k");
+            } else {
+                // No filters, just copy
+                ffmpegCmd.add("-c");
+                ffmpegCmd.add("copy");
+            }
+            
+            // Output file
+            outFile = java.io.File.createTempFile("compiled-", ".mp4");
+            ffmpegCmd.add("-movflags");
+            ffmpegCmd.add("+faststart");
+            ffmpegCmd.add(outFile.getAbsolutePath());
+            
+            // Execute FFmpeg
+            System.out.println("[Compile] FFmpeg command: " + String.join(" ", ffmpegCmd));
+            ProcessBuilder pb = new ProcessBuilder(ffmpegCmd);
+            Process p = pb.start();
+            int code = p.waitFor();
+            
+            if (code != 0) {
+                throw new RuntimeException("ffmpeg compilation failed with exit code " + code);
+            }
+            
+            // Upload to OSS
+            if (ossStorageService == null) {
+                throw new IllegalStateException("AlibabaOssStorageService not available for upload");
+            }
+            String url = ossStorageService.uploadFile(outFile, destObject, "video/mp4");
+            System.out.println("[Compile] ✅ Compiled video with subtitles uploaded: " + url);
+            
+            return url;
+            
+        } finally {
+            // Clean up temp files
+            if (listFile != null) try { listFile.delete(); } catch (Exception ignored) {}
+            if (srtFile != null) try { srtFile.delete(); } catch (Exception ignored) {}
+            if (bgmFile != null) try { bgmFile.delete(); } catch (Exception ignored) {}
+            if (outFile != null) try { outFile.delete(); } catch (Exception ignored) {}
+        }
+    }
 }
