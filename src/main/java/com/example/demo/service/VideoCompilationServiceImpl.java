@@ -331,7 +331,7 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             }
 
             // Get template to extract subtitleSegments
-            com.example.demo.model.ManualTemplate template = templateDao.findById(templateId);
+            com.example.demo.model.ManualTemplate template = templateDao.getTemplate(templateId);
             if (template == null) {
                 throw new NoSuchElementException("Template not found: " + templateId);
             }
