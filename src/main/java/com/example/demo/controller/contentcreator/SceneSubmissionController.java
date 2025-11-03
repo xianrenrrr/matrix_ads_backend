@@ -78,12 +78,55 @@ public class SceneSubmissionController {
         
         // Process AI comparison asynchronously in background
         final String finalSceneId = sceneSubmission.getId();
-        final String templateVideoUrl = getTemplateVideoUrl(template.getVideoId());
+        
+        // For manual templates, each scene has its own videoId
+        // For AI templates, use the template's videoId
+        String videoIdToUse = templateScene.getVideoId() != null ? templateScene.getVideoId() : template.getVideoId();
+        final String templateVideoUrl = getTemplateVideoUrl(videoIdToUse);  // May be null for manual templates without video
         final String userVideoUrl = sceneSubmission.getVideoUrl();
         
         java.util.concurrent.CompletableFuture.runAsync(() -> {
             try {
+                // Ensure template scene has keyframe URL (required for comparison)
+                String templateKeyframeUrl = templateScene.getKeyframeUrl();
+                
+                // If no keyframe URL, try to extract from scene's video (for manual templates)
+                if ((templateKeyframeUrl == null || templateKeyframeUrl.isEmpty()) && templateVideoUrl != null) {
+                    log.info("Template scene {} has no keyframe URL, extracting from scene video", sceneNumber);
+                    try {
+                        // Extract keyframe from middle of the scene video
+                        java.time.Duration keyframeTime = java.time.Duration.ofSeconds(
+                            templateScene.getSceneDurationInSeconds() / 2
+                        );
+                        templateKeyframeUrl = keyframeExtractionService.extractKeyframe(
+                            templateVideoUrl, keyframeTime, null
+                        );
+                        // Update the scene with the extracted keyframe URL for future use
+                        templateScene.setKeyframeUrl(templateKeyframeUrl);
+                        log.info("Extracted keyframe URL for template scene {}: {}", sceneNumber, templateKeyframeUrl);
+                    } catch (Exception e) {
+                        log.error("Failed to extract keyframe from template video: {}", e.getMessage());
+                    }
+                }
+                
+                // Final check - if still no keyframe URL, cannot compare
+                if (templateKeyframeUrl == null || templateKeyframeUrl.isEmpty()) {
+                    log.error("Template scene {} has no keyframe URL and extraction failed, cannot perform AI comparison", sceneNumber);
+                    // Update submission with error message
+                    SceneSubmission errorSubmission = sceneSubmissionDao.findById(finalSceneId);
+                    if (errorSubmission != null) {
+                        errorSubmission.setSimilarityScore(0.5);  // Default middle score
+                        List<String> errorSuggestions = new ArrayList<>();
+                        errorSuggestions.add("模板场景缺少关键帧图片，无法进行AI对比。请联系管理员。");
+                        errorSubmission.setAiSuggestions(errorSuggestions);
+                        sceneSubmissionDao.update(errorSubmission);
+                    }
+                    return;
+                }
+                
                 log.info("Starting async AI comparison for scene {} using NEW direct 2-image method", sceneNumber);
+                log.info("Template keyframe: {}", templateKeyframeUrl);
+                log.info("User video: {}", userVideoUrl);
                 
                 // NEW: Use direct 2-image comparison with purpose-driven evaluation
                 com.example.demo.ai.services.ComparisonResult comparisonResult = qwenComparisonService.compareWithDirectVL(
@@ -379,6 +422,12 @@ public class SceneSubmissionController {
      * Uses VideoDao to fetch from exampleVideos collection
      */
     private String getTemplateVideoUrl(String videoId) {
+        // Handle null videoId (manual templates without video)
+        if (videoId == null || videoId.isEmpty()) {
+            log.warn("Template has no videoId (manual template), cannot retrieve template video URL");
+            return null;  // Return null for manual templates without video
+        }
+        
         try {
             // Use VideoDao to get the video from exampleVideos collection
             Video video = videoDao.getVideoById(videoId);
