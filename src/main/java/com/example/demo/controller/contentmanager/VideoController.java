@@ -180,7 +180,6 @@ public class VideoController {
             System.out.println("Detected language: " + language);
             
             ManualTemplate aiGeneratedTemplate = generateAITemplate(savedVideo, language, description);
-            aiGeneratedTemplate.setUserId(userId);  // Always set to actual creator
             aiGeneratedTemplate.setVideoId(savedVideo.getId());
             aiGeneratedTemplate.setThumbnailUrl(savedVideo.getThumbnailUrl());  // Set thumbnail from video
             aiGeneratedTemplate.setCreatedAt(new java.util.Date());  // Set creation timestamp for permission checks
@@ -197,24 +196,26 @@ public class VideoController {
                 aiGeneratedTemplate.setTemplateTitle(title + " - AI 模版 " + today);
             }
             
-            // Create template (groups are now assigned via push button with TemplateAssignment)
-            String savedTemplateId = templateDao.createTemplate(aiGeneratedTemplate);
-            
             // Determine who should own the template in created_Templates
+            // For employees, template should be added to manager's list
+            String templateOwnerId = userId;
             try {
-                String templateOwnerId = userId;
                 com.example.demo.model.User user = userDao.findById(userId);
                 if (user != null && "employee".equals(user.getRole()) && user.getCreatedBy() != null) {
-                    // If creator is an employee, add to manager's created_Templates only
+                    // If creator is an employee, set template userId to manager
                     templateOwnerId = user.getCreatedBy();
-                    System.out.println("Employee " + userId + " template " + savedTemplateId + " added to manager " + templateOwnerId);
+                    System.out.println("Employee " + userId + " template will be owned by manager " + templateOwnerId);
                 }
-                // Add template to manager's created_Templates (or creator's if they are a manager)
-                userDao.addCreatedTemplate(templateOwnerId, savedTemplateId);
             } catch (Exception e) {
-                System.err.println("Failed to add template to user: " + e.getMessage());
-                // Continue - template is still created successfully
+                System.err.println("Failed to determine template owner: " + e.getMessage());
+                // Continue with original userId
             }
+            
+            // Set the owner userId (createTemplate will automatically add to this user's created_Templates)
+            aiGeneratedTemplate.setUserId(templateOwnerId);
+            
+            // Create template (createTemplate will automatically add to user's created_Templates)
+            String savedTemplateId = templateDao.createTemplate(aiGeneratedTemplate);
             
             savedVideo.setTemplateId(savedTemplateId);
             videoDao.updateVideo(savedVideo);
