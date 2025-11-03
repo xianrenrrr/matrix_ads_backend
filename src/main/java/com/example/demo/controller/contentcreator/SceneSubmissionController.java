@@ -46,6 +46,9 @@ public class SceneSubmissionController {
     
     @Autowired
     private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
+    
+    @Autowired
+    private com.example.demo.ai.services.KeyframeExtractionService keyframeExtractionService;
 
     
     @PostMapping("/upload")
