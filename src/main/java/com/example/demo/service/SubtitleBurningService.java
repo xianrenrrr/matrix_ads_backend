@@ -32,9 +32,9 @@ public class SubtitleBurningService {
         File srtFile = Files.createTempFile("subtitles_", ".srt").toFile();
         srtFile.deleteOnExit();
         
-        int sequenceNumber = 1;
-        
         try (FileWriter writer = new FileWriter(srtFile)) {
+            int sequenceNumber = 1;
+            
             for (Scene scene : scenes) {
                 if (scene.getSubtitleSegments() == null || scene.getSubtitleSegments().isEmpty()) {
                     continue;
