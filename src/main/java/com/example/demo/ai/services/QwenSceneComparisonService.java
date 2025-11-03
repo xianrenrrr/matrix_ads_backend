@@ -151,8 +151,9 @@ public class QwenSceneComparisonService {
             sb.append("   两张图片的构图、角度、内容是否相似？\n");
             sb.append("   不要求完全一样，但应该是同类型的场景。\n\n");
             
-            // Output Format
-            sb.append("请返回JSON格式（不要包含其他内容）：\n");
+            // Output Format - CRITICAL: JSON ONLY!
+            sb.append("\n⚠️⚠️⚠️ 重要：必须只返回JSON格式，不要包含任何解释文字！⚠️⚠️⚠️\n\n");
+            sb.append("返回格式（纯JSON，不要有任何其他文字）：\n");
             sb.append("{\n");
             sb.append("  \"overallScore\": 75,\n");
             sb.append("  \"purposeMatch\": {\n");
@@ -175,7 +176,8 @@ public class QwenSceneComparisonService {
             sb.append("    \"具体改进建议1\",\n");
             sb.append("    \"具体改进建议2\"\n");
             sb.append("  ]\n");
-            sb.append("}\n");
+            sb.append("}\n\n");
+            sb.append("⚠️ 再次提醒：只返回上面的JSON，不要有\"图1\"、\"图2\"等描述文字！\n");
         } else {
             // English version
             sb.append("You are a video marketing expert. Compare two images (Image 1 is template, Image 2 is user-recorded), ");
@@ -304,6 +306,20 @@ public class QwenSceneComparisonService {
                 .replaceAll("(?s)```\\s*$", "")
                 .trim();
             
+            // Try to extract JSON if it's embedded in text
+            if (!cleanJson.startsWith("{")) {
+                log.warn("[DIRECT-COMPARISON] Response doesn't start with JSON, attempting to extract...");
+                int jsonStart = cleanJson.indexOf("{");
+                int jsonEnd = cleanJson.lastIndexOf("}");
+                if (jsonStart >= 0 && jsonEnd > jsonStart) {
+                    cleanJson = cleanJson.substring(jsonStart, jsonEnd + 1);
+                    log.info("[DIRECT-COMPARISON] Extracted JSON from position {} to {}", jsonStart, jsonEnd);
+                } else {
+                    log.error("[DIRECT-COMPARISON] No JSON found in response, using fallback parsing");
+                    return parsePlainTextFallback(jsonResponse);
+                }
+            }
+            
             com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(cleanJson);
             
             ComparisonResult result = new ComparisonResult();
@@ -352,6 +368,27 @@ public class QwenSceneComparisonService {
             log.error("[DIRECT-COMPARISON] Failed to parse result: {}", e.getMessage());
             return ComparisonResult.error("解析比较结果失败: " + e.getMessage());
         }
+    }
+    
+    /**
+     * Fallback parser for plain text responses (when Qwen doesn't return JSON)
+     */
+    private ComparisonResult parsePlainTextFallback(String plainText) {
+        log.warn("[DIRECT-COMPARISON] Using fallback plain text parser");
+        
+        ComparisonResult result = new ComparisonResult();
+        result.setSimilarityScore(50); // Default middle score
+        
+        List<String> suggestions = new ArrayList<>();
+        suggestions.add("AI返回了非JSON格式的响应，请重试。");
+        suggestions.add("原始响应: " + (plainText.length() > 200 ? plainText.substring(0, 200) + "..." : plainText));
+        
+        result.setSuggestions(suggestions);
+        result.setMatchedObjects(new ArrayList<>());
+        result.setMissingObjects(new ArrayList<>());
+        
+        log.info("[DIRECT-COMPARISON] Fallback result created with score=50");
+        return result;
     }
     
     /**
