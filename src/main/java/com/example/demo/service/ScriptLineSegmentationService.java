@@ -23,11 +23,8 @@ public class ScriptLineSegmentationService {
     
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ScriptLineSegmentationService.class);
     
-    @Autowired
-    private RestTemplate restTemplate;
-    
-    @Autowired
-    private ObjectMapper objectMapper;
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
     
     @Value("${AI_QWEN_ENDPOINT:${qwen.api.base:}}")
     private String qwenApiBase;
@@ -37,6 +34,16 @@ public class ScriptLineSegmentationService {
     
     @Value("${AI_QWEN_MODEL:${qwen.model:qwen-plus}}")
     private String qwenModel;
+    
+    public ScriptLineSegmentationService() {
+        // Configure RestTemplate with timeouts (same as QwenVLPlusLabeler)
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory = 
+            new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10000);  // 10 seconds connect timeout
+        factory.setReadTimeout(60000);     // 60 seconds read timeout
+        this.restTemplate = new RestTemplate(factory);
+        this.objectMapper = new ObjectMapper();
+    }
     
     /**
      * Split scriptLine into timed subtitle segments using Qwen AI
