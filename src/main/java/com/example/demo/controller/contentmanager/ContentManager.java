@@ -587,16 +587,19 @@ public class ContentManager {
                 log.info("✅ ScriptLine set from user input for scene {}: {}", 
                     metadata.getSceneNumber(), metadata.getScriptLine());
                 
-                // 4.5. Generate subtitle segments from scriptLine
+                // 4.5. Generate subtitle segments from scriptLine using Qwen AI
                 try {
+                    // Pass scene start time (0 for manual templates since each scene is its own video)
+                    // But we need to adjust later when scenes are combined in template
                     List<com.example.demo.ai.subtitle.SubtitleSegment> subtitleSegments = 
                         scriptLineSegmentationService.splitScriptLine(
                             scene.getScriptLine(), 
-                            (int) videoDurationSeconds
+                            (int) videoDurationSeconds,
+                            scene.getStartTimeMs() != null ? scene.getStartTimeMs() : 0L
                         );
                     scene.setSubtitleSegments(subtitleSegments);
-                    log.info("✅ Generated {} subtitle segments for scene {}", 
-                        subtitleSegments.size(), metadata.getSceneNumber());
+                    log.info("✅ Generated {} subtitle segments for scene {} (startTime={}ms)", 
+                        subtitleSegments.size(), metadata.getSceneNumber(), scene.getStartTimeMs());
                 } catch (Exception e) {
                     log.error("❌ Failed to generate subtitle segments for scene {}: {}", 
                         metadata.getSceneNumber(), e.getMessage(), e);
