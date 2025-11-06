@@ -1,6 +1,5 @@
 package com.example.demo.model;
 
-import com.example.demo.ai.seg.dto.OverlayPolygonClass;
 import com.example.demo.ai.subtitle.SubtitleSegment;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
@@ -31,9 +30,8 @@ public class Scene {
     
     // Dual scene system fields (add-only, non-breaking)
     private String sceneSource;  // "manual" | "ai" - how the scene was created
-    private String overlayType;  // "grid" | "objects" | "polygons" - how to render guidance
+    private String overlayType;  // "grid" | "objects" - how to render guidance
     private List<ObjectOverlay> overlayObjects;  // only when overlayType="objects"
-    private List<OverlayPolygonClass> overlayPolygons; // only when overlayType="polygons"
     private String sourceAspect;  // e.g., "9:16" for mini-app pixel mapping
     private String shortLabelZh;  // Chinese short label for the dominant object
     
@@ -286,14 +284,6 @@ public class Scene {
     
     public void setSourceAspect(String sourceAspect) {
         this.sourceAspect = sourceAspect;
-    }
-    
-    public List<OverlayPolygonClass> getOverlayPolygons() {
-        return overlayPolygons;
-    }
-    
-    public void setOverlayPolygons(List<OverlayPolygonClass> overlayPolygons) {
-        this.overlayPolygons = overlayPolygons;
     }
     
     public String getShortLabelZh() {
