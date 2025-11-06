@@ -51,6 +51,9 @@ public class ContentManager {
     @Autowired
     private com.example.demo.ai.services.UnifiedSceneAnalysisService unifiedSceneAnalysisService;
     
+    @Autowired
+    private com.example.demo.service.ScriptLineSegmentationService scriptLineSegmentationService;
+    
     /**
      * Get manager's groups
      * GET /content-manager/templates/manager/{managerId}/groups
@@ -583,6 +586,21 @@ public class ContentManager {
                 scene.setScriptLine(metadata.getScriptLine().trim());
                 log.info("✅ ScriptLine set from user input for scene {}: {}", 
                     metadata.getSceneNumber(), metadata.getScriptLine());
+                
+                // 4.5. Generate subtitle segments from scriptLine
+                try {
+                    List<com.example.demo.ai.subtitle.SubtitleSegment> subtitleSegments = 
+                        scriptLineSegmentationService.splitScriptLine(
+                            scene.getScriptLine(), 
+                            (int) videoDurationSeconds
+                        );
+                    scene.setSubtitleSegments(subtitleSegments);
+                    log.info("✅ Generated {} subtitle segments for scene {}", 
+                        subtitleSegments.size(), metadata.getSceneNumber());
+                } catch (Exception e) {
+                    log.error("❌ Failed to generate subtitle segments for scene {}: {}", 
+                        metadata.getSceneNumber(), e.getMessage(), e);
+                }
             } else {
                 scene.setScriptLine(""); // Empty scriptLine if not provided
                 log.warn("⚠️ No scriptLine provided for scene {}", metadata.getSceneNumber());
