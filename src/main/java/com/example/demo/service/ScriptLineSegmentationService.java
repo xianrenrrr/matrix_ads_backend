@@ -118,6 +118,12 @@ public class ScriptLineSegmentationService {
      */
     private List<Map<String, Object>> callQwenForSegmentation(String scriptLine, int videoDurationSeconds) {
         try {
+            // Check if Qwen is configured
+            if (qwenApiKey == null || qwenApiKey.isBlank() || qwenApiBase == null || qwenApiBase.isBlank()) {
+                log.warn("Qwen API not configured (apiKey or endpoint missing), skipping AI segmentation");
+                return null;
+            }
+            
             // Build prompt for Qwen
             StringBuilder prompt = new StringBuilder();
             prompt.append("你是字幕分段助手。请将以下文本智能分段，并为每段分配合理的时间。\n\n");
@@ -204,7 +210,8 @@ public class ScriptLineSegmentationService {
             return segments;
             
         } catch (Exception e) {
-            log.error("Error calling Qwen AI: {}", e.getMessage(), e);
+            log.warn("Error calling Qwen AI (will use fallback): {}", e.getMessage());
+            log.debug("Qwen AI error details:", e);
             return null;
         }
     }

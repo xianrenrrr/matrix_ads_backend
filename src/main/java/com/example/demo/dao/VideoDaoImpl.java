@@ -118,13 +118,25 @@ public class VideoDaoImpl implements VideoDao {
             throw new IllegalStateException("AlibabaOssStorageService not available");
         }
         
-        // Extract video duration using FFprobe before upload
+        // First, upload the video (this will handle the file properly)
+        System.out.println("[VIDEO-UPLOAD] Starting upload for videoId: " + videoId);
+        com.example.demo.service.AlibabaOssStorageService.UploadResult uploadResult = 
+            ossStorageService.uploadVideoWithThumbnail(file, userId, videoId);
+        System.out.println("[VIDEO-UPLOAD] Upload complete: " + uploadResult.videoUrl);
+        
+        // Now extract duration from the uploaded video using a signed URL
         long durationSeconds = 0;
         java.io.File tempFile = null;
         try {
-            // Save file temporarily
-            tempFile = java.io.File.createTempFile("video_", ".mp4");
-            file.transferTo(tempFile);
+            // Download video temporarily for duration extraction
+            String signedUrl = ossStorageService.generateSignedUrl(uploadResult.videoUrl, 5, java.util.concurrent.TimeUnit.MINUTES);
+            tempFile = java.io.File.createTempFile("video_duration_", ".mp4");
+            
+            // Download from OSS
+            java.net.URL url = new java.net.URL(signedUrl);
+            try (java.io.InputStream in = url.openStream()) {
+                java.nio.file.Files.copy(in, tempFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
             
             // Use FFprobe to get duration
             ProcessBuilder pb = new ProcessBuilder(
@@ -144,16 +156,13 @@ public class VideoDaoImpl implements VideoDao {
             }
         } catch (Exception e) {
             System.err.println("[VIDEO-DURATION] Failed to extract duration: " + e.getMessage());
+            e.printStackTrace();
             // Continue without duration
         } finally {
             if (tempFile != null && tempFile.exists()) {
                 tempFile.delete();
             }
         }
-        
-        // Upload to OSS
-        com.example.demo.service.AlibabaOssStorageService.UploadResult uploadResult = 
-            ossStorageService.uploadVideoWithThumbnail(file, userId, videoId);
         
         // Create and save video object
         Video video = new Video();
