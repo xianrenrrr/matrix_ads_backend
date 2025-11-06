@@ -809,15 +809,6 @@ public class ContentManager {
                 
                 // Collect detected object labels (Chinese) for context
                 List<String> labels = new ArrayList<>();
-                if (s.getOverlayPolygons() != null) {
-                    for (var p : s.getOverlayPolygons()) {
-                        if (p.getLabelLocalized() != null && !p.getLabelLocalized().isEmpty()) {
-                            labels.add(p.getLabelLocalized());
-                        } else if (p.getLabelZh() != null && !p.getLabelZh().isEmpty()) {
-                            labels.add(p.getLabelZh());
-                        }
-                    }
-                }
                 if (s.getOverlayObjects() != null) {
                     for (var o : s.getOverlayObjects()) {
                         if (o.getLabelLocalized() != null && !o.getLabelLocalized().isEmpty()) {

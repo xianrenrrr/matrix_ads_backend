@@ -13,8 +13,7 @@ public class SceneAnalysisResult {
     private String vlRawResponse;
     private String vlSceneAnalysis;
     private List<Scene.ObjectOverlay> overlayObjects;
-    private List<com.example.demo.ai.seg.dto.OverlayPolygonClass> overlayPolygons;
-    private String overlayType;  // "objects", "polygons", or "grid"
+    private String overlayType;  // "objects" or "grid"
     private String shortLabelZh;
     private String sourceAspect;  // e.g., "9:16" or "16:9"
     private List<String> keyElements;  // Key elements for this scene (for comparison)
@@ -53,14 +52,6 @@ public class SceneAnalysisResult {
     
     public void setOverlayObjects(List<Scene.ObjectOverlay> overlayObjects) {
         this.overlayObjects = overlayObjects;
-    }
-    
-    public List<com.example.demo.ai.seg.dto.OverlayPolygonClass> getOverlayPolygons() {
-        return overlayPolygons;
-    }
-    
-    public void setOverlayPolygons(List<com.example.demo.ai.seg.dto.OverlayPolygonClass> overlayPolygons) {
-        this.overlayPolygons = overlayPolygons;
     }
     
     public String getOverlayType() {
@@ -103,9 +94,6 @@ public class SceneAnalysisResult {
         }
         if (overlayObjects != null) {
             scene.setOverlayObjects(overlayObjects);
-        }
-        if (overlayPolygons != null) {
-            scene.setOverlayPolygons(overlayPolygons);
         }
         if (overlayType != null) {
             scene.setOverlayType(overlayType);

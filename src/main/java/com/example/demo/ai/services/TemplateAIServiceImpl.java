@@ -488,7 +488,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 scene.setKeyframeUrl(analysis.getKeyframeUrl());
                 scene.setOverlayType(analysis.getOverlayType());
                 scene.setOverlayObjects(analysis.getOverlayObjects());
-                scene.setOverlayPolygons(analysis.getOverlayPolygons());
                 scene.setSourceAspect(analysis.getSourceAspect());
                 scene.setShortLabelZh(analysis.getShortLabelZh());
                 scene.setVlRawResponse(analysis.getVlRawResponse());
@@ -608,13 +607,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 
                 // Collect detected object labels
                 List<String> labels = new ArrayList<>();
-                if (s.getOverlayPolygons() != null) {
-                    for (var p : s.getOverlayPolygons()) {
-                        if (p.getLabelZh() != null && !p.getLabelZh().isEmpty()) {
-                            labels.add(p.getLabelZh());
-                        }
-                    }
-                }
                 if (s.getOverlayObjects() != null) {
                     for (var o : s.getOverlayObjects()) {
                         if (o.getLabelZh() != null && !o.getLabelZh().isEmpty()) {
@@ -881,7 +873,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             scene.setKeyframeUrl(analysis.getKeyframeUrl());
             scene.setOverlayType(analysis.getOverlayType());
             scene.setOverlayObjects(analysis.getOverlayObjects());
-            scene.setOverlayPolygons(analysis.getOverlayPolygons());
             scene.setSourceAspect(analysis.getSourceAspect());
             scene.setShortLabelZh(analysis.getShortLabelZh());
             scene.setVlRawResponse(analysis.getVlRawResponse());

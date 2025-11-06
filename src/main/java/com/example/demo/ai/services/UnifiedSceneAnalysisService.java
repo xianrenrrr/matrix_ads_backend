@@ -414,14 +414,8 @@ public class UnifiedSceneAnalysisService {
             }
         }
         
-        // Set results
-        if (hasPolygons) {
-            result.setOverlayPolygons(polygons);
-            result.setOverlayType("polygons");
-            if (!polygons.isEmpty()) {
-                result.setShortLabelZh(polygons.get(0).getLabelZh());
-            }
-        } else if (hasBoxes) {
+        // Set results (polygons removed, only use objects)
+        if (hasBoxes) {
             result.setOverlayObjects(objects);
             result.setOverlayType("objects");
             if (!objects.isEmpty()) {
