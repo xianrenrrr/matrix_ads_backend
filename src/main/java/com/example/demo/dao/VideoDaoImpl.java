@@ -118,20 +118,18 @@ public class VideoDaoImpl implements VideoDao {
             throw new IllegalStateException("AlibabaOssStorageService not available");
         }
         
-        // Extract video duration using FFmpeg before upload
+        // Extract video duration using FFprobe before upload
         long durationSeconds = 0;
+        java.io.File tempFile = null;
         try {
             // Save file temporarily
-            java.io.File tempFile = java.io.File.createTempFile("video_", ".mp4");
+            tempFile = java.io.File.createTempFile("video_", ".mp4");
             file.transferTo(tempFile);
             
             // Use FFprobe to get duration
             ProcessBuilder pb = new ProcessBuilder(
-                "ffprobe",
-                "-v", "error",
-                "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1",
-                tempFile.getAbsolutePath()
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", tempFile.getAbsolutePath()
             );
             Process process = pb.start();
             java.io.BufferedReader reader = new java.io.BufferedReader(
@@ -144,12 +142,13 @@ public class VideoDaoImpl implements VideoDao {
                 durationSeconds = (long) Double.parseDouble(durationStr);
                 System.out.println("[VIDEO-DURATION] Extracted duration: " + durationSeconds + " seconds");
             }
-            
-            // Clean up temp file
-            tempFile.delete();
         } catch (Exception e) {
             System.err.println("[VIDEO-DURATION] Failed to extract duration: " + e.getMessage());
             // Continue without duration
+        } finally {
+            if (tempFile != null && tempFile.exists()) {
+                tempFile.delete();
+            }
         }
         
         // Upload to OSS
