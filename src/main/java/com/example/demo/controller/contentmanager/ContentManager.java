@@ -542,91 +542,113 @@ public class ContentManager {
             
             log.info("Processing scene {}: {}", metadata.getSceneNumber(), metadata.getSceneTitle());
             
-            // 1. Upload video to OSS
+            // 1. Upload video to Google Cloud Storage
             String videoId = java.util.UUID.randomUUID().toString();
             com.example.demo.model.Video video = videoDao.uploadAndSaveVideo(videoFile, userId, videoId);
-            log.info("✅ Video uploaded to OSS: {}", video.getUrl());
+            log.info("✅ Video uploaded: {}", video.getUrl());
             
-            // 2. Extract full insights using Azure Video Indexer
-            log.info("🎬 Extracting full insights for scene {} using Azure Video Indexer", metadata.getSceneNumber());
-            com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureVideoIndexerResult azureResult = null;
+            // 2. Get video duration from video metadata (no Azure needed)
             long videoDurationSeconds = 0;
-            
             try {
-                // Generate signed URL with 2 hours expiration for Azure processing
-                String signedUrl = alibabaOssStorageService.generateSignedUrl(video.getUrl(), 2, java.util.concurrent.TimeUnit.HOURS);
-                log.info("✅ Generated signed URL for Azure (expires in 2 hours)");
-                
-                azureResult = azureExtractor.extractFullInsights(signedUrl);
-                
-                if (azureResult != null) {
-                    // Extract duration from Azure result
-                    videoDurationSeconds = azureResult.durationInSeconds;
-                    
-                    log.info("✅ Azure extracted: {} transcript, {} OCR, {} objects, duration: {}s", 
-                        azureResult.transcript.size(),
-                        azureResult.ocr.size(),
-                        azureResult.detectedObjects.size(),
-                        videoDurationSeconds);
-                    
-                    // Update video with duration from Azure
-                    video.setDurationSeconds(videoDurationSeconds);
-                    videoDao.updateVideo(video);
-                    log.info("✅ Video duration updated: {} seconds", videoDurationSeconds);
+                // Video duration should be set by videoDao during upload
+                if (video.getDurationSeconds() != null && video.getDurationSeconds() > 0) {
+                    videoDurationSeconds = video.getDurationSeconds();
+                    log.info("✅ Video duration from metadata: {} seconds", videoDurationSeconds);
                 } else {
-                    log.warn("⚠️ Azure returned null result for scene {}", metadata.getSceneNumber());
+                    // Fallback: estimate from file size (rough estimate: 1MB = 1 second for typical video)
+                    videoDurationSeconds = 10; // Default fallback
+                    log.warn("⚠️ Video duration not available, using fallback: {} seconds", videoDurationSeconds);
                 }
             } catch (Exception e) {
-                log.error("❌ Azure extraction failed for scene {}: {} - {}", 
-                         metadata.getSceneNumber(), e.getClass().getSimpleName(), e.getMessage());
-                // Continue without Azure data
+                videoDurationSeconds = 10; // Default fallback
+                log.warn("⚠️ Failed to get video duration: {}, using fallback: {} seconds", 
+                    e.getMessage(), videoDurationSeconds);
             }
             
-            // 5. Create Scene object
+            // 3. Create Scene object
             log.info("🎬 Creating Scene object for scene {}", metadata.getSceneNumber());
-            com.example.demo.model.Scene aiScene = new com.example.demo.model.Scene();
-            aiScene.setSceneSource("manual");
-            aiScene.setSceneNumber(metadata.getSceneNumber());
-            aiScene.setSceneTitle(metadata.getSceneTitle());
-            aiScene.setSceneDescription(metadata.getSceneDescription());
-            aiScene.setVideoId(videoId);
-            aiScene.setStartTimeMs(0L); // Entire video = 1 scene
-            aiScene.setEndTimeMs(videoDurationSeconds * 1000L); // Convert to ms
-            aiScene.setSceneDurationInSeconds((int) videoDurationSeconds);
+            com.example.demo.model.Scene scene = new com.example.demo.model.Scene();
+            scene.setSceneSource("manual");
+            scene.setSceneNumber(metadata.getSceneNumber());
+            scene.setSceneTitle(metadata.getSceneTitle());
+            scene.setSceneDescription(metadata.getSceneDescription());
+            scene.setVideoId(videoId);
+            scene.setStartTimeMs(0L); // Entire video = 1 scene
+            scene.setEndTimeMs(videoDurationSeconds * 1000L); // Convert to ms
+            scene.setSceneDurationInSeconds((int) videoDurationSeconds);
             log.info("✅ Scene {} duration set to: {} seconds", metadata.getSceneNumber(), videoDurationSeconds);
             
-            // 6. Process scene with Azure data (REUSE AI template method)
-            if (azureResult != null) {
-                try {
-                    log.info("✅ Processing scene {} with Azure data using shared method", metadata.getSceneNumber());
-                    templateAIService.processSingleSceneWithAzure(aiScene, video.getUrl(), azureResult, language);
-                    log.info("✅ Scene {} processed successfully", metadata.getSceneNumber());
-                } catch (Exception e) {
-                    log.error("❌ Scene processing failed for scene {}: {} - {}", 
-                        metadata.getSceneNumber(), e.getClass().getSimpleName(), e.getMessage(), e);
-                    // Continue with basic scene
-                }
+            // 4. Set scriptLine from user input (no Azure/ASR needed)
+            if (metadata.getScriptLine() != null && !metadata.getScriptLine().trim().isEmpty()) {
+                scene.setScriptLine(metadata.getScriptLine().trim());
+                log.info("✅ ScriptLine set from user input for scene {}: {}", 
+                    metadata.getSceneNumber(), metadata.getScriptLine());
             } else {
-                log.warn("⚠️ Skipping scene processing for scene {} (no Azure data)", metadata.getSceneNumber());
+                scene.setScriptLine(""); // Empty scriptLine if not provided
+                log.warn("⚠️ No scriptLine provided for scene {}", metadata.getSceneNumber());
             }
             
-            // 7. KeyElements are now AI-generated (no user override)
-            // The processSingleSceneWithAzure method already set keyElements via AI analysis
-            if (aiScene.getKeyElements() != null && !aiScene.getKeyElements().isEmpty()) {
+            // 5. Analyze scene with AI using user-provided scriptLine
+            try {
+                log.info("🎬 Analyzing scene {} with AI (using user scriptLine)", metadata.getSceneNumber());
+                
+                // Use UnifiedSceneAnalysisService with user-provided scriptLine
+                com.example.demo.ai.services.SceneAnalysisResult analysisResult = 
+                    unifiedSceneAnalysisService.analyzeScene(
+                        video.getUrl(),
+                        null, // providedRegions - let AI detect
+                        language,
+                        java.time.Duration.ZERO, // startTime - entire video
+                        java.time.Duration.ofSeconds(videoDurationSeconds), // endTime
+                        scene.getScriptLine(), // Use user-provided scriptLine
+                        null // azureObjectHints - not needed
+                    );
+                
+                // Set analysis results on scene
+                if (analysisResult != null) {
+                    scene.setKeyframeUrl(analysisResult.getKeyframeUrl());
+                    scene.setOverlayObjects(analysisResult.getOverlayObjects());
+                    scene.setVlSceneAnalysis(analysisResult.getVlSceneAnalysis());
+                    scene.setKeyElements(analysisResult.getKeyElements());
+                    scene.setSourceAspect(analysisResult.getSourceAspect());
+                    scene.setDeviceOrientation(analysisResult.getSourceAspect()); // Set device orientation
+                    
+                    // Set overlay type based on what we got
+                    if (analysisResult.getOverlayObjects() != null && !analysisResult.getOverlayObjects().isEmpty()) {
+                        scene.setOverlayType("objects");
+                    } else {
+                        scene.setOverlayType("grid");
+                    }
+                    
+                    log.info("✅ Scene {} analyzed: keyframe={}, objects={}, aspect={}", 
+                        metadata.getSceneNumber(),
+                        analysisResult.getKeyframeUrl() != null,
+                        analysisResult.getOverlayObjects() != null ? analysisResult.getOverlayObjects().size() : 0,
+                        analysisResult.getSourceAspect());
+                } else {
+                    log.warn("⚠️ Scene analysis returned null for scene {}", metadata.getSceneNumber());
+                    scene.setOverlayType("grid");
+                }
+                
+            } catch (Exception e) {
+                log.error("❌ Scene analysis failed for scene {}: {} - {}", 
+                    metadata.getSceneNumber(), e.getClass().getSimpleName(), e.getMessage(), e);
+                // Continue with basic scene
+                scene.setOverlayType("grid");
+            }
+            
+            // 6. Log keyElements if generated
+            if (scene.getKeyElements() != null && !scene.getKeyElements().isEmpty()) {
                 log.info("✅ AI-generated keyElements for scene {}: {}", 
-                    metadata.getSceneNumber(), aiScene.getKeyElements());
+                    metadata.getSceneNumber(), scene.getKeyElements());
             } else {
                 log.warn("⚠️ No keyElements generated by AI for scene {}", metadata.getSceneNumber());
             }
             
-            // Fallback to grid if no overlay type set
-            if (aiScene.getOverlayType() == null) {
-                aiScene.setOverlayType("grid");
-            }
-            
-            aiAnalyzedScenes.add(aiScene);
-            log.info("Scene {} analyzed successfully with overlay type: {}", 
-                     metadata.getSceneNumber(), aiScene.getOverlayType());
+            // 7. Add scene to list
+            aiAnalyzedScenes.add(scene);
+            log.info("✅ Scene {} completed with overlay type: {}", 
+                     metadata.getSceneNumber(), scene.getOverlayType());
         }
         
         // 7. Create template with calculated metadata
@@ -721,6 +743,7 @@ public class ContentManager {
         private int sceneNumber;
         private String sceneTitle;
         private String sceneDescription;
+        private String scriptLine;  // User-provided subtitle text
         // keyElements removed - now AI-generated, not user-provided
         
         public SceneMetadata() {}
@@ -734,6 +757,11 @@ public class ContentManager {
         public String getSceneDescription() { return sceneDescription; }
         public void setSceneDescription(String sceneDescription) { 
             this.sceneDescription = sceneDescription; 
+        }
+        
+        public String getScriptLine() { return scriptLine; }
+        public void setScriptLine(String scriptLine) { 
+            this.scriptLine = scriptLine; 
         }
     }
     
