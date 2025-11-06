@@ -27,11 +27,6 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
         System.out.printf("Extracting keyframe from video: %s (start: %s, end: %s)%n", 
                          videoUrl, startTime, endTime);
         
-        if (ossStorageService == null) {
-            System.err.println("AlibabaOssStorageService not available");
-            return null;
-        }
-        
         try {
             // Use scene start timestamp (default to 0 if null)
             Duration target = startTime != null ? startTime : Duration.ZERO;
