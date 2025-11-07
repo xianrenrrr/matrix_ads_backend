@@ -408,9 +408,19 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             // Generate SRT file from subtitleSegments
             String srtPath = null;
             if (subtitleOptions != null && scenes != null && !scenes.isEmpty()) {
+                System.out.println("[Compile] 📋 Generating SRT from " + scenes.size() + " scenes");
+                for (int i = 0; i < scenes.size(); i++) {
+                    com.example.demo.model.Scene scene = scenes.get(i);
+                    int segmentCount = (scene.getSubtitleSegments() != null) ? scene.getSubtitleSegments().size() : 0;
+                    System.out.println("[Compile]   Scene " + (i+1) + ": " + segmentCount + " subtitle segments");
+                }
                 srtPath = subtitleBurningService.generateSrtFile(scenes);
                 srtFile = new java.io.File(srtPath);
-                System.out.println("[Compile] Generated SRT file: " + srtPath);
+                System.out.println("[Compile] ✅ Generated SRT file: " + srtPath);
+            } else {
+                System.out.println("[Compile] ⚠️ No SRT file generated:");
+                System.out.println("[Compile]   - subtitleOptions: " + (subtitleOptions != null ? "present" : "null"));
+                System.out.println("[Compile]   - scenes: " + (scenes != null ? scenes.size() + " scenes" : "null"));
             }
             
             // Build FFmpeg command
@@ -451,6 +461,7 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             // Add subtitle filter if SRT exists
             if (srtPath != null) {
                 String subtitleFilter = subtitleBurningService.buildSubtitleFilter(srtPath, subtitleOptions);
+                System.out.println("[Compile] 📝 Subtitle filter: " + subtitleFilter);
                 filterComplex.append("[0:v]").append(subtitleFilter).append("[v]");
                 hasFilters = true;
             }

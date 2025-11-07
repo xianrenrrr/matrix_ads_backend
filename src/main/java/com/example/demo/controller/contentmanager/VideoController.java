@@ -151,17 +151,42 @@ public class VideoController {
         subtitleOptions.textColor = subtitleColor;
         subtitleOptions.fontSize = subtitleSize;
         
-        // Map position to alignment (1=left, 2=center, 3=right)
-        if ("left".equalsIgnoreCase(subtitlePosition)) {
+        // Map position to alignment
+        // Bottom row: 1=left, 2=center, 3=right
+        // Top row: 7=left, 8=center, 9=right
+        if ("top-left".equalsIgnoreCase(subtitlePosition)) {
+            subtitleOptions.alignment = 7;
+        } else if ("top".equalsIgnoreCase(subtitlePosition) || "top-center".equalsIgnoreCase(subtitlePosition)) {
+            subtitleOptions.alignment = 8;
+        } else if ("top-right".equalsIgnoreCase(subtitlePosition)) {
+            subtitleOptions.alignment = 9;
+        } else if ("left".equalsIgnoreCase(subtitlePosition)) {
             subtitleOptions.alignment = 1;
         } else if ("right".equalsIgnoreCase(subtitlePosition)) {
             subtitleOptions.alignment = 3;
         } else {
-            subtitleOptions.alignment = 2; // center (default)
+            subtitleOptions.alignment = 8; // top center (default - avoids overlap with original subtitles)
         }
         
         log.info("Publishing video with subtitle options: color={}, size={}, position={} (alignment={})", 
                  subtitleColor, subtitleSize, subtitlePosition, subtitleOptions.alignment);
+        
+        // Log template scenes for debugging
+        if (template.getScenes() != null) {
+            log.info("📋 Template has {} scenes for subtitle generation", template.getScenes().size());
+            for (int i = 0; i < template.getScenes().size(); i++) {
+                com.example.demo.model.Scene scene = template.getScenes().get(i);
+                int segmentCount = (scene.getSubtitleSegments() != null) ? scene.getSubtitleSegments().size() : 0;
+                log.info("  Scene {}: {} subtitle segments", i+1, segmentCount);
+                if (segmentCount > 0 && scene.getSubtitleSegments() != null) {
+                    for (com.example.demo.ai.subtitle.SubtitleSegment seg : scene.getSubtitleSegments()) {
+                        log.info("    - \"{}\" ({}ms - {}ms)", seg.getText(), seg.getStartTimeMs(), seg.getEndTimeMs());
+                    }
+                }
+            }
+        } else {
+            log.warn("⚠️ Template has NO scenes!");
+        }
         
         // Use assignmentId (not templateId) because submittedVideos uses assignmentId in composite key
         String compiledVideoUrl = videoCompilationService.compileVideoWithSubtitles(

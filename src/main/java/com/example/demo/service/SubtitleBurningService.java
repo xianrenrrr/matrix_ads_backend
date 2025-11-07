@@ -51,6 +51,14 @@ public class SubtitleBurningService {
         log.info("✅ Generated SRT file: {} with {} subtitle entries", 
             srtFile.getAbsolutePath(), sequenceNumber - 1);
         
+        // Log SRT content for debugging
+        try {
+            String srtContent = new String(Files.readAllBytes(srtFile.toPath()));
+            log.info("📝 SRT Content:\n{}", srtContent);
+        } catch (Exception e) {
+            log.warn("Could not read SRT file for logging: {}", e.getMessage());
+        }
+        
         return srtFile.getAbsolutePath();
     }
     
@@ -91,6 +99,7 @@ public class SubtitleBurningService {
             // Background color (box behind text)
             if (options.backgroundColor != null) {
                 filter.append("BackColour=").append(convertColorToBGRA(options.backgroundColor)).append(",");
+                filter.append("BorderStyle=4,");  // 4 = box background
             }
             
             // Bold
@@ -153,13 +162,13 @@ public class SubtitleBurningService {
      * Subtitle styling options
      */
     public static class SubtitleOptions {
-        public int fontSize = 24;
+        public int fontSize = 32;  // Increased from 24 for better visibility
         public String textColor = "#FFFFFF";  // White
         public String outlineColor = "#000000";  // Black
-        public int outlineWidth = 2;
-        public String backgroundColor = null;  // Transparent by default
-        public boolean bold = false;
-        public int alignment = 2;  // 2 = bottom center
+        public int outlineWidth = 3;  // Increased from 2 for stronger outline
+        public String backgroundColor = "#000000C0";  // Semi-transparent black box (75% opacity)
+        public boolean bold = true;  // Changed to true for better visibility
+        public int alignment = 8;  // 8 = top center (avoids overlap with original subtitles)
         
         // Preset styles
         public static SubtitleOptions defaultStyle() {
