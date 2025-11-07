@@ -103,6 +103,9 @@ public class VideoController {
     @Autowired
     private com.example.demo.service.VideoCompilationService videoCompilationService;
     
+    @Autowired
+    private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
+    
     @PostMapping("/{videoId}/publish")
     public ResponseEntity<ApiResponse<String>> publishVideo(
             @PathVariable String videoId, 
@@ -130,6 +133,16 @@ public class VideoController {
             throw new IllegalArgumentException("Assignment ID not found in submitted video");
         }
         
+        // Get the template from assignment for compilation
+        com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
+        if (assignment == null) {
+            throw new IllegalArgumentException("Assignment not found: " + assignmentId);
+        }
+        com.example.demo.model.ManualTemplate template = assignment.getTemplateSnapshot();
+        if (template == null) {
+            throw new IllegalArgumentException("Template snapshot not found in assignment: " + assignmentId);
+        }
+        
         // COMPILE VIDEO NOW - manager clicked publish (with customized subtitles!)
         com.example.demo.service.SubtitleBurningService.SubtitleOptions subtitleOptions = 
             new com.example.demo.service.SubtitleBurningService.SubtitleOptions();
@@ -150,8 +163,9 @@ public class VideoController {
         log.info("Publishing video with subtitle options: color={}, size={}, position={} (alignment={})", 
                  subtitleColor, subtitleSize, subtitlePosition, subtitleOptions.alignment);
         
+        // Use template ID from the assignment's snapshot
         String compiledVideoUrl = videoCompilationService.compileVideoWithSubtitles(
-            assignmentId, creatorId, publisherId, subtitleOptions);
+            template.getId(), creatorId, publisherId, subtitleOptions);
         com.example.demo.model.CompiledVideo compiledVideo = new com.example.demo.model.CompiledVideo(assignmentId, creatorId, publisherId);
         compiledVideo.setVideoUrl(compiledVideoUrl);
         compiledVideo.setStatus("published");
