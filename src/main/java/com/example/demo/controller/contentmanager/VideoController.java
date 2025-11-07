@@ -19,6 +19,9 @@ import java.util.NoSuchElementException;
 @RestController
 @RequestMapping("/content-manager/videos")
 public class VideoController {
+    
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(VideoController.class);
+    
     @Autowired
     private TemplateAIService aiTemplateGenerator;
     private String detectLanguage(String acceptLanguageHeader) {
@@ -101,9 +104,13 @@ public class VideoController {
     private com.example.demo.service.VideoCompilationService videoCompilationService;
     
     @PostMapping("/{videoId}/publish")
-    public ResponseEntity<ApiResponse<String>> publishVideo(@PathVariable String videoId, 
-                                                            @RequestParam String publisherId,
-                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+    public ResponseEntity<ApiResponse<String>> publishVideo(
+            @PathVariable String videoId, 
+            @RequestParam String publisherId,
+            @RequestParam(required = false, defaultValue = "white") String subtitleColor,
+            @RequestParam(required = false, defaultValue = "24") Integer subtitleSize,
+            @RequestParam(required = false, defaultValue = "center") String subtitlePosition,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
         com.google.cloud.firestore.DocumentSnapshot videoSnap = videoRef.get().get();
@@ -117,11 +124,35 @@ public class VideoController {
         }
         
         String creatorId = (String) videoSnap.get("uploadedBy");
-        String templateId = (String) videoSnap.get("templateId");
+        String assignmentId = (String) videoSnap.get("assignmentId");
         
-        // COMPILE VIDEO NOW - manager clicked publish
-        String compiledVideoUrl = videoCompilationService.compileVideo(templateId, creatorId, publisherId);
-        com.example.demo.model.CompiledVideo compiledVideo = new com.example.demo.model.CompiledVideo(templateId, creatorId, publisherId);
+        if (assignmentId == null || assignmentId.isEmpty()) {
+            throw new IllegalArgumentException("Assignment ID not found in submitted video");
+        }
+        
+        // COMPILE VIDEO NOW - manager clicked publish (with customized subtitles!)
+        com.example.demo.service.SubtitleBurningService.SubtitleOptions subtitleOptions = 
+            new com.example.demo.service.SubtitleBurningService.SubtitleOptions();
+        
+        // Apply custom subtitle styling
+        subtitleOptions.textColor = subtitleColor;
+        subtitleOptions.fontSize = subtitleSize;
+        
+        // Map position to alignment (1=left, 2=center, 3=right)
+        if ("left".equalsIgnoreCase(subtitlePosition)) {
+            subtitleOptions.alignment = 1;
+        } else if ("right".equalsIgnoreCase(subtitlePosition)) {
+            subtitleOptions.alignment = 3;
+        } else {
+            subtitleOptions.alignment = 2; // center (default)
+        }
+        
+        log.info("Publishing video with subtitle options: color={}, size={}, position={} (alignment={})", 
+                 subtitleColor, subtitleSize, subtitlePosition, subtitleOptions.alignment);
+        
+        String compiledVideoUrl = videoCompilationService.compileVideoWithSubtitles(
+            assignmentId, creatorId, publisherId, subtitleOptions);
+        com.example.demo.model.CompiledVideo compiledVideo = new com.example.demo.model.CompiledVideo(assignmentId, creatorId, publisherId);
         compiledVideo.setVideoUrl(compiledVideoUrl);
         compiledVideo.setStatus("published");
         compiledVideoDao.save(compiledVideo);

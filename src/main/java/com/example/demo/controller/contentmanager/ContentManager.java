@@ -398,6 +398,7 @@ public class ContentManager {
         // So we don't need managerId param - we infer it from the submission
         String uploadedBy = (String) videoData.get("uploadedBy");
         double autoRejectThreshold = 0.0;  // Default: no filtering
+        ManualTemplate template = null;  // Store template for subtitle segments
         
         if (uploadedBy != null) {
             try {
@@ -406,6 +407,9 @@ public class ContentManager {
                 if (assignmentId != null) {
                     com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
                     if (assignment != null) {
+                        // Get template snapshot for subtitle segments
+                        template = assignment.getTemplateSnapshot();
+                        
                         // Get the group for this assignment
                         com.example.demo.model.Group group = groupDao.findById(assignment.getGroupId());
                         if (group != null) {
@@ -458,6 +462,23 @@ public class ContentManager {
                         fullSceneData.put("originalFileName", sceneSubmission.getOriginalFileName());
                         fullSceneData.put("fileSize", sceneSubmission.getFileSize());
                         fullSceneData.put("format", sceneSubmission.getFormat());
+                        
+                        // Add subtitle segments from template scene
+                        if (template != null && template.getScenes() != null) {
+                            try {
+                                com.example.demo.model.Scene templateScene = template.getScenes().stream()
+                                    .filter(s -> s.getSceneNumber() == sceneSubmission.getSceneNumber())
+                                    .findFirst()
+                                    .orElse(null);
+                                if (templateScene != null && templateScene.getSubtitleSegments() != null) {
+                                    fullSceneData.put("subtitleSegments", templateScene.getSubtitleSegments());
+                                    fullSceneData.put("scriptLine", templateScene.getScriptLine());
+                                }
+                            } catch (Exception e) {
+                                log.warn("Failed to add subtitle segments for scene {}: {}", sceneId, e.getMessage());
+                            }
+                        }
+                        
                         fullScenes.put(entry.getKey(), fullSceneData);
                     } else {
                         fullScenes.put(entry.getKey(), sceneRef);
