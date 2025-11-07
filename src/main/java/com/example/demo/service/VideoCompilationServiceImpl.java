@@ -288,6 +288,9 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
     @Autowired
     private com.example.demo.dao.TemplateDao templateDao;
     
+    @Autowired
+    private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
+    
     @Override
     public String compileVideoWithSubtitles(String templateId, String userId, String compiledBy, SubtitleBurningService.SubtitleOptions subtitleOptions) {
         return compileVideoWithBGMAndSubtitles(templateId, userId, compiledBy, null, 0.0, subtitleOptions);
@@ -330,10 +333,14 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                 throw new IllegalStateException("No source scene videos with URLs for: " + compositeVideoId);
             }
 
-            // Get template to extract subtitleSegments
-            com.example.demo.model.ManualTemplate template = templateDao.getTemplate(templateId);
+            // Get template from assignment snapshot (templateId is actually assignmentId)
+            com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(templateId);
+            if (assignment == null) {
+                throw new NoSuchElementException("Assignment not found: " + templateId);
+            }
+            com.example.demo.model.ManualTemplate template = assignment.getTemplateSnapshot();
             if (template == null) {
-                throw new NoSuchElementException("Template not found: " + templateId);
+                throw new NoSuchElementException("Template snapshot not found in assignment: " + templateId);
             }
             
             String destObject = String.format("videos/%s/%s/compiled_subtitled.mp4", userId, compositeVideoId);

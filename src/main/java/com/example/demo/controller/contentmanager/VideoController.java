@@ -163,9 +163,9 @@ public class VideoController {
         log.info("Publishing video with subtitle options: color={}, size={}, position={} (alignment={})", 
                  subtitleColor, subtitleSize, subtitlePosition, subtitleOptions.alignment);
         
-        // Use template ID from the assignment's snapshot
+        // Use assignmentId (not templateId) because submittedVideos uses assignmentId in composite key
         String compiledVideoUrl = videoCompilationService.compileVideoWithSubtitles(
-            template.getId(), creatorId, publisherId, subtitleOptions);
+            assignmentId, creatorId, publisherId, subtitleOptions);
         com.example.demo.model.CompiledVideo compiledVideo = new com.example.demo.model.CompiledVideo(assignmentId, creatorId, publisherId);
         compiledVideo.setVideoUrl(compiledVideoUrl);
         compiledVideo.setStatus("published");
