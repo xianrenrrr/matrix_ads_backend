@@ -133,23 +133,34 @@ public class QwenSceneComparisonService {
             }
             
             // Evaluation Criteria (STRICT - purpose and key elements must match)
-            sb.append("请按以下顺序评估（严格模式）：\n\n");
+            sb.append("请按以下顺序评估（严格模式 - 不符合要求直接0分）：\n\n");
             
             sb.append("1. 目的匹配度（50分）- 必须匹配！\n");
             sb.append("   用户图片的内容是否符合视频目的？\n");
-            sb.append("   ⚠️⚠️ 如果目的完全不符合，直接给0分并停止评估！\n");
-            sb.append("   例如：视频目的是推广导航功能，用户却拍摄车衣贴膜 → 0分\n");
-            sb.append("   在suggestions中明确说明：\"请在视频中包含[具体要求的内容]，当前拍摄的内容与要求不符。\"\n\n");
+            sb.append("   ⚠️⚠️⚠️ 如果目的完全不符合，整体分数直接给0分！⚠️⚠️⚠️\n");
+            sb.append("   例如：\n");
+            sb.append("   - 视频目的是推广导航功能，用户却拍摄车衣贴膜 → overallScore = 0\n");
+            sb.append("   - 视频目的是展示餐厅菜品，用户却拍摄店面外观 → overallScore = 0\n");
+            sb.append("   在suggestions中明确说明：\"您拍摄的内容与要求不符。请重新拍摄，确保视频中包含[具体要求的内容]。\"\n\n");
             
             sb.append("2. 关键要素完整度（30分）- 必须包含！\n");
-            sb.append("   用户图片是否包含场景关键要素？\n");
-            sb.append("   ⚠️ 如果关键要素缺失，直接给0分！\n");
+            sb.append("   用户图片是否包含所有场景关键要素？\n");
+            sb.append("   ⚠️⚠️⚠️ 如果关键要素缺失超过50%，整体分数直接给0分！⚠️⚠️⚠️\n");
+            sb.append("   例如：\n");
+            sb.append("   - 要求包含[导航屏幕、中控台、CarPlay界面]，用户只拍了方向盘 → overallScore = 0\n");
+            sb.append("   - 要求包含[菜品、餐具、用餐环境]，用户只拍了桌子 → overallScore = 0\n");
             sb.append("   对比关键要素列表，检查用户图片中出现了哪些。\n");
-            sb.append("   在suggestions中明确列出：\"请在视频中包含以下要素：[缺失的要素列表]\"\n\n");
+            sb.append("   在suggestions中明确列出：\"缺少关键要素：[缺失的要素列表]。请重新拍摄，确保包含所有要求的内容。\"\n\n");
             
             sb.append("3. 视觉相似度（20分）\n");
             sb.append("   两张图片的构图、角度、内容是否相似？\n");
-            sb.append("   不要求完全一样，但应该是同类型的场景。\n\n");
+            sb.append("   不要求完全一样，但应该是同类型的场景。\n");
+            sb.append("   如果前两项都通过，这一项才有意义。\n\n");
+            
+            sb.append("⚠️⚠️⚠️ 重要评分规则 ⚠️⚠️⚠️\n");
+            sb.append("- 如果目的不匹配 → overallScore = 0\n");
+            sb.append("- 如果关键要素缺失超过50% → overallScore = 0\n");
+            sb.append("- 只有当目的匹配且关键要素基本齐全时，才能给及格分（60分以上）\n\n");
             
             // Output Format - CRITICAL: JSON ONLY!
             sb.append("\n⚠️⚠️⚠️ 重要：必须只返回JSON格式，不要包含任何解释文字！⚠️⚠️⚠️\n\n");
@@ -196,16 +207,27 @@ public class QwenSceneComparisonService {
                 sb.append(templateScene.getScriptLine()).append("\n\n");
             }
             
-            sb.append("Evaluate in order (weighted):\n\n");
+            sb.append("Evaluate in order (STRICT MODE - 0 points if requirements not met):\n\n");
             sb.append("1. Purpose Match (50 points) - CRITICAL!\n");
             sb.append("   Does user image content match video purpose?\n");
-            sb.append("   ⚠️ If completely off-topic (e.g., purpose is navigation but shows car wrap), give 0 points!\n\n");
+            sb.append("   ⚠️⚠️⚠️ If completely off-topic, give overallScore = 0! ⚠️⚠️⚠️\n");
+            sb.append("   Examples:\n");
+            sb.append("   - Purpose is navigation, user shows car wrap → overallScore = 0\n");
+            sb.append("   - Purpose is food, user shows exterior → overallScore = 0\n\n");
             
-            sb.append("2. Key Elements Completeness (30 points)\n");
-            sb.append("   Does user image contain key elements?\n\n");
+            sb.append("2. Key Elements Completeness (30 points) - MUST INCLUDE!\n");
+            sb.append("   Does user image contain all key elements?\n");
+            sb.append("   ⚠️⚠️⚠️ If missing >50% of key elements, give overallScore = 0! ⚠️⚠️⚠️\n");
+            sb.append("   List found and missing elements in response.\n\n");
             
             sb.append("3. Visual Similarity (20 points)\n");
-            sb.append("   Are composition, angle, content similar?\n\n");
+            sb.append("   Are composition, angle, content similar?\n");
+            sb.append("   Only matters if first two criteria pass.\n\n");
+            
+            sb.append("⚠️⚠️⚠️ SCORING RULES ⚠️⚠️⚠️\n");
+            sb.append("- Purpose mismatch → overallScore = 0\n");
+            sb.append("- Missing >50% key elements → overallScore = 0\n");
+            sb.append("- Only give passing score (60+) if purpose matches AND key elements present\n\n");
             
             sb.append("Return JSON format only:\n");
             sb.append("{\n");

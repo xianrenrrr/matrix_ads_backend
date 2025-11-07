@@ -126,22 +126,29 @@ public class ScriptLineSegmentationService {
             
             // Build prompt for Qwen
             StringBuilder prompt = new StringBuilder();
-            prompt.append("你是字幕分段助手。请将以下文本智能分段，并为每段分配合理的时间。\n\n");
+            prompt.append("你是KTV字幕分段助手。请将以下文本分成多个短小的字幕段，用于KTV风格的逐字显示。\n\n");
             prompt.append("【文本内容】\n").append(scriptLine).append("\n\n");
             prompt.append("【视频时长】\n").append(videoDurationSeconds).append(" 秒\n\n");
             prompt.append("任务要求：\n");
-            prompt.append("1. 根据语义和标点符号将文本分成多个字幕段\n");
-            prompt.append("2. 每段字幕长度适中（中文10-20字，英文30-60字符）\n");
-            prompt.append("3. 为每段分配开始和结束时间（毫秒），确保总时长不超过视频时长\n");
-            prompt.append("4. 时间分配要考虑阅读速度（中文约3字/秒，英文约15字符/秒）\n");
-            prompt.append("5. 段与段之间可以有小间隔（100-200ms）\n\n");
-            prompt.append("输出格式（仅JSON，不要任何解释）：\n");
+            prompt.append("1. **必须分成多个短段**：每段中文5-12字，英文15-40字符（适合KTV逐句显示）\n");
+            prompt.append("2. 在自然的语义断点分段（逗号、顿号、短语边界）\n");
+            prompt.append("3. 为每段分配精确的开始和结束时间（毫秒）\n");
+            prompt.append("4. 时间分配基于阅读速度：中文约4字/秒，英文约18字符/秒\n");
+            prompt.append("5. 段与段之间有100-200ms的小间隔\n");
+            prompt.append("6. 确保所有段的时间加起来不超过视频总时长\n");
+            prompt.append("7. **重要**：即使文本很短，也要尽量分成至少2-3段\n\n");
+            prompt.append("示例（30字文本，6秒视频）：\n");
+            prompt.append("输入：\"你敢相信么，在广州，只要499，就能给您爱车安排一套，智能的大屏导航\"\n");
+            prompt.append("输出：\n");
             prompt.append("{\n");
             prompt.append("  \"segments\": [\n");
-            prompt.append("    {\"startMs\": 0, \"endMs\": 2500, \"text\": \"第一段字幕文本\"},\n");
-            prompt.append("    {\"startMs\": 2700, \"endMs\": 5200, \"text\": \"第二段字幕文本\"}\n");
+            prompt.append("    {\"startMs\": 0, \"endMs\": 1500, \"text\": \"你敢相信么\"},\n");
+            prompt.append("    {\"startMs\": 1700, \"endMs\": 3000, \"text\": \"在广州，只要499\"},\n");
+            prompt.append("    {\"startMs\": 3200, \"endMs\": 4500, \"text\": \"就能给您爱车安排一套\"},\n");
+            prompt.append("    {\"startMs\": 4700, \"endMs\": 6000, \"text\": \"智能的大屏导航\"}\n");
             prompt.append("  ]\n");
-            prompt.append("}\n");
+            prompt.append("}\n\n");
+            prompt.append("现在请处理上面的文本，输出格式（仅JSON，不要任何解释）：\n");
             
             // Build Qwen API request
             Map<String, Object> request = new HashMap<>();
@@ -218,14 +225,16 @@ public class ScriptLineSegmentationService {
     
     /**
      * Fallback method using simple text splitting (when AI fails)
+     * Creates smaller segments suitable for KTV-style display
      */
     private List<SubtitleSegment> fallbackSplit(String text, int videoDurationSeconds, long sceneStartTimeMs) {
         List<SubtitleSegment> segments = new ArrayList<>();
         
         // Detect if text is primarily Chinese or English
         boolean isChinese = containsChinese(text);
-        int maxSegmentLength = isChinese ? 20 : 60;
-        double charsPerSecond = isChinese ? 3.0 : 15.0;
+        // Smaller segments for KTV display
+        int maxSegmentLength = isChinese ? 12 : 40;
+        double charsPerSecond = isChinese ? 4.0 : 18.0;  // Slightly faster for better pacing
         
         // Split text into segments based on punctuation and max length
         List<String> textSegments = splitTextIntoSegments(text, maxSegmentLength);
@@ -234,14 +243,24 @@ public class ScriptLineSegmentationService {
             return segments;
         }
         
-        // Calculate timing for each segment
+        log.info("Fallback split created {} text segments", textSegments.size());
+        
+        // Calculate timing for each segment with gaps
         long videoDurationMs = videoDurationSeconds * 1000L;
         long currentTimeMs = 0;
+        long gapMs = 150; // 150ms gap between segments
         
-        for (String segmentText : textSegments) {
+        for (int i = 0; i < textSegments.size(); i++) {
+            String segmentText = textSegments.get(i);
+            
             // Calculate duration based on text length and reading speed
             double segmentDurationSeconds = segmentText.length() / charsPerSecond;
             long segmentDurationMs = (long) (segmentDurationSeconds * 1000);
+            
+            // Add gap before segment (except first one)
+            if (i > 0) {
+                currentTimeMs += gapMs;
+            }
             
             // Ensure segment doesn't exceed video duration
             long endTimeMs = Math.min(currentTimeMs + segmentDurationMs, videoDurationMs);
@@ -261,12 +280,13 @@ public class ScriptLineSegmentationService {
             }
         }
         
-        // Extend last segment if needed
+        // Extend last segment to fill remaining time if needed
         if (!segments.isEmpty() && currentTimeMs < videoDurationMs) {
             SubtitleSegment lastSegment = segments.get(segments.size() - 1);
             lastSegment.setEndTimeMs(videoDurationMs + sceneStartTimeMs);
         }
         
+        log.info("Fallback split created {} subtitle segments", segments.size());
         return segments;
     }
     
@@ -319,14 +339,13 @@ public class ScriptLineSegmentationService {
     
     /**
      * Split text into segments based on punctuation and max length
+     * Creates smaller segments suitable for KTV-style display
      */
     private List<String> splitTextIntoSegments(String text, int maxLength) {
         List<String> segments = new ArrayList<>();
         
-        // Split by common punctuation marks
-        String[] sentences = text.split("[。！？；,.!?;]");
-        
-        StringBuilder currentSegment = new StringBuilder();
+        // Split by common punctuation marks (including Chinese punctuation)
+        String[] sentences = text.split("[。！？；，、,.!?;]");
         
         for (String sentence : sentences) {
             sentence = sentence.trim();
@@ -334,36 +353,30 @@ public class ScriptLineSegmentationService {
                 continue;
             }
             
-            // If adding this sentence would exceed max length, save current segment
-            if (currentSegment.length() > 0 && 
-                currentSegment.length() + sentence.length() > maxLength) {
-                segments.add(currentSegment.toString().trim());
-                currentSegment = new StringBuilder();
+            // If sentence is longer than max length, split it further
+            if (sentence.length() > maxLength) {
+                // Split long sentence into chunks
+                for (int i = 0; i < sentence.length(); i += maxLength) {
+                    int end = Math.min(i + maxLength, sentence.length());
+                    String chunk = sentence.substring(i, end).trim();
+                    if (!chunk.isEmpty()) {
+                        segments.add(chunk);
+                    }
+                }
+            } else {
+                // Add sentence as-is if it's within max length
+                segments.add(sentence);
             }
-            
-            // Add sentence to current segment
-            if (currentSegment.length() > 0) {
-                currentSegment.append(" ");
-            }
-            currentSegment.append(sentence);
-            
-            // If current segment is already at max length, save it
-            if (currentSegment.length() >= maxLength) {
-                segments.add(currentSegment.toString().trim());
-                currentSegment = new StringBuilder();
-            }
-        }
-        
-        // Add remaining text
-        if (currentSegment.length() > 0) {
-            segments.add(currentSegment.toString().trim());
         }
         
         // If no segments were created (no punctuation), split by max length
         if (segments.isEmpty() && !text.isEmpty()) {
             for (int i = 0; i < text.length(); i += maxLength) {
                 int end = Math.min(i + maxLength, text.length());
-                segments.add(text.substring(i, end).trim());
+                String chunk = text.substring(i, end).trim();
+                if (!chunk.isEmpty()) {
+                    segments.add(chunk);
+                }
             }
         }
         
