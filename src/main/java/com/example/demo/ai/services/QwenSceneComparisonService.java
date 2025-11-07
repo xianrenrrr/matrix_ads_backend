@@ -51,12 +51,14 @@ public class QwenSceneComparisonService {
      * 
      * @param templateScene Template scene with purpose, key elements, and subtitle
      * @param userVideoUrl User's uploaded scene video URL
+     * @param userThumbnailUrl User's thumbnail URL (if already extracted during upload)
      * @param language Language for analysis (zh, en, etc.)
      * @return ComparisonResult with score (0-100) and suggestions
      */
     public ComparisonResult compareWithDirectVL(
         Scene templateScene,
         String userVideoUrl,
+        String userThumbnailUrl,
         String language
     ) {
         log.info("[DIRECT-COMPARISON] ========================================");
@@ -65,12 +67,20 @@ public class QwenSceneComparisonService {
         log.info("[DIRECT-COMPARISON] ========================================");
         
         try {
-            // Step 1: Extract user keyframe from the scene video
-            // User uploads a scene video (not entire video), so extract from middle of uploaded video
-            log.info("[DIRECT-COMPARISON] Extracting user keyframe from scene video (1 second in)");
-            java.time.Duration keyframeTime = java.time.Duration.ofSeconds(1);  // 1 second into the scene video
-            String userKeyframeUrl = keyframeExtractionService.extractKeyframe(userVideoUrl, keyframeTime, null);
-            log.info("[DIRECT-COMPARISON] User keyframe: {}", userKeyframeUrl);
+            // Step 1: Get user keyframe (use thumbnail if available, otherwise extract)
+            String userKeyframeUrl;
+            if (userThumbnailUrl != null && !userThumbnailUrl.isEmpty()) {
+                // Use existing thumbnail (already extracted during upload) - FAST!
+                log.info("[DIRECT-COMPARISON] Using existing thumbnail (no extraction needed)");
+                userKeyframeUrl = userThumbnailUrl;
+                log.info("[DIRECT-COMPARISON] User thumbnail: {}", userKeyframeUrl);
+            } else {
+                // Fallback: Extract keyframe from video if thumbnail not available
+                log.info("[DIRECT-COMPARISON] No thumbnail available, extracting keyframe from scene video (1 second in)");
+                java.time.Duration keyframeTime = java.time.Duration.ofSeconds(1);
+                userKeyframeUrl = keyframeExtractionService.extractKeyframe(userVideoUrl, keyframeTime, null);
+                log.info("[DIRECT-COMPARISON] User keyframe extracted: {}", userKeyframeUrl);
+            }
             
             // Step 2: Build direct comparison prompt with context (no user subtitle needed)
             log.info("[DIRECT-COMPARISON] Building comparison prompt");

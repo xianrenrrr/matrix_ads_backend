@@ -131,9 +131,14 @@ public class SceneSubmissionController {
                 log.info("Template keyframe: {}", templateKeyframeUrl);
                 log.info("User video: {}", userVideoUrl);
                 
+                // Get the scene submission to access the thumbnail URL (already extracted during upload)
+                SceneSubmission currentSubmission = sceneSubmissionDao.findById(finalSceneId);
+                String userThumbnailUrl = currentSubmission != null ? currentSubmission.getThumbnailUrl() : null;
+                
                 // NEW: Use direct 2-image comparison with purpose-driven evaluation
+                // Pass user thumbnail URL to avoid re-extracting keyframe
                 com.example.demo.ai.services.ComparisonResult comparisonResult = qwenComparisonService.compareWithDirectVL(
-                    templateScene, userVideoUrl, "zh");
+                    templateScene, userVideoUrl, userThumbnailUrl, "zh");
                 
                 // Update the scene submission with AI results
                 SceneSubmission updatedSubmission = sceneSubmissionDao.findById(finalSceneId);
@@ -149,6 +154,14 @@ public class SceneSubmissionController {
                     }
                     
                     sceneSubmissionDao.update(updatedSubmission);
+                    
+                    // Update parent submittedVideos document with new scene status
+                    try {
+                        updateSubmittedVideoWithScene(compositeVideoId, assignmentId, userId, updatedSubmission);
+                        log.info("✅ Updated parent submittedVideos document after AI comparison");
+                    } catch (Exception e) {
+                        log.error("❌ Failed to update parent submittedVideos document: {}", e.getMessage());
+                    }
                     
                     // Log the score
                     log.info("AI Comparison completed for scene {}: score={}/100 ({}%), suggestions={}",
