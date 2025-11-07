@@ -15,7 +15,9 @@ import javax.annotation.PreDestroy;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -329,5 +331,55 @@ public class AlibabaOssStorageService {
         // Not an OSS URL, return as-is (assume it's publicly accessible)
         System.out.println("[OSS] Not an OSS URL, using original URL");
         return url;
+    }
+    
+    /**
+     * Download OSS file to local temp file
+     * Centralizes OSS download logic for FFmpeg processing
+     * 
+     * @param ossUrl OSS URL to download
+     * @param prefix Temp file prefix (e.g., "scene-", "video-")
+     * @param suffix Temp file suffix (e.g., ".mp4", ".jpg")
+     * @return Local temp file
+     */
+    public java.io.File downloadToTempFile(String ossUrl, String prefix, String suffix) throws IOException {
+        String signedUrl = generateSignedUrl(ossUrl, 2, TimeUnit.HOURS);
+        java.io.File tempFile = java.io.File.createTempFile(prefix, suffix);
+        
+        System.out.println("[OSS] Downloading " + ossUrl + " to " + tempFile.getAbsolutePath());
+        
+        try (java.io.InputStream in = new java.net.URL(signedUrl).openStream();
+             java.io.FileOutputStream out = new java.io.FileOutputStream(tempFile)) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = in.read(buffer)) != -1) {
+                out.write(buffer, 0, bytesRead);
+            }
+        }
+        
+        System.out.println("[OSS] Downloaded successfully");
+        return tempFile;
+    }
+    
+    /**
+     * Download multiple OSS files to local temp files
+     * Optimized for batch downloads (e.g., scene videos for compilation)
+     * 
+     * @param ossUrls List of OSS URLs to download
+     * @param prefix Temp file prefix
+     * @param suffix Temp file suffix
+     * @return List of local temp files (same order as input URLs)
+     */
+    public List<java.io.File> downloadMultipleToTempFiles(List<String> ossUrls, String prefix, String suffix) throws IOException {
+        List<java.io.File> tempFiles = new ArrayList<>();
+        
+        for (int i = 0; i < ossUrls.size(); i++) {
+            String url = ossUrls.get(i);
+            java.io.File tempFile = downloadToTempFile(url, prefix + i + "-", suffix);
+            tempFiles.add(tempFile);
+        }
+        
+        System.out.println("[OSS] Downloaded " + tempFiles.size() + " files");
+        return tempFiles;
     }
 }

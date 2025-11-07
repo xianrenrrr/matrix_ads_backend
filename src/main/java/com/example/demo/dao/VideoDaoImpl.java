@@ -124,19 +124,12 @@ public class VideoDaoImpl implements VideoDao {
             ossStorageService.uploadVideoWithThumbnail(file, userId, videoId);
         System.out.println("[VIDEO-UPLOAD] Upload complete: " + uploadResult.videoUrl);
         
-        // Now extract duration from the uploaded video using a signed URL
+        // Now extract duration from the uploaded video using centralized OSS download
         long durationSeconds = 0;
         java.io.File tempFile = null;
         try {
-            // Download video temporarily for duration extraction
-            String signedUrl = ossStorageService.generateSignedUrl(uploadResult.videoUrl, 5, java.util.concurrent.TimeUnit.MINUTES);
-            tempFile = java.io.File.createTempFile("video_duration_", ".mp4");
-            
-            // Download from OSS
-            java.net.URL url = new java.net.URL(signedUrl);
-            try (java.io.InputStream in = url.openStream()) {
-                java.nio.file.Files.copy(in, tempFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            }
+            // Download video temporarily for duration extraction using centralized method
+            tempFile = ossStorageService.downloadToTempFile(uploadResult.videoUrl, "video_duration_", ".mp4");
             
             // Use FFprobe to get duration
             ProcessBuilder pb = new ProcessBuilder(

@@ -215,6 +215,23 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
     }
     
     /**
+     * Get video duration in seconds from local file
+     */
+    private double getVideoDurationFromFile(java.io.File videoFile) throws Exception {
+        ProcessBuilder pb = new ProcessBuilder(
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", videoFile.getAbsolutePath()
+        );
+        Process proc = pb.start();
+        java.io.BufferedReader reader = new java.io.BufferedReader(
+            new java.io.InputStreamReader(proc.getInputStream())
+        );
+        String durationStr = reader.readLine();
+        proc.waitFor();
+        return Double.parseDouble(durationStr);
+    }
+    
+    /**
      * Create concatenated BGM file that loops to match video duration using signed URLs
      */
     private java.io.File createBGMConcatFileFromUrls(List<String> bgmUrls, double videoDuration) throws Exception {
@@ -365,12 +382,9 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
         String destObject
     ) throws Exception {
         
-        // Generate signed URLs for OSS videos
-        List<String> signedUrls = new ArrayList<>();
-        for (String url : sourceUrls) {
-            String signedUrl = ossStorageService.generateSignedUrl(url, 2, java.util.concurrent.TimeUnit.HOURS);
-            signedUrls.add(signedUrl);
-        }
+        // Download videos locally first (more reliable than using signed URLs in concat)
+        // Using centralized OSS service for all downloads
+        List<java.io.File> localVideoFiles = null;
         
         java.io.File listFile = null;
         java.io.File srtFile = null;
@@ -378,11 +392,16 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
         java.io.File outFile = null;
         
         try {
-            // Create concat list file
+            // Download all scene videos using centralized OSS service
+            localVideoFiles = ossStorageService.downloadMultipleToTempFiles(sourceUrls, "scene-", ".mp4");
+            
+            // Create concat list file with local paths
             listFile = java.io.File.createTempFile("concat-", ".txt");
             try (java.io.PrintWriter pw = new java.io.PrintWriter(listFile, java.nio.charset.StandardCharsets.UTF_8)) {
-                for (String signedUrl : signedUrls) {
-                    pw.println("file '" + signedUrl + "'");
+                for (java.io.File videoFile : localVideoFiles) {
+                    // Use absolute path and escape single quotes
+                    String path = videoFile.getAbsolutePath().replace("'", "'\\''");
+                    pw.println("file '" + path + "'");
                 }
             }
             
@@ -407,10 +426,10 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             
             // Add BGM input if specified
             if (bgmUrls != null && !bgmUrls.isEmpty()) {
-                // Get video duration first
-                double videoDuration = getVideoDurationFromUrl(signedUrls.get(0));
-                for (int i = 1; i < signedUrls.size(); i++) {
-                    videoDuration += getVideoDurationFromUrl(signedUrls.get(i));
+                // Get video duration from local files
+                double videoDuration = 0;
+                for (java.io.File videoFile : localVideoFiles) {
+                    videoDuration += getVideoDurationFromFile(videoFile);
                 }
                 
                 // Generate signed URLs for BGM
@@ -491,12 +510,28 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             // Execute FFmpeg
             System.out.println("[Compile] FFmpeg command: " + String.join(" ", ffmpegCmd));
             ProcessBuilder pb = new ProcessBuilder(ffmpegCmd);
+            pb.redirectErrorStream(true); // Merge stderr into stdout
             Process p = pb.start();
+            
+            // Capture output for debugging
+            StringBuilder output = new StringBuilder();
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(p.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
+            }
+            
             int code = p.waitFor();
             
             if (code != 0) {
-                throw new RuntimeException("ffmpeg compilation failed with exit code " + code);
+                System.err.println("[Compile] FFmpeg failed with exit code " + code);
+                System.err.println("[Compile] FFmpeg output:\n" + output.toString());
+                throw new RuntimeException("ffmpeg compilation failed with exit code " + code + ". Output: " + output.toString());
             }
+            
+            System.out.println("[Compile] ✅ FFmpeg completed successfully");
             
             // Upload to OSS
             if (ossStorageService == null) {
@@ -513,6 +548,10 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             if (srtFile != null) try { srtFile.delete(); } catch (Exception ignored) {}
             if (bgmFile != null) try { bgmFile.delete(); } catch (Exception ignored) {}
             if (outFile != null) try { outFile.delete(); } catch (Exception ignored) {}
+            // Clean up downloaded video files
+            for (java.io.File videoFile : localVideoFiles) {
+                try { videoFile.delete(); } catch (Exception ignored) {}
+            }
         }
     }
 }
