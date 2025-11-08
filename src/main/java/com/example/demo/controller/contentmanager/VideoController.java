@@ -151,21 +151,16 @@ public class VideoController {
         subtitleOptions.textColor = subtitleColor;
         subtitleOptions.fontSize = subtitleSize;
         
-        // Map position to alignment
-        // Bottom row: 1=left, 2=center, 3=right
-        // Top row: 7=left, 8=center, 9=right
-        if ("top-left".equalsIgnoreCase(subtitlePosition)) {
-            subtitleOptions.alignment = 7;
-        } else if ("top".equalsIgnoreCase(subtitlePosition) || "top-center".equalsIgnoreCase(subtitlePosition)) {
-            subtitleOptions.alignment = 8;
-        } else if ("top-right".equalsIgnoreCase(subtitlePosition)) {
-            subtitleOptions.alignment = 9;
-        } else if ("left".equalsIgnoreCase(subtitlePosition)) {
-            subtitleOptions.alignment = 1;
-        } else if ("right".equalsIgnoreCase(subtitlePosition)) {
-            subtitleOptions.alignment = 3;
+        // Map position to alignment (always centered horizontally)
+        // Top: 8, Middle: 5, Bottom: 2
+        if ("top".equalsIgnoreCase(subtitlePosition)) {
+            subtitleOptions.alignment = 8;  // Top center
+        } else if ("middle".equalsIgnoreCase(subtitlePosition) || "center".equalsIgnoreCase(subtitlePosition)) {
+            subtitleOptions.alignment = 5;  // Middle center
+        } else if ("bottom".equalsIgnoreCase(subtitlePosition)) {
+            subtitleOptions.alignment = 2;  // Bottom center
         } else {
-            subtitleOptions.alignment = 8; // top center (default - avoids overlap with original subtitles)
+            subtitleOptions.alignment = 2;  // Default: bottom center
         }
         
         log.info("Publishing video with subtitle options: color={}, size={}, position={} (alignment={})", 

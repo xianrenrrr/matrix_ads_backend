@@ -64,19 +64,22 @@ POST /content-manager/videos/{videoId}/publish
   &subtitlePosition=center     (left|center|right)
 ```
 
-### Position Mapping
+### Position Mapping (Simplified)
 
-**Top Row (avoids overlap with original subtitles):**
-- `top-left` → Alignment 7 (top left)
-- `top` or `top-center` → Alignment 8 (top center) - **NEW DEFAULT**
-- `top-right` → Alignment 9 (top right)
+**All positions are centered horizontally:**
+- `top` → Alignment 8 (top center) - **DEFAULT**
+- `middle` or `center` → Alignment 5 (middle center)
+- `bottom` → Alignment 2 (bottom center)
 
-**Bottom Row (may overlap with original subtitles):**
-- `left` → Alignment 1 (bottom left)
-- `center` → Alignment 2 (bottom center)
-- `right` → Alignment 3 (bottom right)
+**Default is `top` (alignment 8) to avoid overlapping with original video subtitles at the bottom.**
 
-**Default changed to `top-center` (alignment 8) to avoid overlapping with original video subtitles.**
+### ASS Alignment Reference
+```
+7  8  9  ← Top row
+4  5  6  ← Middle row
+1  2  3  ← Bottom row
+```
+We use: 8 (top center), 5 (middle center), 2 (bottom center)
 
 ## FFmpeg Filter Generated
 

@@ -76,6 +76,9 @@ public class SubtitleBurningService {
         if (options != null) {
             filter.append(":force_style='");
             
+            // Font name - use system fonts that support Chinese
+            filter.append("FontName=Arial Unicode MS,");  // Fallback to Arial Unicode MS for Chinese
+            
             // Font size
             if (options.fontSize > 0) {
                 filter.append("FontSize=").append(options.fontSize).append(",");
@@ -168,7 +171,7 @@ public class SubtitleBurningService {
         public int outlineWidth = 3;  // Increased from 2 for stronger outline
         public String backgroundColor = "#000000C0";  // Semi-transparent black box (75% opacity)
         public boolean bold = true;  // Changed to true for better visibility
-        public int alignment = 8;  // 8 = top center (avoids overlap with original subtitles)
+        public int alignment = 2;  // 2 = bottom center (default)
         
         // Preset styles
         public static SubtitleOptions defaultStyle() {
