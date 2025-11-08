@@ -495,13 +495,13 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                     ffmpegCmd.add("0:a");
                 }
                 
-                // Encoding settings
+                // Encoding settings (optimized for speed on limited resources)
                 ffmpegCmd.add("-c:v");
                 ffmpegCmd.add("libx264");
                 ffmpegCmd.add("-preset");
-                ffmpegCmd.add("veryfast");
+                ffmpegCmd.add("ultrafast");  // Changed from veryfast to ultrafast
                 ffmpegCmd.add("-crf");
-                ffmpegCmd.add("23");
+                ffmpegCmd.add("28");  // Changed from 23 to 28 (lower quality but faster)
                 ffmpegCmd.add("-c:a");
                 ffmpegCmd.add("aac");
                 ffmpegCmd.add("-b:a");
