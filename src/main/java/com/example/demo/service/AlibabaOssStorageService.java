@@ -90,43 +90,78 @@ public class AlibabaOssStorageService {
     public UploadResult uploadVideoWithThumbnail(MultipartFile file, String userId, String videoId) 
             throws IOException, InterruptedException {
         
-        // Save video to temp file FIRST (before consuming the stream)
-        java.io.File tempVideo = java.io.File.createTempFile("upload-", ".mp4");
-        file.transferTo(tempVideo);
+        java.io.File tempVideo = null;
+        java.io.File tempThumb = null;
         
-        // Upload video from temp file
-        String videoObjectKey = String.format("videos/%s/%s/%s", userId, videoId, file.getOriginalFilename());
-        String videoUrl = uploadFile(tempVideo, videoObjectKey, file.getContentType());
-        
-        System.out.println("[OSS] Uploaded video to: " + videoUrl);
-        
-        // Extract thumbnail using FFmpeg
-        String thumbObjectKey = String.format("videos/%s/%s/thumbnail.jpg", userId, videoId);
-        java.io.File tempThumb = java.io.File.createTempFile("thumb-", ".jpg");
-        
-        ProcessBuilder pb = new ProcessBuilder(
-            "ffmpeg", "-y", "-ss", "1", "-i", tempVideo.getAbsolutePath(), 
-            "-frames:v", "1", tempThumb.getAbsolutePath()
-        );
-        Process proc = pb.start();
-        int exitCode = proc.waitFor();
-        
-        if (exitCode != 0) {
-            tempVideo.delete();
-            tempThumb.delete();
-            throw new IOException("Failed to extract thumbnail with FFmpeg");
+        try {
+            // Save video to temp file FIRST (before consuming the stream)
+            tempVideo = java.io.File.createTempFile("upload-", ".mp4");
+            System.out.println("[OSS] Saving video to temp file: " + tempVideo.getAbsolutePath());
+            file.transferTo(tempVideo);
+            System.out.println("[OSS] Video saved to temp file, size: " + tempVideo.length() + " bytes");
+            
+            // Upload video from temp file
+            String videoObjectKey = String.format("videos/%s/%s/%s", userId, videoId, file.getOriginalFilename());
+            System.out.println("[OSS] Uploading video to OSS: " + videoObjectKey);
+            String videoUrl = uploadFile(tempVideo, videoObjectKey, file.getContentType());
+            
+            System.out.println("[OSS] ✅ Uploaded video to: " + videoUrl);
+            
+            // Extract thumbnail using FFmpeg
+            String thumbObjectKey = String.format("videos/%s/%s/thumbnail.jpg", userId, videoId);
+            tempThumb = java.io.File.createTempFile("thumb-", ".jpg");
+            
+            System.out.println("[OSS] Extracting thumbnail with FFmpeg...");
+            ProcessBuilder pb = new ProcessBuilder(
+                "ffmpeg", "-y", "-ss", "1", "-i", tempVideo.getAbsolutePath(), 
+                "-frames:v", "1", tempThumb.getAbsolutePath()
+            );
+            pb.redirectErrorStream(true);
+            Process proc = pb.start();
+            
+            // Capture FFmpeg output for debugging
+            java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(proc.getInputStream())
+            );
+            String line;
+            StringBuilder ffmpegOutput = new StringBuilder();
+            while ((line = reader.readLine()) != null) {
+                ffmpegOutput.append(line).append("\n");
+            }
+            
+            int exitCode = proc.waitFor();
+            
+            if (exitCode != 0) {
+                System.err.println("[OSS] ❌ FFmpeg failed with exit code: " + exitCode);
+                System.err.println("[OSS] FFmpeg output:\n" + ffmpegOutput.toString());
+                throw new IOException("Failed to extract thumbnail with FFmpeg (exit code: " + exitCode + ")");
+            }
+            
+            System.out.println("[OSS] ✅ Thumbnail extracted successfully");
+            
+            // Upload thumbnail
+            System.out.println("[OSS] Uploading thumbnail to OSS: " + thumbObjectKey);
+            String thumbnailUrl = uploadFile(tempThumb, thumbObjectKey, "image/jpeg");
+            
+            System.out.println("[OSS] ✅ Uploaded thumbnail to: " + thumbnailUrl);
+            
+            return new UploadResult(videoUrl, thumbnailUrl);
+            
+        } catch (Exception e) {
+            System.err.println("[OSS] ❌ Upload failed: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+            e.printStackTrace();
+            throw e;
+        } finally {
+            // Clean up temp files
+            if (tempVideo != null && tempVideo.exists()) {
+                boolean deleted = tempVideo.delete();
+                System.out.println("[OSS] Temp video deleted: " + deleted);
+            }
+            if (tempThumb != null && tempThumb.exists()) {
+                boolean deleted = tempThumb.delete();
+                System.out.println("[OSS] Temp thumbnail deleted: " + deleted);
+            }
         }
-        
-        // Upload thumbnail
-        String thumbnailUrl = uploadFile(tempThumb, thumbObjectKey, "image/jpeg");
-        
-        System.out.println("[OSS] Uploaded thumbnail to: " + thumbnailUrl);
-        
-        // Clean up temp files
-        tempVideo.delete();
-        tempThumb.delete();
-        
-        return new UploadResult(videoUrl, thumbnailUrl);
     }
     
     /**

@@ -118,54 +118,71 @@ public class VideoDaoImpl implements VideoDao {
             throw new IllegalStateException("AlibabaOssStorageService not available");
         }
         
-        // First, upload the video (this will handle the file properly)
-        System.out.println("[VIDEO-UPLOAD] Starting upload for videoId: " + videoId);
-        com.example.demo.service.AlibabaOssStorageService.UploadResult uploadResult = 
-            ossStorageService.uploadVideoWithThumbnail(file, userId, videoId);
-        System.out.println("[VIDEO-UPLOAD] Upload complete: " + uploadResult.videoUrl);
-        
-        // Now extract duration from the uploaded video using centralized OSS download
-        long durationSeconds = 0;
-        java.io.File tempFile = null;
         try {
-            // Download video temporarily for duration extraction using centralized method
-            tempFile = ossStorageService.downloadToTempFile(uploadResult.videoUrl, "video_duration_", ".mp4");
+            // First, upload the video (this will handle the file properly)
+            System.out.println("[VIDEO-UPLOAD] Starting upload for videoId: " + videoId);
+            System.out.println("[VIDEO-UPLOAD] File: " + file.getOriginalFilename() + ", Size: " + file.getSize() + " bytes");
             
-            // Use FFprobe to get duration
-            ProcessBuilder pb = new ProcessBuilder(
-                "ffprobe", "-v", "error", "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1", tempFile.getAbsolutePath()
-            );
-            Process process = pb.start();
-            java.io.BufferedReader reader = new java.io.BufferedReader(
-                new java.io.InputStreamReader(process.getInputStream())
-            );
-            String durationStr = reader.readLine();
-            process.waitFor();
+            com.example.demo.service.AlibabaOssStorageService.UploadResult uploadResult = 
+                ossStorageService.uploadVideoWithThumbnail(file, userId, videoId);
+            System.out.println("[VIDEO-UPLOAD] ✅ Upload complete: " + uploadResult.videoUrl);
             
-            if (durationStr != null && !durationStr.isEmpty()) {
-                durationSeconds = (long) Double.parseDouble(durationStr);
-                System.out.println("[VIDEO-DURATION] Extracted duration: " + durationSeconds + " seconds");
+            // Now extract duration from the uploaded video using centralized OSS download
+            long durationSeconds = 0;
+            java.io.File tempFile = null;
+            try {
+                System.out.println("[VIDEO-DURATION] Downloading video for duration extraction...");
+                // Download video temporarily for duration extraction using centralized method
+                tempFile = ossStorageService.downloadToTempFile(uploadResult.videoUrl, "video_duration_", ".mp4");
+                
+                // Use FFprobe to get duration
+                ProcessBuilder pb = new ProcessBuilder(
+                    "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1", tempFile.getAbsolutePath()
+                );
+                Process process = pb.start();
+                java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getInputStream())
+                );
+                String durationStr = reader.readLine();
+                int exitCode = process.waitFor();
+                
+                if (exitCode == 0 && durationStr != null && !durationStr.isEmpty()) {
+                    durationSeconds = (long) Double.parseDouble(durationStr);
+                    System.out.println("[VIDEO-DURATION] ✅ Extracted duration: " + durationSeconds + " seconds");
+                } else {
+                    System.err.println("[VIDEO-DURATION] ⚠️ FFprobe failed or returned empty (exit code: " + exitCode + ")");
+                }
+            } catch (Exception e) {
+                System.err.println("[VIDEO-DURATION] ❌ Failed to extract duration: " + e.getMessage());
+                e.printStackTrace();
+                // Continue without duration
+            } finally {
+                if (tempFile != null && tempFile.exists()) {
+                    boolean deleted = tempFile.delete();
+                    System.out.println("[VIDEO-DURATION] Temp file deleted: " + deleted);
+                }
             }
+            
+            // Create and save video object
+            Video video = new Video();
+            video.setId(videoId);
+            video.setUserId(userId);
+            video.setUrl(uploadResult.videoUrl);
+            video.setThumbnailUrl(uploadResult.thumbnailUrl);
+            video.setDurationSeconds(durationSeconds);
+            
+            System.out.println("[VIDEO-UPLOAD] Saving video to Firestore...");
+            Video savedVideo = saveVideo(video);
+            System.out.println("[VIDEO-UPLOAD] ✅ Video saved successfully");
+            
+            return savedVideo;
+            
         } catch (Exception e) {
-            System.err.println("[VIDEO-DURATION] Failed to extract duration: " + e.getMessage());
+            System.err.println("[VIDEO-UPLOAD] ❌ Upload failed: " + e.getClass().getSimpleName() + " - " + e.getMessage());
             e.printStackTrace();
-            // Continue without duration
-        } finally {
-            if (tempFile != null && tempFile.exists()) {
-                tempFile.delete();
-            }
+            throw e;
         }
-        
-        // Create and save video object
-        Video video = new Video();
-        video.setId(videoId);
-        video.setUserId(userId);
-        video.setUrl(uploadResult.videoUrl);
-        video.setThumbnailUrl(uploadResult.thumbnailUrl);
-        video.setDurationSeconds(durationSeconds);
-        
-        return saveVideo(video);
     }
     
     @Override
