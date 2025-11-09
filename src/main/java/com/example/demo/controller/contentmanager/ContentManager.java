@@ -538,7 +538,6 @@ public class ContentManager {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
         log.info("Creating manual template with AI analysis for user: {}", userId);
-        log.info("Speech extraction: ASR per scene video (Alibaba Cloud Qwen)");
         
         // Parse scenes metadata
         com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();

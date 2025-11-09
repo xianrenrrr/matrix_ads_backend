@@ -90,15 +90,15 @@ public class AlibabaOssStorageService {
     public UploadResult uploadVideoWithThumbnail(MultipartFile file, String userId, String videoId) 
             throws IOException, InterruptedException {
         
-        // Upload video
-        String videoObjectKey = String.format("videos/%s/%s/%s", userId, videoId, file.getOriginalFilename());
-        String videoUrl = uploadFile(file.getInputStream(), videoObjectKey, file.getContentType());
-        
-        System.out.println("[OSS] Uploaded video to: " + videoUrl);
-        
-        // Save video to temp file for FFmpeg thumbnail extraction
+        // Save video to temp file FIRST (before consuming the stream)
         java.io.File tempVideo = java.io.File.createTempFile("upload-", ".mp4");
         file.transferTo(tempVideo);
+        
+        // Upload video from temp file
+        String videoObjectKey = String.format("videos/%s/%s/%s", userId, videoId, file.getOriginalFilename());
+        String videoUrl = uploadFile(tempVideo, videoObjectKey, file.getContentType());
+        
+        System.out.println("[OSS] Uploaded video to: " + videoUrl);
         
         // Extract thumbnail using FFmpeg
         String thumbObjectKey = String.format("videos/%s/%s/thumbnail.jpg", userId, videoId);
