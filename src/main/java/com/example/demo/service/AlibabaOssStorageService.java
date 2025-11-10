@@ -56,14 +56,34 @@ public class AlibabaOssStorageService {
                 "Set ALIBABA_CLOUD_ACCESS_KEY_ID and ALIBABA_CLOUD_ACCESS_KEY_SECRET");
         }
         
-        // Create OSS client
-        this.ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
-        
         System.out.println("========================================");
-        System.out.println("Alibaba OSS Storage Service Initialized");
+        System.out.println("Initializing Alibaba OSS Storage Service");
         System.out.println("Bucket: " + bucketName);
         System.out.println("Region: cn-shanghai");
         System.out.println("Endpoint: " + endpoint);
+        System.out.println("AccessKeyId: " + (accessKeyId != null ? accessKeyId.substring(0, Math.min(8, accessKeyId.length())) + "..." : "null"));
+        
+        // Create OSS client with timeout configuration
+        com.aliyun.oss.ClientBuilderConfiguration config = new com.aliyun.oss.ClientBuilderConfiguration();
+        config.setConnectionTimeout(30000); // 30 seconds
+        config.setSocketTimeout(60000); // 60 seconds
+        config.setMaxErrorRetry(3);
+        
+        System.out.println("Client config: connectionTimeout=30s, socketTimeout=60s, maxRetry=3");
+        
+        this.ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret, config);
+        
+        // Test connection
+        try {
+            System.out.println("Testing OSS connection...");
+            boolean exists = ossClient.doesBucketExist(bucketName);
+            System.out.println("✅ OSS connection successful, bucket exists: " + exists);
+        } catch (Exception e) {
+            System.err.println("❌ OSS connection test failed: " + e.getMessage());
+            e.printStackTrace();
+            throw new IllegalStateException("Failed to connect to OSS: " + e.getMessage(), e);
+        }
+        
         System.out.println("========================================");
     }
     
@@ -168,14 +188,44 @@ public class AlibabaOssStorageService {
      * Upload file from InputStream
      */
     public String uploadFile(InputStream inputStream, String objectKey, String contentType) throws IOException {
-        ObjectMetadata metadata = new ObjectMetadata();
-        metadata.setContentType(contentType);
-        
-        PutObjectRequest putRequest = new PutObjectRequest(bucketName, objectKey, inputStream, metadata);
-        ossClient.putObject(putRequest);
-        
-        // Return public URL (bucket is private, will need signed URLs for access)
-        return String.format("https://%s.%s/%s", bucketName, endpoint, objectKey);
+        try {
+            System.out.println("[OSS-UPLOAD] Starting upload: " + objectKey);
+            System.out.println("[OSS-UPLOAD] Bucket: " + bucketName + ", Endpoint: " + endpoint);
+            
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentType(contentType);
+            
+            PutObjectRequest putRequest = new PutObjectRequest(bucketName, objectKey, inputStream, metadata);
+            
+            System.out.println("[OSS-UPLOAD] Calling ossClient.putObject()...");
+            com.aliyun.oss.model.PutObjectResult result = ossClient.putObject(putRequest);
+            
+            // Log request ID and ETag
+            String requestId = result.getRequestId();
+            String etag = result.getETag();
+            System.out.println("[OSS-UPLOAD] ✅ Upload successful");
+            System.out.println("[OSS-UPLOAD] Request ID: " + requestId);
+            System.out.println("[OSS-UPLOAD] ETag: " + etag);
+            
+            // Return public URL (bucket is private, will need signed URLs for access)
+            String url = String.format("https://%s.%s/%s", bucketName, endpoint, objectKey);
+            System.out.println("[OSS-UPLOAD] URL: " + url);
+            return url;
+        } catch (Exception e) {
+            System.err.println("[OSS-UPLOAD] ❌ Upload failed for: " + objectKey);
+            System.err.println("[OSS-UPLOAD] Error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+            
+            // Try to extract request ID from exception
+            if (e instanceof com.aliyun.oss.OSSException) {
+                com.aliyun.oss.OSSException ossEx = (com.aliyun.oss.OSSException) e;
+                System.err.println("[OSS-UPLOAD] Request ID: " + ossEx.getRequestId());
+                System.err.println("[OSS-UPLOAD] Error Code: " + ossEx.getErrorCode());
+                System.err.println("[OSS-UPLOAD] Host ID: " + ossEx.getHostId());
+            }
+            
+            e.printStackTrace();
+            throw new IOException("OSS upload failed: " + e.getMessage(), e);
+        }
     }
     
 
@@ -183,13 +233,47 @@ public class AlibabaOssStorageService {
      * Upload file from File object
      */
     public String uploadFile(java.io.File file, String objectKey, String contentType) throws IOException {
-        ObjectMetadata metadata = new ObjectMetadata();
-        metadata.setContentType(contentType);
-        
-        PutObjectRequest putRequest = new PutObjectRequest(bucketName, objectKey, file, metadata);
-        ossClient.putObject(putRequest);
-        
-        return String.format("https://%s.%s/%s", bucketName, endpoint, objectKey);
+        try {
+            System.out.println("[OSS-UPLOAD] Starting upload: " + objectKey);
+            System.out.println("[OSS-UPLOAD] File size: " + file.length() + " bytes");
+            System.out.println("[OSS-UPLOAD] Bucket: " + bucketName + ", Endpoint: " + endpoint);
+            
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentType(contentType);
+            metadata.setContentLength(file.length());
+            
+            PutObjectRequest putRequest = new PutObjectRequest(bucketName, objectKey, file, metadata);
+            
+            System.out.println("[OSS-UPLOAD] Calling ossClient.putObject()...");
+            long startTime = System.currentTimeMillis();
+            com.aliyun.oss.model.PutObjectResult result = ossClient.putObject(putRequest);
+            long duration = System.currentTimeMillis() - startTime;
+            
+            // Log request ID and ETag
+            String requestId = result.getRequestId();
+            String etag = result.getETag();
+            System.out.println("[OSS-UPLOAD] ✅ Upload successful in " + duration + "ms");
+            System.out.println("[OSS-UPLOAD] Request ID: " + requestId);
+            System.out.println("[OSS-UPLOAD] ETag: " + etag);
+            
+            String url = String.format("https://%s.%s/%s", bucketName, endpoint, objectKey);
+            System.out.println("[OSS-UPLOAD] URL: " + url);
+            return url;
+        } catch (Exception e) {
+            System.err.println("[OSS-UPLOAD] ❌ Upload failed for: " + objectKey);
+            System.err.println("[OSS-UPLOAD] Error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+            
+            // Try to extract request ID from exception
+            if (e instanceof com.aliyun.oss.OSSException) {
+                com.aliyun.oss.OSSException ossEx = (com.aliyun.oss.OSSException) e;
+                System.err.println("[OSS-UPLOAD] Request ID: " + ossEx.getRequestId());
+                System.err.println("[OSS-UPLOAD] Error Code: " + ossEx.getErrorCode());
+                System.err.println("[OSS-UPLOAD] Host ID: " + ossEx.getHostId());
+            }
+            
+            e.printStackTrace();
+            throw new IOException("OSS upload failed: " + e.getMessage(), e);
+        }
     }
     
     /**
