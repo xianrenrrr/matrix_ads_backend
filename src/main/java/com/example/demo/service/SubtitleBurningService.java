@@ -100,11 +100,8 @@ public class SubtitleBurningService {
                 filter.append("Outline=").append(options.outlineWidth).append(",");
             }
             
-            // Background color (box behind text)
-            if (options.backgroundColor != null) {
-                filter.append("BackColour=").append(convertColorToBGRA(options.backgroundColor)).append(",");
-                filter.append("BorderStyle=4,");  // 4 = box background
-            }
+            // BorderStyle: 1 = normal text with outline, no box
+            filter.append("BorderStyle=1,");
             
             // Bold
             if (options.bold) {
@@ -149,7 +146,9 @@ public class SubtitleBurningService {
         }
         
         // Convert to BGRA format: &HAABBGGRR
-        return String.format("&H%02X%02X%02X%02X", a, b, g, r);
+        // IMPORTANT: In ASS format, alpha is INVERTED: 00 = opaque, FF = transparent
+        int assAlpha = 255 - a;  // Invert alpha for ASS format
+        return String.format("&H%02X%02X%02X%02X", assAlpha, b, g, r);
     }
     
     /**
