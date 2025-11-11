@@ -230,50 +230,93 @@ public class AlibabaOssStorageService {
     
 
     /**
-     * Upload file from File object
+     * Upload file from File object with retry logic for network errors
      */
     public String uploadFile(java.io.File file, String objectKey, String contentType) throws IOException {
-        try {
-            System.out.println("[OSS-UPLOAD] Starting upload: " + objectKey);
-            System.out.println("[OSS-UPLOAD] File size: " + file.length() + " bytes");
-            System.out.println("[OSS-UPLOAD] Bucket: " + bucketName + ", Endpoint: " + endpoint);
-            
-            ObjectMetadata metadata = new ObjectMetadata();
-            metadata.setContentType(contentType);
-            metadata.setContentLength(file.length());
-            
-            PutObjectRequest putRequest = new PutObjectRequest(bucketName, objectKey, file, metadata);
-            
-            System.out.println("[OSS-UPLOAD] Calling ossClient.putObject()...");
-            long startTime = System.currentTimeMillis();
-            com.aliyun.oss.model.PutObjectResult result = ossClient.putObject(putRequest);
-            long duration = System.currentTimeMillis() - startTime;
-            
-            // Log request ID and ETag
-            String requestId = result.getRequestId();
-            String etag = result.getETag();
-            System.out.println("[OSS-UPLOAD] ✅ Upload successful in " + duration + "ms");
-            System.out.println("[OSS-UPLOAD] Request ID: " + requestId);
-            System.out.println("[OSS-UPLOAD] ETag: " + etag);
-            
-            String url = String.format("https://%s.%s/%s", bucketName, endpoint, objectKey);
-            System.out.println("[OSS-UPLOAD] URL: " + url);
-            return url;
-        } catch (Exception e) {
-            System.err.println("[OSS-UPLOAD] ❌ Upload failed for: " + objectKey);
-            System.err.println("[OSS-UPLOAD] Error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
-            
-            // Try to extract request ID from exception
-            if (e instanceof com.aliyun.oss.OSSException) {
-                com.aliyun.oss.OSSException ossEx = (com.aliyun.oss.OSSException) e;
-                System.err.println("[OSS-UPLOAD] Request ID: " + ossEx.getRequestId());
-                System.err.println("[OSS-UPLOAD] Error Code: " + ossEx.getErrorCode());
-                System.err.println("[OSS-UPLOAD] Host ID: " + ossEx.getHostId());
+        int maxRetries = 3;
+        int retryDelay = 2000; // 2 seconds
+        
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                System.out.println("[OSS-UPLOAD] Starting upload (attempt " + attempt + "/" + maxRetries + "): " + objectKey);
+                System.out.println("[OSS-UPLOAD] File size: " + file.length() + " bytes");
+                System.out.println("[OSS-UPLOAD] Bucket: " + bucketName + ", Endpoint: " + endpoint);
+                
+                ObjectMetadata metadata = new ObjectMetadata();
+                metadata.setContentType(contentType);
+                metadata.setContentLength(file.length());
+                
+                PutObjectRequest putRequest = new PutObjectRequest(bucketName, objectKey, file, metadata);
+                
+                System.out.println("[OSS-UPLOAD] Calling ossClient.putObject()...");
+                long startTime = System.currentTimeMillis();
+                com.aliyun.oss.model.PutObjectResult result = ossClient.putObject(putRequest);
+                long duration = System.currentTimeMillis() - startTime;
+                
+                // Log request ID and ETag
+                String requestId = result.getRequestId();
+                String etag = result.getETag();
+                System.out.println("[OSS-UPLOAD] ✅ Upload successful in " + duration + "ms");
+                System.out.println("[OSS-UPLOAD] Request ID: " + requestId);
+                System.out.println("[OSS-UPLOAD] ETag: " + etag);
+                
+                String url = String.format("https://%s.%s/%s", bucketName, endpoint, objectKey);
+                System.out.println("[OSS-UPLOAD] URL: " + url);
+                return url;
+                
+            } catch (Exception e) {
+                boolean isRetryable = isRetryableError(e);
+                System.err.println("[OSS-UPLOAD] ❌ Upload failed (attempt " + attempt + "/" + maxRetries + "): " + objectKey);
+                System.err.println("[OSS-UPLOAD] Error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+                System.err.println("[OSS-UPLOAD] Retryable: " + isRetryable);
+                
+                // Try to extract request ID from exception
+                if (e instanceof com.aliyun.oss.OSSException) {
+                    com.aliyun.oss.OSSException ossEx = (com.aliyun.oss.OSSException) e;
+                    System.err.println("[OSS-UPLOAD] Request ID: " + ossEx.getRequestId());
+                    System.err.println("[OSS-UPLOAD] Error Code: " + ossEx.getErrorCode());
+                    System.err.println("[OSS-UPLOAD] Host ID: " + ossEx.getHostId());
+                }
+                
+                // Retry on network errors (broken pipe, connection reset, etc.)
+                if (isRetryable && attempt < maxRetries) {
+                    System.out.println("[OSS-UPLOAD] ⏳ Retrying in " + retryDelay + "ms...");
+                    try {
+                        Thread.sleep(retryDelay);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("Upload interrupted", ie);
+                    }
+                    retryDelay *= 2; // Exponential backoff
+                    continue;
+                }
+                
+                // No more retries or non-retryable error
+                e.printStackTrace();
+                throw new IOException("OSS upload failed after " + attempt + " attempts: " + e.getMessage(), e);
             }
-            
-            e.printStackTrace();
-            throw new IOException("OSS upload failed: " + e.getMessage(), e);
         }
+        
+        throw new IOException("OSS upload failed after " + maxRetries + " attempts");
+    }
+    
+    /**
+     * Check if an error is retryable (network issues, timeouts, etc.)
+     */
+    private boolean isRetryableError(Exception e) {
+        String message = e.getMessage();
+        if (message == null) return false;
+        
+        String lowerMessage = message.toLowerCase();
+        
+        // Network errors that should be retried
+        return lowerMessage.contains("broken pipe") ||
+               lowerMessage.contains("connection reset") ||
+               lowerMessage.contains("connection timed out") ||
+               lowerMessage.contains("socket timeout") ||
+               lowerMessage.contains("connection refused") ||
+               lowerMessage.contains("unable to execute http request") ||
+               (e instanceof com.aliyun.oss.ClientException);
     }
     
     /**
