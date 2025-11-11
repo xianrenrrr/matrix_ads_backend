@@ -76,9 +76,9 @@ public class SubtitleBurningService {
         if (options != null) {
             filter.append(":force_style='");
             
-            // Font name - use fonts that support Chinese characters
-            // Try multiple fallbacks in order: Noto Sans CJK > DejaVu Sans > Sans
-            filter.append("FontName=Noto Sans CJK SC,DejaVu Sans,Sans,");  // Multiple fallbacks for Chinese support
+            // Font name - FFmpeg force_style only accepts ONE font name (no commas!)
+            // Use Noto Sans CJK SC which is confirmed to be installed in the container
+            filter.append("FontName=Noto Sans CJK SC,");  // Exact match for installed font
             
             // Font size
             if (options.fontSize > 0) {
