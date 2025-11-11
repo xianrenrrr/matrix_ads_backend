@@ -717,7 +717,20 @@ public class ContentManager {
                      metadata.getSceneNumber(), scene.getOverlayType());
         }
         
-        // 7. Create template with calculated metadata
+        // 7. Calculate cumulative start times for multi-scene template
+        long cumulativeStartMs = 0;
+        for (com.example.demo.model.Scene scene : aiAnalyzedScenes) {
+            scene.setStartTimeMs(cumulativeStartMs);
+            long sceneDurationMs = scene.getEndTimeMs() - 0L; // endTimeMs was set relative to scene
+            scene.setEndTimeMs(cumulativeStartMs + sceneDurationMs);
+            
+            log.info("✅ Scene {} timing: start={}ms, end={}ms, duration={}ms", 
+                scene.getSceneNumber(), scene.getStartTimeMs(), scene.getEndTimeMs(), sceneDurationMs);
+            
+            cumulativeStartMs += sceneDurationMs;
+        }
+        
+        // 8. Create template with calculated metadata
         ManualTemplate template = new ManualTemplate();
         
         // Always set userId to the actual creator (employee or manager)
