@@ -61,7 +61,8 @@ public class SceneReviewController {
         // Simple approve or reject
         if (isApproval) {
             submission.approve(reviewerId);
-            updateSceneStatusInSubmittedVideos(submission.getTemplateId(), submission.getUserId(), 
+            // Use assignmentId (not templateId) for composite video ID
+            updateSceneStatusInSubmittedVideos(submission.getAssignmentId(), submission.getUserId(), 
                 submission.getSceneNumber(), "approved");
         } else {
             submission.reject(reviewerId, feedback);
@@ -84,9 +85,9 @@ public class SceneReviewController {
      * Update scene status in submittedVideos collection
      */
     @SuppressWarnings("unchecked")
-    private void updateSceneStatusInSubmittedVideos(String templateId, String userId, int sceneNumber, String newStatus) throws Exception {
-            // Create composite video ID
-            String compositeVideoId = userId + "_" + templateId;
+    private void updateSceneStatusInSubmittedVideos(String assignmentId, String userId, int sceneNumber, String newStatus) throws Exception {
+            // Create composite video ID using assignmentId (not templateId!)
+            String compositeVideoId = userId + "_" + assignmentId;
             
             // Get the submitted video document
             var videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
@@ -120,8 +121,8 @@ public class SceneReviewController {
                             }
                         }
                         
-                        // Get actual template scene count
-                        int templateTotalScenes = getTemplateTotalScenes(templateId);
+                        // Get actual template scene count from assignment
+                        int templateTotalScenes = getTemplateTotalScenes(assignmentId);
                         
                         updates.put("progress", Map.of(
                             "totalScenes", templateTotalScenes,
@@ -136,7 +137,7 @@ public class SceneReviewController {
                             if (!"approved".equals(currentPublishStatus) && !"published".equals(currentPublishStatus)) {
                                 updates.put("publishStatus", "approved");
                                 updates.put("approvedAt", com.google.cloud.firestore.FieldValue.serverTimestamp());
-                                System.out.println("Automatically updated publishStatus to 'approved' for video: " + compositeVideoId);
+                                System.out.println("✅ All scenes approved! Updated publishStatus to 'approved' for video: " + compositeVideoId);
                             }
                         }
                         
@@ -149,9 +150,17 @@ public class SceneReviewController {
         }
     }
     
-    private int getTemplateTotalScenes(String templateId) throws Exception {
-        ManualTemplate template = templateDao.getTemplate(templateId);
-        return (template != null && template.getScenes() != null) ? template.getScenes().size() : 0;
+    @Autowired
+    private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
+    
+    private int getTemplateTotalScenes(String assignmentId) throws Exception {
+        // Get template from assignment snapshot
+        com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
+        if (assignment != null && assignment.getTemplateSnapshot() != null) {
+            ManualTemplate template = assignment.getTemplateSnapshot();
+            return (template.getScenes() != null) ? template.getScenes().size() : 0;
+        }
+        return 0;
     }
 
     /**

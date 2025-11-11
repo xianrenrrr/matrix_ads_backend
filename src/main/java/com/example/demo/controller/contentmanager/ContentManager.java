@@ -214,6 +214,31 @@ public class ContentManager {
                     data.put("templateTitle", template.getTemplateTitle());
                 }
                 
+                // Fetch thumbnail from first scene if not already present
+                if (!data.containsKey("thumbnailUrl") || data.get("thumbnailUrl") == null) {
+                    try {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> scenes = (Map<String, Object>) data.get("scenes");
+                        if (scenes != null && !scenes.isEmpty()) {
+                            // Get first scene's thumbnail
+                            Object firstSceneObj = scenes.values().iterator().next();
+                            if (firstSceneObj instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> firstScene = (Map<String, Object>) firstSceneObj;
+                                String sceneId = (String) firstScene.get("sceneId");
+                                if (sceneId != null) {
+                                    SceneSubmission sceneSubmission = sceneSubmissionDao.findById(sceneId);
+                                    if (sceneSubmission != null && sceneSubmission.getThumbnailUrl() != null) {
+                                        data.put("thumbnailUrl", sceneSubmission.getThumbnailUrl());
+                                    }
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        // Continue without thumbnail if fetch fails
+                    }
+                }
+                
                 String status = (String) data.getOrDefault("publishStatus", "pending");
                 if ("approved".equalsIgnoreCase(status)) {
                     approved.add(data);
