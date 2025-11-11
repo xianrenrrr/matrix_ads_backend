@@ -15,9 +15,14 @@ RUN mvn -B -DskipTests clean package
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
-# Install ffmpeg and curl for health checks
+# Install ffmpeg, curl, and Chinese fonts for subtitle rendering
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg curl \
+ && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    curl \
+    fonts-noto-cjk \
+    fontconfig \
+ && fc-cache -f -v \
  && rm -rf /var/lib/apt/lists/*
 
 # Non-root user

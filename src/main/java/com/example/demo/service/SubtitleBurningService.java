@@ -76,8 +76,9 @@ public class SubtitleBurningService {
         if (options != null) {
             filter.append(":force_style='");
             
-            // Font name - use system fonts that support Chinese
-            filter.append("FontName=Arial Unicode MS,");  // Fallback to Arial Unicode MS for Chinese
+            // Font name - use fonts that support Chinese characters
+            // Try multiple fallbacks in order: Noto Sans CJK > DejaVu Sans > Sans
+            filter.append("FontName=Noto Sans CJK SC,DejaVu Sans,Sans,");  // Multiple fallbacks for Chinese support
             
             // Font size
             if (options.fontSize > 0) {
