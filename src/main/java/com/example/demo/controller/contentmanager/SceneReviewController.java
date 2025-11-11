@@ -61,8 +61,8 @@ public class SceneReviewController {
         // Simple approve or reject
         if (isApproval) {
             submission.approve(reviewerId);
-            // Use assignmentId (not templateId) for composite video ID
-            updateSceneStatusInSubmittedVideos(submission.getAssignmentId(), submission.getUserId(), 
+            // Use assignmentId (stored in templateId field) for composite video ID
+            updateSceneStatusInSubmittedVideos(submission.getTemplateId(), submission.getUserId(), 
                 submission.getSceneNumber(), "approved");
         } else {
             submission.reject(reviewerId, feedback);
