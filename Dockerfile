@@ -21,8 +21,19 @@ RUN apt-get update \
     ffmpeg \
     curl \
     fonts-noto-cjk \
+    fonts-noto-cjk-extra \
     fontconfig \
  && fc-cache -f -v \
+ && echo "========== FONT VERIFICATION ==========" \
+ && echo "CJK Fonts:" \
+ && fc-list | grep -i "cjk" || echo "❌ No CJK fonts found" \
+ && echo "" \
+ && echo "Noto Fonts:" \
+ && fc-list | grep -i "noto" || echo "❌ No Noto fonts found" \
+ && echo "" \
+ && echo "Sample of all fonts (first 20):" \
+ && fc-list | head -20 \
+ && echo "======================================" \
  && rm -rf /var/lib/apt/lists/*
 
 # Non-root user
