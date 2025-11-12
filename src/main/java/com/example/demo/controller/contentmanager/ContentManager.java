@@ -720,9 +720,21 @@ public class ContentManager {
         // 7. Calculate cumulative start times for multi-scene template
         long cumulativeStartMs = 0;
         for (com.example.demo.model.Scene scene : aiAnalyzedScenes) {
+            long oldStartMs = scene.getStartTimeMs(); // Save old start time (0 for individual scenes)
             scene.setStartTimeMs(cumulativeStartMs);
             long sceneDurationMs = scene.getEndTimeMs() - 0L; // endTimeMs was set relative to scene
             scene.setEndTimeMs(cumulativeStartMs + sceneDurationMs);
+            
+            // CRITICAL: Adjust subtitle segment times to match new scene start time
+            if (scene.getSubtitleSegments() != null && !scene.getSubtitleSegments().isEmpty()) {
+                long timeOffset = cumulativeStartMs - oldStartMs; // How much to shift subtitles
+                for (com.example.demo.ai.subtitle.SubtitleSegment segment : scene.getSubtitleSegments()) {
+                    segment.setStartTimeMs(segment.getStartTimeMs() + timeOffset);
+                    segment.setEndTimeMs(segment.getEndTimeMs() + timeOffset);
+                }
+                log.info("✅ Adjusted {} subtitle segments by +{}ms for scene {}", 
+                    scene.getSubtitleSegments().size(), timeOffset, scene.getSceneNumber());
+            }
             
             log.info("✅ Scene {} timing: start={}ms, end={}ms, duration={}ms", 
                 scene.getSceneNumber(), scene.getStartTimeMs(), scene.getEndTimeMs(), sceneDurationMs);

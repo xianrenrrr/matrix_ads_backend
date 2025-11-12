@@ -148,7 +148,10 @@ public class ScriptLineSegmentationService {
             prompt.append("    {\"startMs\": 4700, \"endMs\": 6000, \"text\": \"智能的大屏导航\"}\n");
             prompt.append("  ]\n");
             prompt.append("}\n\n");
-            prompt.append("现在请处理上面的文本，输出格式（仅JSON，不要任何解释）：\n");
+            prompt.append("现在请处理上面的文本，输出格式要求：\n");
+            prompt.append("1. 仅输出纯JSON，不要markdown代码块（不要```json```）\n");
+            prompt.append("2. 不要任何解释或额外文字\n");
+            prompt.append("3. 直接以{开始，以}结束\n");
             
             // Build Qwen API request
             Map<String, Object> request = new HashMap<>();
@@ -308,7 +311,7 @@ public class ScriptLineSegmentationService {
     }
     
     /**
-     * Extract content from Qwen API response
+     * Extract content from Qwen API response and strip markdown formatting
      */
     private String extractContent(String responseBody) {
         try {
@@ -329,7 +332,23 @@ public class ScriptLineSegmentationService {
             }
             
             Object content = message.get("content");
-            return content != null ? content.toString().trim() : null;
+            if (content == null) {
+                return null;
+            }
+            
+            String contentStr = content.toString().trim();
+            
+            // Strip markdown code blocks if present (```json ... ``` or ``` ... ```)
+            if (contentStr.startsWith("```")) {
+                // Remove opening ```json or ```
+                contentStr = contentStr.replaceFirst("^```(?:json)?\\s*", "");
+                // Remove closing ```
+                contentStr = contentStr.replaceFirst("```\\s*$", "");
+                contentStr = contentStr.trim();
+                log.debug("Stripped markdown code blocks from Qwen response");
+            }
+            
+            return contentStr;
             
         } catch (Exception e) {
             log.error("Failed to extract content from response: {}", e.getMessage());

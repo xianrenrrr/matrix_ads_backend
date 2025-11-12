@@ -28,8 +28,9 @@ public class KeyframeExtractionServiceImpl implements KeyframeExtractionService 
                          videoUrl, startTime, endTime);
         
         try {
-            // Use scene start timestamp (default to 0 if null)
-            Duration target = startTime != null ? startTime : Duration.ZERO;
+            // Extract keyframe at 1 second into the scene for consistency with submission thumbnails
+            // This ensures template examples and user submissions have aligned thumbnails for comparison
+            Duration target = startTime != null ? startTime.plusSeconds(1) : Duration.ofSeconds(1);
             double targetSeconds = target.getSeconds() + target.getNano() / 1_000_000_000.0;
             
             // Generate signed URL for video download (7 days for processing)
