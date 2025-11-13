@@ -267,6 +267,22 @@ public class ContentCreatorVideoController {
                 }
             }
             
+            // Get compiled video URL from compiledVideos collection (for re-download)
+            String compiledVideoUrl = getCompiledVideoUrl(videoDoc.getId());
+            if (compiledVideoUrl != null) {
+                video.put("videoUrl", compiledVideoUrl);
+                // Generate signed URL for download
+                try {
+                    String signedUrl = generateSignedUrl(compiledVideoUrl);
+                    video.put("signedUrl", signedUrl);
+                    video.put("compiledVideoUrl", signedUrl); // For mini app compatibility
+                } catch (Exception e) {
+                    log.warn("Failed to generate signed URL: {}", e.getMessage());
+                    video.put("signedUrl", compiledVideoUrl);
+                    video.put("compiledVideoUrl", compiledVideoUrl);
+                }
+            }
+            
             video.put("downloadedAt", videoDoc.getTimestamp("downloadedAt"));
             video.put("createdAt", videoDoc.getTimestamp("createdAt"));
             
