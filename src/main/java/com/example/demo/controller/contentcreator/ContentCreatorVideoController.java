@@ -38,88 +38,98 @@ public class ContentCreatorVideoController {
      */
     @GetMapping("/users/{userId}/assignments")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getUserAssignments(
-            @PathVariable String userId) throws ExecutionException, InterruptedException {
+            @PathVariable String userId) {
         
         log.info("Getting assignments for user: {}", userId);
         
-        // Get user's groupId
-        String groupId = db.collection("users").document(userId).get().get().getString("groupId");
-        if (groupId == null) {
-            return ResponseEntity.ok(ApiResponse.ok("No group assigned", Collections.emptyList()));
-        }
-        
-        // Get all active assignments for the group
-        QuerySnapshot assignmentsSnapshot = db.collection("templateAssignments")
-                .whereEqualTo("groupId", groupId)
-                .whereGreaterThan("expiresAt", com.google.cloud.Timestamp.now())
-                .orderBy("expiresAt")
-                .orderBy("pushedAt", com.google.cloud.firestore.Query.Direction.DESCENDING)
-                .get()
-                .get();
-        
-        List<Map<String, Object>> pendingAssignments = new ArrayList<>();
-        
-        for (QueryDocumentSnapshot assignmentDoc : assignmentsSnapshot.getDocuments()) {
-            String assignmentId = assignmentDoc.getId();
-            String compositeVideoId = userId + "_" + assignmentId;
+        try {
+            // Get user's groupId
+            String groupId = db.collection("users").document(userId).get().get().getString("groupId");
+            if (groupId == null) {
+                return ResponseEntity.ok(ApiResponse.ok("No group assigned", Collections.emptyList()));
+            }
             
-            // Check if submittedVideo exists
-            var submittedVideoDoc = db.collection("submittedVideos")
-                    .document(compositeVideoId)
+            // Get all active assignments for the group (simplified query - no composite index needed)
+            QuerySnapshot assignmentsSnapshot = db.collection("templateAssignments")
+                    .whereEqualTo("groupId", groupId)
+                    .orderBy("pushedAt", com.google.cloud.firestore.Query.Direction.DESCENDING)
+                    .limit(50)
                     .get()
                     .get();
-            
-            boolean shouldInclude = false;
-            Map<String, Object> progress = null;
-            
-            if (!submittedVideoDoc.exists()) {
-                // No submission yet - include
-                shouldInclude = true;
-            } else {
-                // Check status
-                String status = submittedVideoDoc.getString("publishStatus");
-                if ("pending".equals(status) || "approved".equals(status) || "rejected".equals(status)) {
-                    shouldInclude = true;
-                    progress = (Map<String, Object>) submittedVideoDoc.get("progress");
-                }
-            }
-            
-            if (shouldInclude) {
-                Map<String, Object> assignment = new HashMap<>();
-                assignment.put("id", assignmentId);
-                
-                // Get template info from snapshot
-                Map<String, Object> snapshot = (Map<String, Object>) assignmentDoc.get("templateSnapshot");
-                if (snapshot != null) {
-                    assignment.put("templateTitle", snapshot.get("templateTitle"));
-                    assignment.put("thumbnailUrl", snapshot.get("thumbnailUrl"));
-                    
-                    List<Map<String, Object>> scenes = (List<Map<String, Object>>) snapshot.get("scenes");
-                    assignment.put("sceneCount", scenes != null ? scenes.size() : 0);
-                    assignment.put("totalVideoLength", snapshot.get("totalVideoLength"));
-                }
-                
-                assignment.put("expiresAt", assignmentDoc.getTimestamp("expiresAt"));
-                assignment.put("pushedAt", assignmentDoc.getTimestamp("pushedAt"));
-                
-                // Calculate days until expiry
-                com.google.cloud.Timestamp expiresAt = assignmentDoc.getTimestamp("expiresAt");
-                if (expiresAt != null) {
-                    long daysUntilExpiry = (expiresAt.getSeconds() - System.currentTimeMillis() / 1000) / 86400;
-                    assignment.put("daysUntilExpiry", Math.max(0, daysUntilExpiry));
-                }
-                
-                // Add progress if exists
-                if (progress != null) {
-                    assignment.put("progress", progress);
-                }
-                
-                pendingAssignments.add(assignment);
-            }
-        }
         
-        log.info("Found {} pending assignments for user {}", pendingAssignments.size(), userId);
-        return ResponseEntity.ok(ApiResponse.ok("Assignments retrieved", pendingAssignments));
+            List<Map<String, Object>> pendingAssignments = new ArrayList<>();
+            
+            for (QueryDocumentSnapshot assignmentDoc : assignmentsSnapshot.getDocuments()) {
+                String assignmentId = assignmentDoc.getId();
+                String compositeVideoId = userId + "_" + assignmentId;
+                
+                // Check expiry (filter in code since we removed from query)
+                com.google.cloud.Timestamp expiresAt = assignmentDoc.getTimestamp("expiresAt");
+                if (expiresAt != null && expiresAt.getSeconds() < System.currentTimeMillis() / 1000) {
+                    continue; // Skip expired assignments
+                }
+                
+                // Check if submittedVideo exists
+                var submittedVideoDoc = db.collection("submittedVideos")
+                        .document(compositeVideoId)
+                        .get()
+                        .get();
+                
+                boolean shouldInclude = false;
+                Map<String, Object> progress = null;
+                
+                if (!submittedVideoDoc.exists()) {
+                    // No submission yet - include
+                    shouldInclude = true;
+                } else {
+                    // Check status
+                    String status = submittedVideoDoc.getString("publishStatus");
+                    if ("pending".equals(status) || "approved".equals(status) || "rejected".equals(status)) {
+                        shouldInclude = true;
+                        progress = (Map<String, Object>) submittedVideoDoc.get("progress");
+                    }
+                }
+                
+                if (shouldInclude) {
+                    Map<String, Object> assignment = new HashMap<>();
+                    assignment.put("id", assignmentId);
+                    
+                    // Get template info from snapshot
+                    Map<String, Object> snapshot = (Map<String, Object>) assignmentDoc.get("templateSnapshot");
+                    if (snapshot != null) {
+                        assignment.put("templateTitle", snapshot.get("templateTitle"));
+                        assignment.put("thumbnailUrl", snapshot.get("thumbnailUrl"));
+                        
+                        List<Map<String, Object>> scenes = (List<Map<String, Object>>) snapshot.get("scenes");
+                        assignment.put("sceneCount", scenes != null ? scenes.size() : 0);
+                        assignment.put("totalVideoLength", snapshot.get("totalVideoLength"));
+                    }
+                    
+                    assignment.put("expiresAt", expiresAt);
+                    assignment.put("pushedAt", assignmentDoc.getTimestamp("pushedAt"));
+                    
+                    // Calculate days until expiry
+                    if (expiresAt != null) {
+                        long daysUntilExpiry = (expiresAt.getSeconds() - System.currentTimeMillis() / 1000) / 86400;
+                        assignment.put("daysUntilExpiry", Math.max(0, daysUntilExpiry));
+                    }
+                    
+                    // Add progress if exists
+                    if (progress != null) {
+                        assignment.put("progress", progress);
+                    }
+                    
+                    pendingAssignments.add(assignment);
+                }
+            }
+            
+            log.info("Found {} pending assignments for user {}", pendingAssignments.size(), userId);
+            return ResponseEntity.ok(ApiResponse.ok("Assignments retrieved", pendingAssignments));
+            
+        } catch (Exception e) {
+            log.error("Error getting assignments for user {}: {}", userId, e.getMessage(), e);
+            return ResponseEntity.status(500).body(ApiResponse.fail("Failed to get assignments: " + e.getMessage()));
+        }
     }
     
     /**
@@ -128,22 +138,27 @@ public class ContentCreatorVideoController {
      */
     @GetMapping("/users/{userId}/to-download")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getToDownloadVideos(
-            @PathVariable String userId) throws ExecutionException, InterruptedException {
+            @PathVariable String userId) {
         
         log.info("Getting to-download videos for user: {}", userId);
         
-        // Query submittedVideos with status = "published"
-        QuerySnapshot videosSnapshot = db.collection("submittedVideos")
-                .whereEqualTo("uploadedBy", userId)
-                .whereEqualTo("publishStatus", "published")
-                .orderBy("lastUpdated", com.google.cloud.firestore.Query.Direction.DESCENDING)
-                .limit(50)
-                .get()
-                .get();
+        try {
+            // Get all submittedVideos for this user (filter by document ID pattern)
+            // Document ID format: {userId}_{assignmentId}
+            QuerySnapshot videosSnapshot = db.collection("submittedVideos")
+                    .whereEqualTo("uploadedBy", userId)
+                    .limit(100)
+                    .get()
+                    .get();
         
-        List<Map<String, Object>> toDownloadVideos = new ArrayList<>();
+            List<Map<String, Object>> toDownloadVideos = new ArrayList<>();
         
-        for (QueryDocumentSnapshot videoDoc : videosSnapshot.getDocuments()) {
+            for (QueryDocumentSnapshot videoDoc : videosSnapshot.getDocuments()) {
+                // Filter for published status
+                String status = videoDoc.getString("publishStatus");
+                if (!"published".equals(status)) {
+                    continue;
+                }
             Map<String, Object> video = new HashMap<>();
             video.put("id", videoDoc.getId());
             video.put("videoId", videoDoc.getId());  // For status update
@@ -183,11 +198,16 @@ public class ContentCreatorVideoController {
             video.put("createdAt", videoDoc.getTimestamp("createdAt"));
             video.put("lastUpdated", videoDoc.getTimestamp("lastUpdated"));
             
-            toDownloadVideos.add(video);
+                toDownloadVideos.add(video);
+            }
+            
+            log.info("Found {} videos to download for user {}", toDownloadVideos.size(), userId);
+            return ResponseEntity.ok(ApiResponse.ok("Videos retrieved", toDownloadVideos));
+            
+        } catch (Exception e) {
+            log.error("Error getting to-download videos for user {}: {}", userId, e.getMessage(), e);
+            return ResponseEntity.status(500).body(ApiResponse.fail("Failed to get videos: " + e.getMessage()));
         }
-        
-        log.info("Found {} videos to download for user {}", toDownloadVideos.size(), userId);
-        return ResponseEntity.ok(ApiResponse.ok("Videos retrieved", toDownloadVideos));
     }
     
     /**
@@ -196,22 +216,26 @@ public class ContentCreatorVideoController {
      */
     @GetMapping("/users/{userId}/downloaded")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getDownloadedVideos(
-            @PathVariable String userId) throws ExecutionException, InterruptedException {
+            @PathVariable String userId) {
         
         log.info("Getting downloaded videos for user: {}", userId);
         
-        // Query submittedVideos with status = "downloaded"
-        QuerySnapshot videosSnapshot = db.collection("submittedVideos")
-                .whereEqualTo("uploadedBy", userId)
-                .whereEqualTo("publishStatus", "downloaded")
-                .orderBy("downloadedAt", com.google.cloud.firestore.Query.Direction.DESCENDING)
-                .limit(50)
-                .get()
-                .get();
+        try {
+            // Get all submittedVideos for this user (filter by status in code)
+            QuerySnapshot videosSnapshot = db.collection("submittedVideos")
+                    .whereEqualTo("uploadedBy", userId)
+                    .limit(100)
+                    .get()
+                    .get();
         
-        List<Map<String, Object>> downloadedVideos = new ArrayList<>();
+            List<Map<String, Object>> downloadedVideos = new ArrayList<>();
         
-        for (QueryDocumentSnapshot videoDoc : videosSnapshot.getDocuments()) {
+            for (QueryDocumentSnapshot videoDoc : videosSnapshot.getDocuments()) {
+                // Filter for downloaded status
+                String status = videoDoc.getString("publishStatus");
+                if (!"downloaded".equals(status)) {
+                    continue;
+                }
             Map<String, Object> video = new HashMap<>();
             video.put("id", videoDoc.getId());
             video.put("videoId", videoDoc.getId());
@@ -237,11 +261,16 @@ public class ContentCreatorVideoController {
             video.put("downloadedAt", videoDoc.getTimestamp("downloadedAt"));
             video.put("createdAt", videoDoc.getTimestamp("createdAt"));
             
-            downloadedVideos.add(video);
+                downloadedVideos.add(video);
+            }
+            
+            log.info("Found {} downloaded videos for user {}", downloadedVideos.size(), userId);
+            return ResponseEntity.ok(ApiResponse.ok("Videos retrieved", downloadedVideos));
+            
+        } catch (Exception e) {
+            log.error("Error getting downloaded videos for user {}: {}", userId, e.getMessage(), e);
+            return ResponseEntity.status(500).body(ApiResponse.fail("Failed to get videos: " + e.getMessage()));
         }
-        
-        log.info("Found {} downloaded videos for user {}", downloadedVideos.size(), userId);
-        return ResponseEntity.ok(ApiResponse.ok("Videos retrieved", downloadedVideos));
     }
     
     /**
