@@ -259,18 +259,18 @@ public class ContentCreatorVideoController {
         // Verify the video belongs to this user
         var videoDoc = db.collection("submittedVideos").document(videoId).get().get();
         if (!videoDoc.exists()) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("Video not found"));
+            return ResponseEntity.badRequest().body(ApiResponse.fail("Video not found"));
         }
         
         String uploadedBy = videoDoc.getString("uploadedBy");
         if (!userId.equals(uploadedBy)) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("Unauthorized"));
+            return ResponseEntity.badRequest().body(ApiResponse.fail("Unauthorized"));
         }
         
         String currentStatus = videoDoc.getString("publishStatus");
         if (!"published".equals(currentStatus)) {
             return ResponseEntity.badRequest().body(
-                    ApiResponse.error("Video must be in 'published' status to mark as downloaded"));
+                    ApiResponse.fail("Video must be in 'published' status to mark as downloaded"));
         }
         
         // Update status to "downloaded"

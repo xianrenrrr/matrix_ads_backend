@@ -131,9 +131,12 @@ public class QwenSceneComparisonService {
             // For now, comparison focuses on key elements and visual similarity
             
             // Context 2: Scene Key Elements
-            if (templateScene.getKeyElements() != null && !templateScene.getKeyElements().isEmpty()) {
+            if (templateScene.getKeyElementsWithBoxes() != null && !templateScene.getKeyElementsWithBoxes().isEmpty()) {
                 sb.append("【场景关键要素】\n");
-                sb.append(String.join("、", templateScene.getKeyElements())).append("\n\n");
+                List<String> elementNames = templateScene.getKeyElementsWithBoxes().stream()
+                    .map(com.example.demo.model.Scene.KeyElement::getName)
+                    .collect(java.util.stream.Collectors.toList());
+                sb.append(String.join("、", elementNames)).append("\n\n");
             }
             
             // Context 3: Template ScriptLine (for reference)
@@ -207,9 +210,12 @@ public class QwenSceneComparisonService {
             // Note: Purpose should be passed separately or stored in Scene model
             // For now, comparison focuses on key elements and visual similarity
             
-            if (templateScene.getKeyElements() != null && !templateScene.getKeyElements().isEmpty()) {
+            if (templateScene.getKeyElementsWithBoxes() != null && !templateScene.getKeyElementsWithBoxes().isEmpty()) {
                 sb.append("【Scene Key Elements】\n");
-                sb.append(String.join(", ", templateScene.getKeyElements())).append("\n\n");
+                List<String> elementNames = templateScene.getKeyElementsWithBoxes().stream()
+                    .map(com.example.demo.model.Scene.KeyElement::getName)
+                    .collect(java.util.stream.Collectors.toList());
+                sb.append(String.join(", ", elementNames)).append("\n\n");
             }
             
             if (templateScene.getScriptLine() != null && !templateScene.getScriptLine().isEmpty()) {

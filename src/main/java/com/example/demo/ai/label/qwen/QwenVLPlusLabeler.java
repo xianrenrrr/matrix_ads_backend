@@ -391,7 +391,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         System.out.println("[QWEN] ========================================");
         
         // Call the internal implementation with scriptLine context
-        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, null);
+        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, null, null);
     }
     
     /**
@@ -524,7 +524,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                 System.out.println("[QWEN-AZURE-HINTS] ⚠️ No Azure hints - using free object detection");
             }
             
-            .append("任务2：场景分析\n")
+            sb.append("任务2：场景分析\n")
             .append("请在200字内描述以下要素，保持客观一致的描述风格：\n")
             .append("1. 环境类型（室内/室外、场所）\n")
             .append("2. 光线条件（自然光/人工光、明暗）\n")
@@ -1096,7 +1096,6 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             return UUID.randomUUID().toString();
         }
     }
-}
 
     /**
      * Get bounding box for a single object name
@@ -1238,3 +1237,4 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             return null;
         }
     }
+}

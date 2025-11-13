@@ -56,7 +56,7 @@ public class UnifiedSceneAnalysisService {
         Duration startTime,
         Duration endTime
     ) {
-        return analyzeScene(videoUrl, null, language, startTime, endTime);
+        return analyzeScene(videoUrl, language, startTime, endTime, null, null, null);
     }
     
     /**
@@ -196,7 +196,7 @@ public class UnifiedSceneAnalysisService {
                     
                     // Extract key elements from VL result
                     if (firstResult.keyElements != null && !firstResult.keyElements.isEmpty()) {
-                        result.setKeyElements(firstResult.keyElements);
+                        result.setKeyElementsWithBoxes(firstResult.keyElements);
                         log.info("[UNIFIED] Extracted {} key elements from VL: {}", 
                             firstResult.keyElements.size(), firstResult.keyElements);
                     } else {

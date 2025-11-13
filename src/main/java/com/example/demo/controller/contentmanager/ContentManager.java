@@ -899,12 +899,10 @@ public class ContentManager {
                 
                 // Collect detected object labels (Chinese) for context
                 List<String> labels = new ArrayList<>();
-                if (s.getOverlayObjects() != null) {
-                    for (var o : s.getOverlayObjects()) {
-                        if (o.getLabelLocalized() != null && !o.getLabelLocalized().isEmpty()) {
-                            labels.add(o.getLabelLocalized());
-                        } else if (o.getLabelZh() != null && !o.getLabelZh().isEmpty()) {
-                            labels.add(o.getLabelZh());
+                if (s.getKeyElementsWithBoxes() != null) {
+                    for (var element : s.getKeyElementsWithBoxes()) {
+                        if (element.getName() != null && !element.getName().isEmpty()) {
+                            labels.add(element.getName());
                         }
                     }
                 }
