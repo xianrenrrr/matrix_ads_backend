@@ -49,13 +49,14 @@ public class ContentCreatorVideoController {
                 return ResponseEntity.ok(ApiResponse.ok("No group assigned", Collections.emptyList()));
             }
             
-            // Get all active assignments for the group (simplified query - no composite index needed)
+            // Get all active assignments for the group (no orderBy to avoid composite index)
             QuerySnapshot assignmentsSnapshot = db.collection("templateAssignments")
                     .whereEqualTo("groupId", groupId)
-                    .orderBy("pushedAt", com.google.cloud.firestore.Query.Direction.DESCENDING)
-                    .limit(50)
+                    .limit(100)
                     .get()
                     .get();
+            
+            log.info("Found {} total assignments for group {}", assignmentsSnapshot.size(), groupId);
         
             List<Map<String, Object>> pendingAssignments = new ArrayList<>();
             
@@ -122,6 +123,14 @@ public class ContentCreatorVideoController {
                     pendingAssignments.add(assignment);
                 }
             }
+            
+            // Sort by pushedAt descending (most recent first) in code
+            pendingAssignments.sort((a, b) -> {
+                com.google.cloud.Timestamp timeA = (com.google.cloud.Timestamp) a.get("pushedAt");
+                com.google.cloud.Timestamp timeB = (com.google.cloud.Timestamp) b.get("pushedAt");
+                if (timeA == null || timeB == null) return 0;
+                return Long.compare(timeB.getSeconds(), timeA.getSeconds());
+            });
             
             log.info("Found {} pending assignments for user {}", pendingAssignments.size(), userId);
             return ResponseEntity.ok(ApiResponse.ok("Assignments retrieved", pendingAssignments));
