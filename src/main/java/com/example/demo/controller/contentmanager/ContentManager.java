@@ -668,7 +668,6 @@ public class ContentManager {
                 com.example.demo.ai.services.SceneAnalysisResult analysisResult = 
                     unifiedSceneAnalysisService.analyzeScene(
                         video.getUrl(),
-                        null, // providedRegions - let AI detect
                         language,
                         java.time.Duration.ZERO, // startTime - entire video
                         java.time.Duration.ofSeconds(videoDurationSeconds), // endTime

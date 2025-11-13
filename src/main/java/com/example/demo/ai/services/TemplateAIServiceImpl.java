@@ -452,7 +452,6 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 
                 SceneAnalysisResult analysis = sceneAnalysisService.analyzeScene(
                     videoUrl,
-                    null, // No provided regions - auto-detect
                     language,
                     startTime,
                     endTime,
@@ -826,12 +825,12 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         try {
             SceneAnalysisResult analysis = sceneAnalysisService.analyzeScene(
                 videoUrl,
-                null, // No provided regions - auto-detect
                 language,
                 Duration.ofMillis(scene.getStartTimeMs()),
                 Duration.ofMillis(scene.getEndTimeMs()),
                 scene.getScriptLine(), // Pass scriptLine for context
-                azureObjectHints // Pass Azure detected objects as hints
+                azureObjectHints, // Pass Azure detected objects as hints
+                null // No combined scriptLines for single scene analysis
             );
             
             // Apply analysis results to scene

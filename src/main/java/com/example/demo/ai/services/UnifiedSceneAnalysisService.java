@@ -195,10 +195,10 @@ public class UnifiedSceneAnalysisService {
                     }
                     
                     // Extract key elements from VL result
-                    if (firstResult.keyElements != null && !firstResult.keyElements.isEmpty()) {
-                        result.setKeyElementsWithBoxes(firstResult.keyElements);
+                    if (firstResult.keyElementsWithBoxes != null && !firstResult.keyElementsWithBoxes.isEmpty()) {
+                        result.setKeyElementsWithBoxes(firstResult.keyElementsWithBoxes);
                         log.info("[UNIFIED] Extracted {} key elements from VL: {}", 
-                            firstResult.keyElements.size(), firstResult.keyElements);
+                            firstResult.keyElementsWithBoxes.size(), firstResult.keyElementsWithBoxes);
                     } else {
                         log.warn("[UNIFIED] No key elements in VL result");
                     }
@@ -206,7 +206,7 @@ public class UnifiedSceneAnalysisService {
                     log.info("[UNIFIED] VL analysis complete - rawResponse: {}, sceneAnalysis: {}, keyElements: {}",
                         firstResult.rawResponse != null ? firstResult.rawResponse.length() + " chars" : "null",
                         firstResult.sceneAnalysis != null ? firstResult.sceneAnalysis.length() + " chars" : "null",
-                        firstResult.keyElements != null ? firstResult.keyElements.size() : 0);
+                        firstResult.keyElementsWithBoxes != null ? firstResult.keyElementsWithBoxes.size() : 0);
                 } else {
                     log.warn("[UNIFIED] VL returned empty results");
                 }
