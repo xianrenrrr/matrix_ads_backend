@@ -38,7 +38,25 @@ public interface ObjectLabelService {
     
     // Enhanced API with Azure object hints for targeted grounding
     default Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale, String subtitleText, List<String> azureObjectHints) {
+        return labelRegions(keyframeUrl, regions, locale, subtitleText, azureObjectHints, null);
+    }
+    
+    // Enhanced API with combined scriptLines from all scenes for full context
+    default Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale, String subtitleText, List<String> azureObjectHints, String combinedScriptLines) {
         return Collections.emptyMap();
+    }
+    
+    /**
+     * Get bounding box for a single object name
+     * Used when user edits keyElement name and we need to find its bounding box
+     * 
+     * @param keyframeUrl Keyframe image URL
+     * @param objectName Object name to find (e.g., "车载大屏导航")
+     * @param locale Language locale
+     * @return Bounding box [x, y, width, height] in 0-1 range, or null if not found
+     */
+    default float[] getBoundingBoxForObject(String keyframeUrl, String objectName, String locale) {
+        return null;
     }
 
     // DTOs for region labeling (normalized [0,1])
@@ -60,9 +78,15 @@ public interface ObjectLabelService {
         public double conf;
         public String sceneAnalysis;  // Detailed scene analysis from VL
         public String rawResponse;    // Raw VL response for debugging
-        public List<String> keyElements;  // NEW - Key visual elements (3-5 items)
-        public String scriptLine;  // NEW - Cleaned/validated ASR text
-        public int[] box;  // NEW - Bounding box [x, y, width, height] in 0-1000 range
+        public String scriptLine;  // Cleaned/validated ASR text
+        
+        // NEW: Unified key elements with optional bounding boxes
+        public List<com.example.demo.model.Scene.KeyElement> keyElementsWithBoxes;
+        
+        // DEPRECATED: Old separate fields
+        public List<String> keyElements;  // Use keyElementsWithBoxes instead
+        public int[] box;  // Use keyElementsWithBoxes instead
+        
         public LabelResult() {}
         public LabelResult(String id, String labelZh, double conf) {
             this.id = id; this.labelZh = labelZh; this.conf = conf;

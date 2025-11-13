@@ -313,7 +313,7 @@ public class ContentManager {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         updatedTemplate.setId(templateId); // Ensure ID matches path parameter
         
-        // Mark all scenes as manual with grid overlay for updates and validate minimum duration
+        // Mark all scenes as manual and validate timing
         if (updatedTemplate.getScenes() != null) {
             log.info("Processing {} scenes for update", updatedTemplate.getScenes().size());
             int sceneIndex = 0;
@@ -324,9 +324,6 @@ public class ContentManager {
                 
                 if (scene.getSceneSource() == null) {
                     scene.setSceneSource("manual");
-                }
-                if (scene.getOverlayType() == null) {
-                    scene.setOverlayType("grid");
                 }
                 
                 // Log scene timing info (no validation - mini app will handle minimum duration)
@@ -575,6 +572,15 @@ public class ContentManager {
         
         log.info("Processing {} scenes for template: {}", scenesMetadata.size(), templateTitle);
         
+        // Collect all scriptLines for combined context
+        String combinedScriptLines = scenesMetadata.stream()
+            .map(SceneMetadata::getScriptLine)
+            .filter(sl -> sl != null && !sl.trim().isEmpty())
+            .collect(java.util.stream.Collectors.joining(" | "));
+        
+        log.info("✅ Combined scriptLines from all scenes: \"{}\"", 
+            combinedScriptLines.length() > 100 ? combinedScriptLines.substring(0, 100) + "..." : combinedScriptLines);
+        
         // Process each scene video
         List<com.example.demo.model.Scene> aiAnalyzedScenes = new ArrayList<>();
         
@@ -658,7 +664,7 @@ public class ContentManager {
             try {
                 log.info("🎬 Analyzing scene {} with AI (using user scriptLine)", metadata.getSceneNumber());
                 
-                // Use UnifiedSceneAnalysisService with user-provided scriptLine
+                // Use UnifiedSceneAnalysisService with user-provided scriptLine and combined context
                 com.example.demo.ai.services.SceneAnalysisResult analysisResult = 
                     unifiedSceneAnalysisService.analyzeScene(
                         video.getUrl(),
@@ -666,55 +672,48 @@ public class ContentManager {
                         language,
                         java.time.Duration.ZERO, // startTime - entire video
                         java.time.Duration.ofSeconds(videoDurationSeconds), // endTime
-                        scene.getScriptLine(), // Use user-provided scriptLine
-                        null // azureObjectHints - not needed
+                        scene.getScriptLine(), // Use user-provided scriptLine for this scene
+                        null, // azureObjectHints - not needed for manual templates
+                        combinedScriptLines // Pass combined scriptLines from all scenes for full context
                     );
                 
                 // Set analysis results on scene
                 if (analysisResult != null) {
                     scene.setKeyframeUrl(analysisResult.getKeyframeUrl());
-                    scene.setOverlayObjects(analysisResult.getOverlayObjects());
+                    scene.setKeyElementsWithBoxes(analysisResult.getKeyElementsWithBoxes());
                     scene.setVlSceneAnalysis(analysisResult.getVlSceneAnalysis());
-                    scene.setKeyElements(analysisResult.getKeyElements());
                     scene.setSourceAspect(analysisResult.getSourceAspect());
                     scene.setDeviceOrientation(analysisResult.getSourceAspect()); // Set device orientation
                     
-                    // Set overlay type based on what we got
-                    if (analysisResult.getOverlayObjects() != null && !analysisResult.getOverlayObjects().isEmpty()) {
-                        scene.setOverlayType("objects");
-                    } else {
-                        scene.setOverlayType("grid");
-                    }
-                    
-                    log.info("✅ Scene {} analyzed: keyframe={}, objects={}, aspect={}", 
+                    log.info("✅ Scene {} analyzed: keyframe={}, keyElements={}, aspect={}", 
                         metadata.getSceneNumber(),
                         analysisResult.getKeyframeUrl() != null,
-                        analysisResult.getOverlayObjects() != null ? analysisResult.getOverlayObjects().size() : 0,
+                        analysisResult.getKeyElementsWithBoxes() != null ? analysisResult.getKeyElementsWithBoxes().size() : 0,
                         analysisResult.getSourceAspect());
                 } else {
                     log.warn("⚠️ Scene analysis returned null for scene {}", metadata.getSceneNumber());
-                    scene.setOverlayType("grid");
                 }
                 
             } catch (Exception e) {
                 log.error("❌ Scene analysis failed for scene {}: {} - {}", 
                     metadata.getSceneNumber(), e.getClass().getSimpleName(), e.getMessage(), e);
                 // Continue with basic scene
-                scene.setOverlayType("grid");
             }
             
             // 6. Log keyElements if generated
-            if (scene.getKeyElements() != null && !scene.getKeyElements().isEmpty()) {
+            if (scene.getKeyElementsWithBoxes() != null && !scene.getKeyElementsWithBoxes().isEmpty()) {
                 log.info("✅ AI-generated keyElements for scene {}: {}", 
-                    metadata.getSceneNumber(), scene.getKeyElements());
+                    metadata.getSceneNumber(), 
+                    scene.getKeyElementsWithBoxes().stream()
+                        .map(com.example.demo.model.Scene.KeyElement::getName)
+                        .collect(java.util.stream.Collectors.toList()));
             } else {
                 log.warn("⚠️ No keyElements generated by AI for scene {}", metadata.getSceneNumber());
             }
             
             // 7. Add scene to list
             aiAnalyzedScenes.add(scene);
-            log.info("✅ Scene {} completed with overlay type: {}", 
-                     metadata.getSceneNumber(), scene.getOverlayType());
+            log.info("✅ Scene {} completed", metadata.getSceneNumber());
         }
         
         // 7. Calculate cumulative start times for multi-scene template

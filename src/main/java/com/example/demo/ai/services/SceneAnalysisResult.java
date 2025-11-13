@@ -12,11 +12,11 @@ public class SceneAnalysisResult {
     private String keyframeUrl;
     private String vlRawResponse;
     private String vlSceneAnalysis;
-    private List<Scene.ObjectOverlay> overlayObjects;
-    private String overlayType;  // "objects" or "grid"
     private String shortLabelZh;
     private String sourceAspect;  // e.g., "9:16" or "16:9"
-    private List<String> keyElements;  // Key elements for this scene (for comparison)
+    
+    // Key elements with optional bounding boxes (unified system)
+    private List<Scene.KeyElement> keyElementsWithBoxes;
     
     public SceneAnalysisResult() {}
     
@@ -46,20 +46,12 @@ public class SceneAnalysisResult {
         this.vlSceneAnalysis = vlSceneAnalysis;
     }
     
-    public List<Scene.ObjectOverlay> getOverlayObjects() {
-        return overlayObjects;
+    public List<Scene.KeyElement> getKeyElementsWithBoxes() {
+        return keyElementsWithBoxes;
     }
     
-    public void setOverlayObjects(List<Scene.ObjectOverlay> overlayObjects) {
-        this.overlayObjects = overlayObjects;
-    }
-    
-    public String getOverlayType() {
-        return overlayType;
-    }
-    
-    public void setOverlayType(String overlayType) {
-        this.overlayType = overlayType;
+    public void setKeyElementsWithBoxes(List<Scene.KeyElement> keyElementsWithBoxes) {
+        this.keyElementsWithBoxes = keyElementsWithBoxes;
     }
     
     public String getShortLabelZh() {
@@ -92,23 +84,20 @@ public class SceneAnalysisResult {
         if (vlSceneAnalysis != null) {
             scene.setVlSceneAnalysis(vlSceneAnalysis);
         }
-        if (overlayObjects != null) {
-            scene.setOverlayObjects(overlayObjects);
-        }
-        if (overlayType != null) {
-            scene.setOverlayType(overlayType);
-        }
         if (shortLabelZh != null) {
             scene.setShortLabelZh(shortLabelZh);
         }
         if (sourceAspect != null) {
             scene.setSourceAspect(sourceAspect);
         }
-        if (keyElements != null) {
-            scene.setKeyElements(keyElements);
+        // Apply keyElementsWithBoxes
+        if (keyElementsWithBoxes != null) {
+            scene.setKeyElementsWithBoxes(keyElementsWithBoxes);
         }
     }
     
+    // REMOVED - use getKeyElementsWithBoxes() instead
+    /*
     public List<String> getKeyElements() {
         return keyElements;
     }
@@ -116,4 +105,5 @@ public class SceneAnalysisResult {
     public void setKeyElements(List<String> keyElements) {
         this.keyElements = keyElements;
     }
+    */
 }

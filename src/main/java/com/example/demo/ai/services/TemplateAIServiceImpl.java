@@ -390,40 +390,7 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         return ocr;
     }
     
-    /**
-     * Parse overlay objects from vlRawResponse JSON
-     * Extracts regions with bounding boxes from the VL response
-     */
-    private List<Scene.ObjectOverlay> parseOverlayObjectsFromVlResponse(String vlRawResponse) {
-        List<Scene.ObjectOverlay> objects = new ArrayList<>();
-        try {
-            JsonNode root = mapper.readTree(vlRawResponse);
-            if (root.has("regions") && root.get("regions").isArray()) {
-                JsonNode regions = root.get("regions");
-                for (JsonNode region : regions) {
-                    if (region.has("box") && region.get("box").isArray()) {
-                        JsonNode boxNode = region.get("box");
-                        if (boxNode.size() == 4) {
-                            Scene.ObjectOverlay obj = new Scene.ObjectOverlay();
-                            obj.setLabelZh(region.path("labelZh").asText("未知"));
-                            obj.setLabelLocalized(region.path("labelZh").asText("未知"));
-                            obj.setLabel(region.path("labelZh").asText("unknown"));
-                            obj.setConfidence((float) region.path("conf").asDouble(0.0));
-                            // Convert from pixel coordinates to normalized 0-1
-                            obj.setX((float) boxNode.get(0).asInt() / 1000.0f);
-                            obj.setY((float) boxNode.get(1).asInt() / 1000.0f);
-                            obj.setWidth((float) boxNode.get(2).asInt() / 1000.0f);
-                            obj.setHeight((float) boxNode.get(3).asInt() / 1000.0f);
-                            objects.add(obj);
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.error("Failed to parse vlRawResponse: {}", e.getMessage());
-        }
-        return objects;
-    }
+
     
     /**
      * Analyze each scene with Qwen VL
@@ -440,6 +407,15 @@ public class TemplateAIServiceImpl implements TemplateAIService {
         com.example.demo.ai.subtitle.AzureVideoIndexerExtractor.AzureVideoIndexerResult azureResult,
         String language
     ) {
+        // Collect all scriptLines for combined context
+        String combinedScriptLines = scenes.stream()
+            .map(Scene::getScriptLine)
+            .filter(sl -> sl != null && !sl.isEmpty())
+            .collect(java.util.stream.Collectors.joining(" | "));
+        
+        log.info("✅ Combined scriptLines from all scenes: \"{}\"", 
+            combinedScriptLines.length() > 100 ? combinedScriptLines.substring(0, 100) + "..." : combinedScriptLines);
+        
         for (Scene scene : scenes) {
             try {
                 log.info("Analyzing scene {}/{}", scene.getSceneNumber(), scenes.size());
@@ -480,36 +456,22 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                     language,
                     startTime,
                     endTime,
-                    scriptLine, // Pass scriptLine for context
-                    azureObjectHints // Pass Azure detected objects as hints
+                    scriptLine, // Pass scriptLine for this scene
+                    azureObjectHints, // Pass Azure detected objects as hints
+                    combinedScriptLines // Pass combined scriptLines from all scenes for full context
                 );
                 
                 // Apply analysis results to scene
                 scene.setKeyframeUrl(analysis.getKeyframeUrl());
-                scene.setOverlayType(analysis.getOverlayType());
-                scene.setOverlayObjects(analysis.getOverlayObjects());
                 scene.setSourceAspect(analysis.getSourceAspect());
                 scene.setShortLabelZh(analysis.getShortLabelZh());
                 scene.setVlRawResponse(analysis.getVlRawResponse());
                 scene.setVlSceneAnalysis(analysis.getVlSceneAnalysis());
-                scene.setKeyElements(analysis.getKeyElements());
+                scene.setKeyElementsWithBoxes(analysis.getKeyElementsWithBoxes());
                 
-                // IMPORTANT: If overlayObjects is null but vlRawResponse has regions, parse them
-                if ((scene.getOverlayObjects() == null || scene.getOverlayObjects().isEmpty()) 
-                    && scene.getVlRawResponse() != null) {
-                    List<Scene.ObjectOverlay> parsedObjects = parseOverlayObjectsFromVlResponse(scene.getVlRawResponse());
-                    if (!parsedObjects.isEmpty()) {
-                        scene.setOverlayObjects(parsedObjects);
-                        scene.setOverlayType("objects");
-                        log.info("✅ Parsed {} overlay objects from vlRawResponse for scene {}", 
-                            parsedObjects.size(), scene.getSceneNumber());
-                    }
-                }
-                
-                log.info("✅ Scene {} analyzed: overlayType={}, keyElements={}",
+                log.info("✅ Scene {} analyzed: keyElements={}",
                     scene.getSceneNumber(),
-                    scene.getOverlayType(),
-                    scene.getKeyElements() != null ? scene.getKeyElements().size() : 0);
+                    scene.getKeyElementsWithBoxes() != null ? scene.getKeyElementsWithBoxes().size() : 0);
                 
             } catch (Exception e) {
                 log.error("Failed to analyze scene {}", scene.getSceneNumber(), e);
@@ -605,17 +567,17 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 so.put("keyframeUrl", s.getKeyframeUrl());
                 so.put("scriptLine", s.getScriptLine());
                 
-                // Collect detected object labels
-                List<String> labels = new ArrayList<>();
-                if (s.getOverlayObjects() != null) {
-                    for (var o : s.getOverlayObjects()) {
-                        if (o.getLabelZh() != null && !o.getLabelZh().isEmpty()) {
-                            labels.add(o.getLabelZh());
+                // Collect key element names
+                List<String> elementNames = new ArrayList<>();
+                if (s.getKeyElementsWithBoxes() != null) {
+                    for (var ke : s.getKeyElementsWithBoxes()) {
+                        if (ke.getName() != null && !ke.getName().isEmpty()) {
+                            elementNames.add(ke.getName());
                         }
                     }
                 }
-                if (labels.size() > 5) labels = labels.subList(0, 5);
-                so.put("detectedObjects", labels);
+                if (elementNames.size() > 5) elementNames = elementNames.subList(0, 5);
+                so.put("keyElements", elementNames);
                 
                 // Add VL scene analysis
                 if (s.getVlSceneAnalysis() != null && !s.getVlSceneAnalysis().isEmpty()) {
@@ -736,8 +698,11 @@ public class TemplateAIServiceImpl implements TemplateAIService {
                 scene.setBackgroundInstructions("参考场景分析: " + scene.getVlSceneAnalysis());
             }
             
-            if (scene.getKeyElements() != null && !scene.getKeyElements().isEmpty()) {
-                scene.setSpecificCameraInstructions("重点拍摄: " + String.join(", ", scene.getKeyElements()));
+            if (scene.getKeyElementsWithBoxes() != null && !scene.getKeyElementsWithBoxes().isEmpty()) {
+                List<String> elementNames = scene.getKeyElementsWithBoxes().stream()
+                    .map(Scene.KeyElement::getName)
+                    .toList();
+                scene.setSpecificCameraInstructions("重点拍摄: " + String.join(", ", elementNames));
             }
         }
         
@@ -871,18 +836,15 @@ public class TemplateAIServiceImpl implements TemplateAIService {
             
             // Apply analysis results to scene
             scene.setKeyframeUrl(analysis.getKeyframeUrl());
-            scene.setOverlayType(analysis.getOverlayType());
-            scene.setOverlayObjects(analysis.getOverlayObjects());
             scene.setSourceAspect(analysis.getSourceAspect());
             scene.setShortLabelZh(analysis.getShortLabelZh());
             scene.setVlRawResponse(analysis.getVlRawResponse());
             scene.setVlSceneAnalysis(analysis.getVlSceneAnalysis());
-            scene.setKeyElements(analysis.getKeyElements());
+            scene.setKeyElementsWithBoxes(analysis.getKeyElementsWithBoxes());
             
-            log.info("[PROCESS-SCENE] ✅ Scene {} analyzed: overlayType={}, keyElements={}",
+            log.info("[PROCESS-SCENE] ✅ Scene {} analyzed: keyElements={}",
                 scene.getSceneNumber(),
-                scene.getOverlayType(),
-                scene.getKeyElements() != null ? scene.getKeyElements().size() : 0);
+                scene.getKeyElementsWithBoxes() != null ? scene.getKeyElementsWithBoxes().size() : 0);
                 
         } catch (Exception e) {
             log.error("[PROCESS-SCENE] Failed to analyze scene {}", scene.getSceneNumber(), e);

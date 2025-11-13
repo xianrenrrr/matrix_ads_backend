@@ -410,8 +410,29 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         System.out.println("[QWEN] azureObjectHints: " + (azureObjectHints != null ? azureObjectHints : "null"));
         System.out.println("[QWEN] ========================================");
         
-        // Call the internal implementation with both scriptLine and Azure hints
-        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, azureObjectHints);
+        // Call the internal implementation with both scriptLine and Azure hints (no combined scriptLines)
+        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, azureObjectHints, null);
+    }
+    
+    /**
+     * Enhanced 6-parameter version with combined scriptLines from all scenes
+     */
+    @Override
+    public Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale, String scriptLineContext, List<String> azureObjectHints, String combinedScriptLines) {
+        System.out.println("[QWEN] ========================================");
+        System.out.println("[QWEN] labelRegions called (6-param WITH COMBINED SCRIPTLINES)");
+        System.out.println("[QWEN] keyframeUrl: " + (keyframeUrl != null ? keyframeUrl.substring(0, Math.min(100, keyframeUrl.length())) + "..." : "null"));
+        System.out.println("[QWEN] regions count: " + (regions != null ? regions.size() : 0));
+        System.out.println("[QWEN] locale: " + locale);
+        System.out.println("[QWEN] scriptLineContext (this scene): " + (scriptLineContext != null && !scriptLineContext.isEmpty() ? 
+            "\"" + scriptLineContext.substring(0, Math.min(50, scriptLineContext.length())) + (scriptLineContext.length() > 50 ? "...\"" : "\"") : "null"));
+        System.out.println("[QWEN] combinedScriptLines (all scenes): " + (combinedScriptLines != null && !combinedScriptLines.isEmpty() ? 
+            "\"" + combinedScriptLines.substring(0, Math.min(100, combinedScriptLines.length())) + (combinedScriptLines.length() > 100 ? "...\"" : "\"") : "null"));
+        System.out.println("[QWEN] azureObjectHints: " + (azureObjectHints != null ? azureObjectHints : "null"));
+        System.out.println("[QWEN] ========================================");
+        
+        // Call the internal implementation with all context
+        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, azureObjectHints, combinedScriptLines);
     }
     
     /**
@@ -427,13 +448,13 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         System.out.println("[QWEN] ========================================");
         
         // Call the internal implementation without scriptLine context or Azure hints
-        return labelRegionsInternal(keyframeUrl, regions, locale, null, null);
+        return labelRegionsInternal(keyframeUrl, regions, locale, null, null, null);
     }
     
     /**
-     * Internal implementation that handles scriptLine context and Azure object hints
+     * Internal implementation that handles scriptLine context, Azure object hints, and combined scriptLines
      */
-    private Map<String, LabelResult> labelRegionsInternal(String keyframeUrl, List<RegionBox> regions, String locale, String scriptLineContext, List<String> azureObjectHints) {
+    private Map<String, LabelResult> labelRegionsInternal(String keyframeUrl, List<RegionBox> regions, String locale, String scriptLineContext, List<String> azureObjectHints, String combinedScriptLines) {
         
         System.out.println("[QWEN-KEYELEMENTS] 🎯 Starting Qwen VL call for keyElements extraction");
         System.out.println("[QWEN-KEYELEMENTS]    Keyframe: " + (keyframeUrl != null ? keyframeUrl.substring(0, Math.min(80, keyframeUrl.length())) + "..." : "null"));
@@ -452,6 +473,16 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             StringBuilder sb = new StringBuilder();
             sb.append("分析这个场景图片，完成三个任务：\n\n");
             
+            // Add combined scriptLines context if available (for manual templates with multiple scenes)
+            if (combinedScriptLines != null && !combinedScriptLines.isEmpty()) {
+                sb.append("【完整模板背景（所有场景的台词）】\n");
+                sb.append(combinedScriptLines).append("\n\n");
+                System.out.println("[QWEN-COMBINED] ✅ Combined scriptLines context included: \"" + 
+                    (combinedScriptLines.length() > 100 ? combinedScriptLines.substring(0, 100) + "..." : combinedScriptLines) + "\"");
+            } else {
+                System.out.println("[QWEN-COMBINED] ⚠️ No combined scriptLines context");
+            }
+            
             // Add scriptLine context if available (optional reference)
             if (scriptLineContext != null && !scriptLineContext.isEmpty()) {
                 sb.append("【场景语音内容（参考）】\n");
@@ -462,22 +493,36 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                 System.out.println("[QWEN-KEYELEMENTS] ⚠️ No scriptLine context provided");
             }
             
-            // Add Azure object hints if available (for targeted grounding)
+            // Task 1: Different prompts based on whether Azure hints are available
             if (azureObjectHints != null && !azureObjectHints.isEmpty()) {
-                sb.append("【Azure检测到的物体（请在图中定位这些物体）】\n");
+                // WITH Azure hints - targeted grounding
+                sb.append("【Azure检测到的物体】\n");
                 for (String hint : azureObjectHints) {
                     sb.append("- ").append(hint).append("\n");
                 }
                 sb.append("\n");
+                
+                sb.append("任务1：定位Azure检测到的物体并提供精确边界框\n")
+                .append("请在图像中找到上述Azure检测到的物体，为每个物体提供：\n")
+                .append("- id: 使用格式 \"obj1\", \"obj2\", \"obj3\" 等\n")
+                .append("- labelZh: 简体中文标签（≤4字）\n")
+                .append("- conf: 置信度（0~1）\n")
+                .append("- box: 精确边界框 [x, y, width, height]，坐标范围 0-1000\n")
+                .append("注意：优先定位Azure提示的物体，确保边界框准确。\n\n");
+                
                 System.out.println("[QWEN-AZURE-HINTS] ✅ Azure object hints included: " + azureObjectHints);
             } else {
-                System.out.println("[QWEN-AZURE-HINTS] ⚠️ No Azure object hints provided");
+                // WITHOUT Azure hints - free detection
+                sb.append("任务1：检测场景中的主要物体并提供边界框\n")
+                .append("请检测图像中最重要的2-5个物体，为每个物体提供：\n")
+                .append("- id: 使用格式 \"obj1\", \"obj2\", \"obj3\" 等\n")
+                .append("- labelZh: 简体中文标签（≤4字）\n")
+                .append("- conf: 置信度（0~1）\n")
+                .append("- box: 边界框 [x, y, width, height]，坐标范围 0-1000\n")
+                .append("注意：优先检测与场景主题相关的物体（如产品、人物、关键道具）。\n\n");
+                
+                System.out.println("[QWEN-AZURE-HINTS] ⚠️ No Azure hints - using free object detection");
             }
-            
-            sb.append("任务1：对指定区域进行标注\n")
-            .append("区域坐标（归一化0~1）：\n")
-            .append(regionsJson).append("\n")
-            .append("要求：使用简体中文标签（≤4字），返回置信度conf（0~1）\n\n")
             
             .append("任务2：场景分析\n")
             .append("请在200字内描述以下要素，保持客观一致的描述风格：\n")
@@ -488,23 +533,25 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             .append("5. 动作活动（如有）\n")
             .append("6. 拍摄角度（俯视/平视/仰视等）\n\n")
             
-            .append("任务3：提取关键要素\n")
-            .append("请提取该场景中最重要的恰好3个物体、产品或元素，并提供它们的边界框坐标。\n")
-            .append("**重要**：必须返回恰好3个关键要素（可以少），每个要素必须包含边界框坐标 [x, y, width, height]，坐标范围 0-1000。\n")
-            .append("例如：\n")
-            .append("- 推销导航的场景：[\"导航屏幕\", \"中控台\", \"CarPlay界面\"]\n")
-            .append("- 推销车衣的场景：[\"车身\", \"贴膜过程\", \"防护效果\"]\n")
-            .append("- 餐饮场景：[\"菜品\", \"门店招牌\", \"用餐环境\"]\n\n")
-            
             .append("返回JSON格式：\n")
             .append("{\n")
-            .append("  \"regions\": [\n")
-            .append("    {\"id\":\"p1\",\"labelZh\":\"汽车\",\"conf\":0.95,\"box\":[100,150,300,200]}\n")
+            .append("  \"keyElements\": [\n")
+            .append("    {\"name\":\"汽车\",\"box\":[100,150,300,200],\"conf\":0.95},\n")
+            .append("    {\"name\":\"屏幕\",\"box\":[400,200,200,150],\"conf\":0.90},\n")
+            .append("    {\"name\":\"销售场景\",\"box\":null,\"conf\":0.85}\n")
             .append("  ],\n")
-            .append("  \"sceneAnalysis\": \"详细的场景分析文字...\",\n")
-            .append("  \"keyElements\": [\"关键要素1\", \"关键要素2\", \"关键要素3\"]\n")
+            .append("  \"sceneAnalysis\": \"详细的场景分析文字...\"\n")
             .append("}\n\n")
-            .append("注意：box 格式为 [x, y, width, height]，坐标系统：左上角为原点，x向右，y向下，范围0-1000。");
+            .append("说明：\n")
+            .append("- keyElements: 场景的关键要素（既包括具体物体，也包括抽象概念）\n")
+            .append("- name: 关键要素名称（简体中文，≤6字）\n")
+            .append("- box: 边界框 [x, y, width, height]，如果是抽象概念则为 null\n")
+            .append("- conf: 置信度（0~1）\n")
+            .append("- box格式: [x, y, width, height]，左上角为原点，范围0-1000\n\n")
+            .append("注意：\n")
+            .append("1. 具体物体（如汽车、人物）应提供边界框\n")
+            .append("2. 抽象概念（如销售场景、宣传氛围）box设为null\n")
+            .append("3. box坐标系统：左上角为原点，x向右，y向下，范围0-1000");
 
             Map<String, Object> request = new HashMap<>();
             request.put("model", qwenModel);
@@ -598,10 +645,10 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                     System.out.println("[QWEN] Added fallback region: " + region.id + " with raw scene analysis");
                 }
             }
-            // Try new format first: {regions: [...], sceneAnalysis: "...", keyElements: [...], scriptLine: "..."}
-            else if (root.isObject() && root.has("regions")) {
-                System.out.println("[QWEN] ✅ Found 'regions' field in response");
-                JsonNode regionsNode = root.get("regions");
+            // Try new unified format: {keyElements: [{name, box, conf}, ...], sceneAnalysis: "..."}
+            else if (root.isObject() && root.has("keyElements")) {
+                System.out.println("[QWEN] ✅ Found 'keyElements' field in response (unified format)");
+                JsonNode keyElementsNode = root.get("keyElements");
                 
                 // Extract scene analysis
                 if (root.has("sceneAnalysis")) {
@@ -612,75 +659,129 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                     System.err.println("[QWEN] ⚠️ No 'sceneAnalysis' field in response");
                 }
                 
-                // Extract key elements (limit to 3)
-                List<String> keyElements = new ArrayList<>();
-                if (root.has("keyElements") && root.get("keyElements").isArray()) {
-                    for (JsonNode element : root.get("keyElements")) {
-                        keyElements.add(element.asText());
+                // Build unified keyElementsWithBoxes list
+                List<com.example.demo.model.Scene.KeyElement> keyElementsWithBoxes = new ArrayList<>();
+                
+                if (keyElementsNode.isArray()) {
+                    System.out.println("[QWEN] Processing " + keyElementsNode.size() + " keyElements (unified format)");
+                    
+                    int idCounter = 1;
+                    for (JsonNode node : keyElementsNode) {
+                        String name = node.path("name").asText("");
+                        double conf = clamp(node.path("conf").asDouble(0.8));
+                        
+                        // Extract bounding box if present (can be null for abstract concepts)
+                        int[] box = null;
+                        JsonNode boxNode = node.get("box");
+                        if (boxNode != null && !boxNode.isNull() && boxNode.isArray() && boxNode.size() == 4) {
+                            box = new int[4];
+                            box[0] = boxNode.get(0).asInt();
+                            box[1] = boxNode.get(1).asInt();
+                            box[2] = boxNode.get(2).asInt();
+                            box[3] = boxNode.get(3).asInt();
+                            
+                            System.out.println("[QWEN-BOX-DEBUG] ========================================");
+                            System.out.println("[QWEN-BOX-DEBUG] KeyElement: " + name);
+                            System.out.println("[QWEN-BOX-DEBUG] Raw box from Qwen: [" + box[0] + ", " + box[1] + ", " + box[2] + ", " + box[3] + "]");
+                            System.out.println("[QWEN-BOX-DEBUG] Normalized (÷1000): [" + (box[0]/1000.0) + ", " + (box[1]/1000.0) + ", " + (box[2]/1000.0) + ", " + (box[3]/1000.0) + "]");
+                            
+                            // Check if this looks like [x, y, width, height] or [x1, y1, x2, y2]
+                            if (box[2] > 500 || box[3] > 500) {
+                                System.out.println("[QWEN-BOX-DEBUG] ⚠️ WARNING: Box values [2] or [3] > 500, might be absolute coordinates instead of dimensions!");
+                                System.out.println("[QWEN-BOX-DEBUG] If [x1,y1,x2,y2]: width=" + (box[2]-box[0]) + ", height=" + (box[3]-box[1]));
+                            }
+                            
+                            // Check if box is too large (>40% of frame)
+                            if (box[2] > 400 || box[3] > 400) {
+                                System.out.println("[QWEN-BOX-DEBUG] ⚠️ WARNING: Large bounding box detected! w=" + box[2] + ", h=" + box[3]);
+                            }
+                            System.out.println("[QWEN-BOX-DEBUG] ========================================");
+                        }
+                        
+                        if (!name.isEmpty()) {
+                            // Build KeyElement (with or without box)
+                            float[] normalizedBox = null;
+                            if (box != null && box.length == 4) {
+                                normalizedBox = new float[4];
+                                normalizedBox[0] = box[0] / 1000.0f;  // x
+                                normalizedBox[1] = box[1] / 1000.0f;  // y
+                                normalizedBox[2] = box[2] / 1000.0f;  // width
+                                normalizedBox[3] = box[3] / 1000.0f;  // height
+                            }
+                            
+                            com.example.demo.model.Scene.KeyElement keyElement = 
+                                new com.example.demo.model.Scene.KeyElement(name, normalizedBox, (float) conf);
+                            keyElementsWithBoxes.add(keyElement);
+                            
+                            // Also create LabelResult for backward compatibility
+                            String id = "obj" + idCounter++;
+                            LabelResult result = new LabelResult(id, name, conf);
+                            result.sceneAnalysis = sceneAnalysis;
+                            result.rawResponse = contentStr;
+                            result.keyElementsWithBoxes = keyElementsWithBoxes;
+                            result.box = box;
+                            out.put(id, result);
+                            
+                            System.out.println("[QWEN] Added keyElement: " + name + " with box: " + 
+                                (normalizedBox != null ? "[" + normalizedBox[0] + "," + normalizedBox[1] + "," + normalizedBox[2] + "," + normalizedBox[3] + "]" : "null (abstract concept)"));
+                        }
                     }
                     
-                    // Enforce limit of 3 elements
-                    if (keyElements.size() > 3) {
-                        System.out.println("[QWEN-KEYELEMENTS] ⚠️ AI returned " + keyElements.size() + " key elements, trimming to 3");
-                        keyElements = keyElements.subList(0, 3);
-                    } else if (keyElements.size() < 3) {
-                        System.out.println("[QWEN-KEYELEMENTS] ⚠️ AI returned only " + keyElements.size() + " key elements (expected 3)");
-                    }
+                    System.out.println("[QWEN] ✅ Total keyElements: " + keyElementsWithBoxes.size());
                     
-                    System.out.println("[QWEN-KEYELEMENTS] ✅ Key elements extracted: " + keyElements);
                 } else {
-                    System.err.println("[QWEN-KEYELEMENTS] ⚠️ No 'keyElements' field in response");
+                    System.err.println("[QWEN] ⚠️ 'keyElements' is not an array");
+                }
+            }
+            // Fallback: old regions format for backward compatibility
+            else if (root.isObject() && root.has("regions")) {
+                System.out.println("[QWEN] ⚠️ Using legacy 'regions' format");
+                JsonNode regionsNode = root.get("regions");
+                
+                if (root.has("sceneAnalysis")) {
+                    sceneAnalysis = root.get("sceneAnalysis").asText();
                 }
                 
+                List<com.example.demo.model.Scene.KeyElement> keyElementsWithBoxes = new ArrayList<>();
+                
                 if (regionsNode.isArray()) {
-                    System.out.println("[QWEN] Processing " + regionsNode.size() + " regions");
                     for (JsonNode node : regionsNode) {
                         String id = node.path("id").asText(null);
                         String label = sanitize(node.path("labelZh").asText(""));
                         double conf = clamp(node.path("conf").asDouble(0.0));
                         
-                        // Extract bounding box if present
                         int[] box = null;
                         if (node.has("box") && node.get("box").isArray()) {
                             JsonNode boxNode = node.get("box");
                             if (boxNode.size() == 4) {
                                 box = new int[4];
-                                box[0] = boxNode.get(0).asInt();
-                                box[1] = boxNode.get(1).asInt();
-                                box[2] = boxNode.get(2).asInt();
-                                box[3] = boxNode.get(3).asInt();
-                                
-                                System.out.println("[QWEN-BOX-DEBUG] ========================================");
-                                System.out.println("[QWEN-BOX-DEBUG] Object: " + label);
-                                System.out.println("[QWEN-BOX-DEBUG] Raw box from Qwen: [" + box[0] + ", " + box[1] + ", " + box[2] + ", " + box[3] + "]");
-                                System.out.println("[QWEN-BOX-DEBUG] Normalized (÷1000): [" + (box[0]/1000.0) + ", " + (box[1]/1000.0) + ", " + (box[2]/1000.0) + ", " + (box[3]/1000.0) + "]");
-                                
-                                // Check if this looks like [x, y, width, height] or [x1, y1, x2, y2]
-                                if (box[2] > 500 || box[3] > 500) {
-                                    System.out.println("[QWEN-BOX-DEBUG] ⚠️ WARNING: Box values [2] or [3] > 500, might be absolute coordinates instead of dimensions!");
-                                    System.out.println("[QWEN-BOX-DEBUG] If [x1,y1,x2,y2]: width=" + (box[2]-box[0]) + ", height=" + (box[3]-box[1]));
+                                for (int i = 0; i < 4; i++) {
+                                    box[i] = boxNode.get(i).asInt();
                                 }
-                                
-                                // Check if box is too large (>40% of frame)
-                                if (box[2] > 400 || box[3] > 400) {
-                                    System.out.println("[QWEN-BOX-DEBUG] ⚠️ WARNING: Large bounding box detected! w=" + box[2] + ", h=" + box[3]);
-                                }
-                                System.out.println("[QWEN-BOX-DEBUG] ========================================");
                             }
                         }
                         
                         if (id != null && !label.isEmpty()) {
+                            float[] normalizedBox = null;
+                            if (box != null && box.length == 4) {
+                                normalizedBox = new float[4];
+                                for (int i = 0; i < 4; i++) {
+                                    normalizedBox[i] = box[i] / 1000.0f;
+                                }
+                            }
+                            
+                            com.example.demo.model.Scene.KeyElement keyElement = 
+                                new com.example.demo.model.Scene.KeyElement(label, normalizedBox, (float) conf);
+                            keyElementsWithBoxes.add(keyElement);
+                            
                             LabelResult result = new LabelResult(id, label, conf);
-                            result.sceneAnalysis = sceneAnalysis;  // Attach scene analysis to all results
-                            result.rawResponse = contentStr;  // Store raw response
-                            result.keyElements = keyElements;  // Attach key elements
-                            result.box = box;  // Attach bounding box
+                            result.sceneAnalysis = sceneAnalysis;
+                            result.rawResponse = contentStr;
+                            result.keyElementsWithBoxes = keyElementsWithBoxes;
+                            result.box = box;
                             out.put(id, result);
-                            System.out.println("[QWEN] Added region: " + id + " -> " + label + " (conf: " + conf + ")");
                         }
                     }
-                } else {
-                    System.err.println("[QWEN] ⚠️ 'regions' is not an array");
                 }
             }
             // Fallback: old format (array) for backward compatibility
@@ -996,3 +1097,144 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         }
     }
 }
+
+    /**
+     * Get bounding box for a single object name
+     * Used when user edits keyElement and we need to find its bounding box
+     */
+    @Override
+    public float[] getBoundingBoxForObject(String keyframeUrl, String objectName, String locale) {
+        System.out.println("[QWEN-SINGLE-BOX] Getting bounding box for object: " + objectName);
+        
+        try {
+            // Build simple prompt to find one object
+            StringBuilder sb = new StringBuilder();
+            sb.append("请在图像中找到以下物体并提供精确的边界框：\n\n");
+            sb.append("物体名称：").append(objectName).append("\n\n");
+            sb.append("返回JSON格式：\n");
+            sb.append("{\n");
+            sb.append("  \"found\": true,\n");
+            sb.append("  \"box\": [x, y, width, height]\n");
+            sb.append("}\n\n");
+            sb.append("说明：\n");
+            sb.append("- box格式: [x, y, width, height]，坐标范围 0-1000\n");
+            sb.append("- 如果找不到该物体，返回 {\"found\": false}\n");
+            
+            Map<String, Object> request = new HashMap<>();
+            request.put("model", qwenModel);
+            
+            List<Map<String, Object>> messages = new ArrayList<>();
+            Map<String, Object> message = new HashMap<>();
+            message.put("role", "user");
+            
+            List<Map<String, Object>> content = new ArrayList<>();
+            
+            // Add image
+            Map<String, Object> imageContent = new HashMap<>();
+            imageContent.put("type", "image");
+            imageContent.put("image", keyframeUrl);
+            content.add(imageContent);
+            
+            // Add text
+            Map<String, Object> textContent = new HashMap<>();
+            textContent.put("type", "text");
+            textContent.put("text", sb.toString());
+            content.add(textContent);
+            
+            message.put("content", content);
+            messages.add(message);
+            request.put("messages", messages);
+            
+            // Call Qwen API
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + qwenApiKey);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+            
+            ResponseEntity<String> response = restTemplate.exchange(
+                qwenApiBase + "/chat/completions",
+                HttpMethod.POST,
+                entity,
+                String.class
+            );
+            
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                System.err.println("[QWEN-SINGLE-BOX] API returned non-success status: " + response.getStatusCodeValue());
+                return null;
+            }
+            
+            String responseBody = response.getBody();
+            if (responseBody == null || responseBody.isBlank()) {
+                System.err.println("[QWEN-SINGLE-BOX] Empty response body");
+                return null;
+            }
+            
+            // Extract content
+            String contentStr = extractContentFromResponse(responseBody);
+            if (contentStr == null) {
+                System.err.println("[QWEN-SINGLE-BOX] Failed to extract content");
+                return null;
+            }
+            
+            // Strip markdown if present
+            if (contentStr.startsWith("```")) {
+                contentStr = contentStr.replaceFirst("^```(?:json)?\\s*", "");
+                contentStr = contentStr.replaceFirst("```\\s*$", "");
+                contentStr = contentStr.trim();
+            }
+            
+            // Parse JSON
+            JsonNode root = objectMapper.readTree(contentStr);
+            
+            if (!root.has("found") || !root.get("found").asBoolean()) {
+                System.out.println("[QWEN-SINGLE-BOX] Object not found: " + objectName);
+                return null;
+            }
+            
+            if (!root.has("box") || !root.get("box").isArray()) {
+                System.err.println("[QWEN-SINGLE-BOX] No box in response");
+                return null;
+            }
+            
+            JsonNode boxNode = root.get("box");
+            if (boxNode.size() != 4) {
+                System.err.println("[QWEN-SINGLE-BOX] Invalid box size: " + boxNode.size());
+                return null;
+            }
+            
+            // Convert from 0-1000 to 0-1 range
+            float[] box = new float[4];
+            box[0] = (float) boxNode.get(0).asInt() / 1000.0f;  // x
+            box[1] = (float) boxNode.get(1).asInt() / 1000.0f;  // y
+            box[2] = (float) boxNode.get(2).asInt() / 1000.0f;  // width
+            box[3] = (float) boxNode.get(3).asInt() / 1000.0f;  // height
+            
+            System.out.println("[QWEN-SINGLE-BOX] ✅ Found box for " + objectName + ": [" + 
+                box[0] + ", " + box[1] + ", " + box[2] + ", " + box[3] + "]");
+            
+            return box;
+            
+        } catch (Exception e) {
+            System.err.println("[QWEN-SINGLE-BOX] Error: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+    
+    private String extractContentFromResponse(String responseBody) {
+        try {
+            JsonNode response = objectMapper.readTree(responseBody);
+            JsonNode choices = response.get("choices");
+            if (choices == null || !choices.isArray() || choices.size() == 0) {
+                return null;
+            }
+            JsonNode message = choices.get(0).get("message");
+            if (message == null) {
+                return null;
+            }
+            JsonNode content = message.get("content");
+            return content != null ? content.asText() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }

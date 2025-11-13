@@ -28,10 +28,8 @@ public class Scene {
     private String keyframeUrl;
     private String videoId;  // NEW: For manual templates - ID of the scene's video
     
-    // Dual scene system fields (add-only, non-breaking)
+    // Scene metadata
     private String sceneSource;  // "manual" | "ai" - how the scene was created
-    private String overlayType;  // "grid" | "objects" - how to render guidance
-    private List<ObjectOverlay> overlayObjects;  // only when overlayType="objects"
     private String sourceAspect;  // e.g., "9:16" for mini-app pixel mapping
     private String shortLabelZh;  // Chinese short label for the dominant object
     
@@ -39,58 +37,35 @@ public class Scene {
     private String vlRawResponse;  // Complete raw VL API response (JSON string)
     private String vlSceneAnalysis;  // Detailed scene analysis from VL (for video comparison)
     
-    // Key elements for this scene (for purpose-driven comparison)
-    private List<String> keyElements;
+    // Key elements with optional bounding boxes (unified system)
+    private List<KeyElement> keyElementsWithBoxes;
     
     // Subtitle segments for KTV-style display and video compilation
     private List<SubtitleSegment> subtitleSegments;
     
-    // Inner class for object overlay data
-    public static class ObjectOverlay {
-        private String label;
-        private String labelLocalized;  // Localized label (e.g., Chinese translation)
-        private String labelZh;  // Chinese label
-        private float confidence;
-        private float x;  // normalized [0,1], top-left corner
-        private float y;  // normalized [0,1], top-left corner
-        private float width;  // normalized [0,1], width
-        private float height;  // normalized [0,1], height
+    // Inner class for key element with optional bounding box
+    // This unified structure replaces the old ObjectOverlay system
+    public static class KeyElement {
+        private String name;  // e.g., "车载大屏导航", "销售人员"
+        private float[] box;  // Optional bounding box [x, y, width, height] in 0-1 range, null if no box
+        private float confidence;  // Confidence score 0-1
         
-        public ObjectOverlay() {}
+        public KeyElement() {}
         
-        public ObjectOverlay(String label, float confidence, float x, float y, float width, float height) {
-            this.label = label;
+        public KeyElement(String name, float[] box, float confidence) {
+            this.name = name;
+            this.box = box;
             this.confidence = confidence;
-            this.x = x;
-            this.y = y;
-            this.width = width;
-            this.height = height;
         }
         
-        public String getLabel() { return label; }
-        public void setLabel(String label) { this.label = label; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
         
-        public String getLabelLocalized() { return labelLocalized; }
-        public void setLabelLocalized(String labelLocalized) { this.labelLocalized = labelLocalized; }
-        
-        public String getLabelZh() { return labelZh; }
-        public void setLabelZh(String labelZh) { this.labelZh = labelZh; }
+        public float[] getBox() { return box; }
+        public void setBox(float[] box) { this.box = box; }
         
         public float getConfidence() { return confidence; }
         public void setConfidence(float confidence) { this.confidence = confidence; }
-        
-        public float getX() { return x; }
-        public void setX(float x) { this.x = x; }
-        
-        public float getY() { return y; }
-        public void setY(float y) { this.y = y; }
-        
-        public float getWidth() { return width; }
-        public void setWidth(float width) { this.width = width; }
-        
-        public float getHeight() { return height; }
-        public void setHeight(float height) { this.height = height; }
-
     }
 
     public Scene() {
@@ -262,21 +237,7 @@ public class Scene {
         this.sceneSource = sceneSource;
     }
     
-    public String getOverlayType() {
-        return overlayType;
-    }
-    
-    public void setOverlayType(String overlayType) {
-        this.overlayType = overlayType;
-    }
-    
-    public List<ObjectOverlay> getOverlayObjects() {
-        return overlayObjects;
-    }
-    
-    public void setOverlayObjects(List<ObjectOverlay> overlayObjects) {
-        this.overlayObjects = overlayObjects;
-    }
+
     
     public String getSourceAspect() {
         return sourceAspect;
@@ -310,12 +271,14 @@ public class Scene {
         this.vlSceneAnalysis = vlSceneAnalysis;
     }
     
-    public List<String> getKeyElements() {
-        return keyElements;
+
+    
+    public List<KeyElement> getKeyElementsWithBoxes() {
+        return keyElementsWithBoxes;
     }
     
-    public void setKeyElements(List<String> keyElements) {
-        this.keyElements = keyElements;
+    public void setKeyElementsWithBoxes(List<KeyElement> keyElementsWithBoxes) {
+        this.keyElementsWithBoxes = keyElementsWithBoxes;
     }
     
     public List<SubtitleSegment> getSubtitleSegments() {
@@ -327,4 +290,4 @@ public class Scene {
     }
     
 }
-// Change Log: Added dual scene system fields (sceneSource, overlayType, overlayObjects) for object overlay support
+// Change Log: Unified keyElements system - removed ObjectOverlay in favor of KeyElement with optional box
