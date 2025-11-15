@@ -228,9 +228,9 @@ public class UnifiedSceneAnalysisService {
                     
                     log.info("[UNIFIED] ✅ Extracted {} keyElements from Qwen VL", firstResult.keyElementsWithBoxes.size());
                     for (Scene.KeyElement ke : firstResult.keyElementsWithBoxes) {
-                        if (ke.getBox() != null) {
+                        if (ke.getBox() != null && ke.getBox().size() >= 4) {
                             log.info("[UNIFIED]    - {} at [{},{},{},{}] conf:{}", 
-                                ke.getName(), ke.getBox()[0], ke.getBox()[1], ke.getBox()[2], ke.getBox()[3], ke.getConfidence());
+                                ke.getName(), ke.getBox().get(0), ke.getBox().get(1), ke.getBox().get(2), ke.getBox().get(3), ke.getConfidence());
                         } else {
                             log.info("[UNIFIED]    - {} (abstract concept, no box) conf:{}", 
                                 ke.getName(), ke.getConfidence());
