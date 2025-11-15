@@ -700,13 +700,14 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                         
                         if (!name.isEmpty()) {
                             // Build KeyElement (with or without box)
-                            float[] normalizedBox = null;
+                            List<Float> normalizedBox = null;
                             if (box != null && box.length == 4) {
-                                normalizedBox = new float[4];
-                                normalizedBox[0] = box[0] / 1000.0f;  // x
-                                normalizedBox[1] = box[1] / 1000.0f;  // y
-                                normalizedBox[2] = box[2] / 1000.0f;  // width
-                                normalizedBox[3] = box[3] / 1000.0f;  // height
+                                normalizedBox = java.util.Arrays.asList(
+                                    box[0] / 1000.0f,  // x
+                                    box[1] / 1000.0f,  // y
+                                    box[2] / 1000.0f,  // width
+                                    box[3] / 1000.0f   // height
+                                );
                             }
                             
                             com.example.demo.model.Scene.KeyElement keyElement = 
@@ -762,12 +763,14 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                         }
                         
                         if (id != null && !label.isEmpty()) {
-                            float[] normalizedBox = null;
+                            List<Float> normalizedBox = null;
                             if (box != null && box.length == 4) {
-                                normalizedBox = new float[4];
-                                for (int i = 0; i < 4; i++) {
-                                    normalizedBox[i] = box[i] / 1000.0f;
-                                }
+                                normalizedBox = java.util.Arrays.asList(
+                                    box[0] / 1000.0f,
+                                    box[1] / 1000.0f,
+                                    box[2] / 1000.0f,
+                                    box[3] / 1000.0f
+                                );
                             }
                             
                             com.example.demo.model.Scene.KeyElement keyElement = 

@@ -58,27 +58,11 @@ public class Scene {
             this.confidence = confidence;
         }
         
-        // Helper constructor for backward compatibility with float arrays
-        public KeyElement(String name, float[] boxArray, float confidence) {
-            this.name = name;
-            this.box = boxArray != null ? java.util.Arrays.asList(
-                boxArray[0], boxArray[1], boxArray[2], boxArray[3]
-            ) : null;
-            this.confidence = confidence;
-        }
-        
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
         
         public List<Float> getBox() { return box; }
         public void setBox(List<Float> box) { this.box = box; }
-        
-        // Helper method for backward compatibility
-        public void setBox(float[] boxArray) {
-            this.box = boxArray != null ? java.util.Arrays.asList(
-                boxArray[0], boxArray[1], boxArray[2], boxArray[3]
-            ) : null;
-        }
         
         public float getConfidence() { return confidence; }
         public void setConfidence(float confidence) { this.confidence = confidence; }
