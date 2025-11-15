@@ -63,15 +63,22 @@ public class AlibabaOssStorageService {
         System.out.println("Endpoint: " + endpoint);
         System.out.println("AccessKeyId: " + (accessKeyId != null ? accessKeyId.substring(0, Math.min(8, accessKeyId.length())) + "..." : "null"));
         
-        // Create OSS client with timeout configuration
+        // Create OSS client with V4 signature and timeout configuration (following Alibaba's latest best practices)
         com.aliyun.oss.ClientBuilderConfiguration config = new com.aliyun.oss.ClientBuilderConfiguration();
+        config.setSignatureVersion(com.aliyun.oss.common.comm.SignVersion.V4);  // Use V4 signature
         config.setConnectionTimeout(30000); // 30 seconds
         config.setSocketTimeout(60000); // 60 seconds
         config.setMaxErrorRetry(3);
         
-        System.out.println("Client config: connectionTimeout=30s, socketTimeout=60s, maxRetry=3");
+        System.out.println("Client config: signatureVersion=V4, connectionTimeout=30s, socketTimeout=60s, maxRetry=3");
         
-        this.ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret, config);
+        // Use new builder pattern with explicit region
+        this.ossClient = com.aliyun.oss.OSSClientBuilder.create()
+            .endpoint(endpoint)
+            .credentialsProvider(com.aliyun.oss.common.auth.CredentialsProviderFactory.newDefaultCredentialProvider(accessKeyId, accessKeySecret))
+            .clientConfiguration(config)
+            .region("cn-shanghai")  // Explicit region for better routing
+            .build();
         
         // Test connection
         try {
@@ -230,11 +237,12 @@ public class AlibabaOssStorageService {
     
 
     /**
-     * Upload file from File object with retry logic for network errors
+     * Upload file from File object with timeout protection and retry logic
      */
     public String uploadFile(java.io.File file, String objectKey, String contentType) throws IOException {
         int maxRetries = 3;
         int retryDelay = 2000; // 2 seconds
+        int uploadTimeoutSeconds = 90; // 90 second hard timeout per attempt
         
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             try {
@@ -248,9 +256,34 @@ public class AlibabaOssStorageService {
                 
                 PutObjectRequest putRequest = new PutObjectRequest(bucketName, objectKey, file, metadata);
                 
-                System.out.println("[OSS-UPLOAD] Calling ossClient.putObject()...");
+                System.out.println("[OSS-UPLOAD] Calling ossClient.putObject() with " + uploadTimeoutSeconds + "s timeout...");
                 long startTime = System.currentTimeMillis();
-                com.aliyun.oss.model.PutObjectResult result = ossClient.putObject(putRequest);
+                
+                // Use ExecutorService for hard timeout - prevents indefinite hanging
+                java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+                java.util.concurrent.Future<com.aliyun.oss.model.PutObjectResult> future = executor.submit(() -> {
+                    return ossClient.putObject(putRequest);
+                });
+                
+                com.aliyun.oss.model.PutObjectResult result;
+                try {
+                    result = future.get(uploadTimeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (java.util.concurrent.TimeoutException e) {
+                    future.cancel(true);
+                    executor.shutdownNow();
+                    throw new IOException("OSS upload timed out after " + uploadTimeoutSeconds + " seconds");
+                } catch (java.util.concurrent.ExecutionException e) {
+                    executor.shutdownNow();
+                    throw new IOException("OSS upload failed: " + e.getCause().getMessage(), e.getCause());
+                } catch (InterruptedException e) {
+                    future.cancel(true);
+                    executor.shutdownNow();
+                    Thread.currentThread().interrupt();
+                    throw new IOException("OSS upload interrupted", e);
+                } finally {
+                    executor.shutdown();
+                }
+                
                 long duration = System.currentTimeMillis() - startTime;
                 
                 // Log request ID and ETag
