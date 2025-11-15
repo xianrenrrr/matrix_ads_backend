@@ -47,22 +47,38 @@ public class Scene {
     // This unified structure replaces the old ObjectOverlay system
     public static class KeyElement {
         private String name;  // e.g., "车载大屏导航", "销售人员"
-        private float[] box;  // Optional bounding box [x, y, width, height] in 0-1 range, null if no box
+        private List<Float> box;  // Optional bounding box [x, y, width, height] in 0-1 range, null if no box
         private float confidence;  // Confidence score 0-1
         
         public KeyElement() {}
         
-        public KeyElement(String name, float[] box, float confidence) {
+        public KeyElement(String name, List<Float> box, float confidence) {
             this.name = name;
             this.box = box;
+            this.confidence = confidence;
+        }
+        
+        // Helper constructor for backward compatibility with float arrays
+        public KeyElement(String name, float[] boxArray, float confidence) {
+            this.name = name;
+            this.box = boxArray != null ? java.util.Arrays.asList(
+                boxArray[0], boxArray[1], boxArray[2], boxArray[3]
+            ) : null;
             this.confidence = confidence;
         }
         
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
         
-        public float[] getBox() { return box; }
-        public void setBox(float[] box) { this.box = box; }
+        public List<Float> getBox() { return box; }
+        public void setBox(List<Float> box) { this.box = box; }
+        
+        // Helper method for backward compatibility
+        public void setBox(float[] boxArray) {
+            this.box = boxArray != null ? java.util.Arrays.asList(
+                boxArray[0], boxArray[1], boxArray[2], boxArray[3]
+            ) : null;
+        }
         
         public float getConfidence() { return confidence; }
         public void setConfidence(float confidence) { this.confidence = confidence; }
