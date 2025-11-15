@@ -798,11 +798,44 @@ public class ContentManager {
         }
         
         // 10. Save template (groups are now assigned via push button with TemplateAssignment)
-        String templateId = templateDao.createTemplate(template);
+        log.info("💾 Attempting to save template to database...");
+        log.info("Template data: userId={}, title={}, scenes={}, totalLength={}, videoFormat={}", 
+            template.getUserId(), template.getTemplateTitle(), 
+            template.getScenes() != null ? template.getScenes().size() : 0,
+            template.getTotalVideoLength(), template.getVideoFormat());
+        
+        // Log scene details to identify serialization issues
+        if (template.getScenes() != null) {
+            for (com.example.demo.model.Scene scene : template.getScenes()) {
+                log.info("Scene {}: title={}, duration={}s, subtitleSegments={}, keyElements={}", 
+                    scene.getSceneNumber(), scene.getSceneTitle(), 
+                    scene.getSceneDurationInSeconds(),
+                    scene.getSubtitleSegments() != null ? scene.getSubtitleSegments().size() : 0,
+                    scene.getKeyElementsWithBoxes() != null ? scene.getKeyElementsWithBoxes().size() : 0);
+            }
+        }
+        
+        String templateId;
+        try {
+            templateId = templateDao.createTemplate(template);
+            log.info("✅ Template saved successfully with ID: {}", templateId);
+        } catch (Exception e) {
+            log.error("❌ FAILED to save template: {} - {}", e.getClass().getSimpleName(), e.getMessage(), e);
+            throw e;
+        }
         
         // Determine who should own the template in created_Templates
+        log.info("👤 Looking up user: {}", userId);
         String templateOwnerId = userId;
-        com.example.demo.model.User user = userDao.findById(userId);
+        com.example.demo.model.User user;
+        try {
+            user = userDao.findById(userId);
+            log.info("✅ User found: {} (role: {})", userId, user != null ? user.getRole() : "null");
+        } catch (Exception e) {
+            log.error("❌ FAILED to find user {}: {} - {}", userId, e.getClass().getSimpleName(), e.getMessage(), e);
+            throw e;
+        }
+        
         if (user != null && "employee".equals(user.getRole()) && user.getCreatedBy() != null) {
             // If creator is an employee, add to manager's created_Templates only
             templateOwnerId = user.getCreatedBy();
@@ -810,7 +843,14 @@ public class ContentManager {
         }
         
         // Add template to manager's created_Templates (or creator's if they are a manager)
-        userDao.addCreatedTemplate(templateOwnerId, templateId);
+        log.info("📝 Adding template {} to user {}'s created_Templates", templateId, templateOwnerId);
+        try {
+            userDao.addCreatedTemplate(templateOwnerId, templateId);
+            log.info("✅ Template added to user's created_Templates successfully");
+        } catch (Exception e) {
+            log.error("❌ FAILED to add template to user's created_Templates: {} - {}", e.getClass().getSimpleName(), e.getMessage(), e);
+            throw e;
+        }
         
         log.info("Manual template created successfully: {} with {} scenes", templateId, aiAnalyzedScenes.size());
         

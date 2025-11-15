@@ -49,30 +49,8 @@ public class TemplateDaoImpl implements TemplateDao {
         ApiFuture<WriteResult> result = docRef.set(template);
         result.get(); // Wait for write to complete
 
-        // --- Update user's templates field ---
-        if (template.getUserId() != null && !template.getUserId().isEmpty()) {
-            String userId = template.getUserId();
-            DocumentReference userRef = db.collection("users").document(userId);
-            db.runTransaction(transaction -> {
-                DocumentSnapshot userSnap = transaction.get(userRef).get();
-                List<String> templateIds = new ArrayList<>();
-                if (userSnap.exists() && userSnap.contains("created_Templates")) {
-                    Object raw = userSnap.get("created_Templates");
-                    if (raw instanceof List<?>) {
-                        for (Object obj : (List<?>) raw) {
-                            if (obj instanceof String) {
-                                templateIds.add((String) obj);
-                            }
-                        }
-                    }
-                }
-                // If the user never had the field, templateIds will be empty and a new field will be created.
-                // Use update with dot notation to add only the new templateId as a key to the map, preserving existing entries
-                transaction.update(userRef, "created_Templates." + template.getId(), true);
-                return null;
-            }).get();
-        }
-        // --- End update user's templates field ---
+        // NOTE: User's created_Templates field is updated separately via UserDao.addCreatedTemplate()
+        // This avoids duplicate logic and potential conflicts
 
         return template.getId();
     }
