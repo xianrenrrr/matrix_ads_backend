@@ -724,7 +724,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                             out.put(id, result);
                             
                             System.out.println("[QWEN] Added keyElement: " + name + " with box: " + 
-                                (normalizedBox != null ? "[" + normalizedBox[0] + "," + normalizedBox[1] + "," + normalizedBox[2] + "," + normalizedBox[3] + "]" : "null (abstract concept)"));
+                                (normalizedBox != null ? "[" + normalizedBox.get(0) + "," + normalizedBox.get(1) + "," + normalizedBox.get(2) + "," + normalizedBox.get(3) + "]" : "null (abstract concept)"));
                         }
                     }
                     
