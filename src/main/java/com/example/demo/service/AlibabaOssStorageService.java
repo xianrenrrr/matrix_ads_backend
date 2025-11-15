@@ -40,10 +40,10 @@ public class AlibabaOssStorageService {
     @Value("${ALIBABA_CLOUD_ACCESS_KEY_SECRET:}")
     private String accessKeySecret;
     
-    @Value("${alibaba.oss.bucket:xpectra}")
+    @Value("${alibaba.oss.bucket-name:xpectra1}")
     private String bucketName;
     
-    @Value("${alibaba.oss.endpoint:oss-cn-shanghai.aliyuncs.com}")
+    @Value("${alibaba.oss.endpoint:oss-ap-southeast-1.aliyuncs.com}")
     private String endpoint;
     
     private OSS ossClient;
