@@ -59,7 +59,7 @@ public class AlibabaOssStorageService {
         System.out.println("========================================");
         System.out.println("Initializing Alibaba OSS Storage Service");
         System.out.println("Bucket: " + bucketName);
-        System.out.println("Region: cn-shanghai");
+        System.out.println("Region: ap-southeast-1 (Singapore)");
         System.out.println("Endpoint: " + endpoint);
         System.out.println("AccessKeyId: " + (accessKeyId != null ? accessKeyId.substring(0, Math.min(8, accessKeyId.length())) + "..." : "null"));
         
@@ -77,7 +77,7 @@ public class AlibabaOssStorageService {
             .endpoint(endpoint)
             .credentialsProvider(com.aliyun.oss.common.auth.CredentialsProviderFactory.newDefaultCredentialProvider(accessKeyId, accessKeySecret))
             .clientConfiguration(config)
-            .region("cn-shanghai")  // Explicit region for better routing
+            .region("ap-southeast-1")  // Singapore region
             .build();
         
         // Test connection
@@ -342,11 +342,12 @@ public class AlibabaOssStorageService {
         
         String lowerMessage = message.toLowerCase();
         
-        // Network errors that should be retried
+        // Network errors and timeouts that should be retried
         return lowerMessage.contains("broken pipe") ||
                lowerMessage.contains("connection reset") ||
                lowerMessage.contains("connection timed out") ||
                lowerMessage.contains("socket timeout") ||
+               lowerMessage.contains("timed out after") ||  // Our custom timeout wrapper
                lowerMessage.contains("connection refused") ||
                lowerMessage.contains("unable to execute http request") ||
                (e instanceof com.aliyun.oss.ClientException);
