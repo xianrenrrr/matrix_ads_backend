@@ -54,6 +54,9 @@ public class ContentManager {
     @Autowired
     private com.example.demo.service.ScriptLineSegmentationService scriptLineSegmentationService;
     
+    @Autowired
+    private com.example.demo.ai.label.ObjectLabelService objectLabelService;
+    
     /**
      * Get manager's groups
      * GET /content-manager/templates/manager/{managerId}/groups
@@ -528,9 +531,6 @@ public class ContentManager {
     
     @Autowired
     private com.example.demo.dao.VideoDao videoDao;
-    
-    @Autowired
-    private com.example.demo.ai.label.ObjectLabelService objectLabelService;
     
     @Autowired
     private com.example.demo.service.AlibabaOssStorageService alibabaOssStorageService;
@@ -1248,9 +1248,70 @@ public class ContentManager {
         return ResponseEntity.ok(ApiResponse.ok(message, template));
     }
     
+    /**
+     * Get bounding boxes for new keyElements
+     * POST /content-manager/templates/{templateId}/scenes/{sceneNumber}/keyelements/boxes
+     * Body: { "keyframeUrl": "...", "newElements": ["dog", "cat"] }
+     */
+    @PostMapping("/{templateId}/scenes/{sceneNumber}/keyelements/boxes")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getKeyElementBoxes(
+            @PathVariable String templateId,
+            @PathVariable int sceneNumber,
+            @RequestBody Map<String, Object> request,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
+        String language = i18nService.detectLanguageFromHeader(acceptLanguage);
+        
+        try {
+            String keyframeUrl = (String) request.get("keyframeUrl");
+            @SuppressWarnings("unchecked")
+            List<String> newElements = (List<String>) request.get("newElements");
+            
+            if (keyframeUrl == null || keyframeUrl.isEmpty() || newElements == null || newElements.isEmpty()) {
+                throw new IllegalArgumentException("keyframeUrl and newElements are required");
+            }
+            
+            log.info("[GET-BOXES] Getting bounding boxes for {} new elements in template {} scene {}", 
+                newElements.size(), templateId, sceneNumber);
+            
+            // Get bounding boxes for each new element
+            Map<String, List<Float>> elementBoxes = new HashMap<>();
+            
+            for (String elementName : newElements) {
+                if (elementName == null || elementName.trim().isEmpty()) {
+                    continue;
+                }
+                
+                log.info("[GET-BOXES] Requesting box for element: {}", elementName);
+                float[] box = objectLabelService.getBoundingBoxForObject(keyframeUrl, elementName, language);
+                
+                if (box != null && box.length == 4) {
+                    elementBoxes.put(elementName, Arrays.asList(box[0], box[1], box[2], box[3]));
+                    log.info("[GET-BOXES] Found box for {}: [{}, {}, {}, {}]", 
+                        elementName, box[0], box[1], box[2], box[3]);
+                } else {
+                    log.warn("[GET-BOXES] No box found for element: {}", elementName);
+                    elementBoxes.put(elementName, null);
+                }
+            }
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("elementBoxes", elementBoxes);
+            
+            String message = i18nService.getMessage("operation.success", language);
+            return ResponseEntity.ok(ApiResponse.ok(message, result));
+            
+        } catch (Exception e) {
+            log.error("[GET-BOXES] Error getting bounding boxes: {}", e.getMessage(), e);
+            String errorMessage = i18nService.getMessage("operation.failed", language);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.fail(errorMessage + ": " + e.getMessage()));
+        }
+    }
+    
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ContentManager.class);
 }
 // Change Log: Manual scenes always set sceneSource="manual" and overlayType="grid" for dual scene system
 // Added manual-with-ai endpoint for creating templates with per-scene AI analysis (no scene detection)
 // Added AI metadata generation using reasoning model (same as AI template)
 // Added template assignment APIs for time-limited template pushing (Phase 2)
+// Added endpoint to get bounding boxes for new keyElements when user edits them
