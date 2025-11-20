@@ -496,32 +496,44 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             // Task 1: Different prompts based on whether Azure hints are available
             if (azureObjectHints != null && !azureObjectHints.isEmpty()) {
                 // WITH Azure hints - targeted grounding
-                sb.append("【Azure检测到的物体】\n");
+                sb.append("【Azure检测到的物体（需要细化）】\n");
                 for (String hint : azureObjectHints) {
                     sb.append("- ").append(hint).append("\n");
                 }
                 sb.append("\n");
                 
-                sb.append("任务1：定位Azure检测到的物体并提供精确边界框\n")
-                .append("请在图像中找到上述Azure检测到的物体，为每个物体提供：\n")
-                .append("- id: 使用格式 \"obj1\", \"obj2\", \"obj3\" 等\n")
-                .append("- labelZh: 简体中文标签（≤4字）\n")
-                .append("- conf: 置信度（0~1）\n")
-                .append("- box: 精确边界框 [x, y, width, height]，坐标范围 0-1000\n")
-                .append("注意：优先定位Azure提示的物体，确保边界框准确。\n\n");
+                sb.append("任务1：提取关键要素（keyElements）并提供精确边界框\n")
+                .append("**重要规则**：\n")
+                .append("1. **必须结合字幕/语音内容细化Azure检测结果** - 不要直接使用Azure的通用名称\n")
+                .append("2. 如果字幕提到品牌、型号、特征，必须加入名称中\n")
+                .append("3. 好的细化示例：\n")
+                .append("   - Azure检测\"刀\" → 结合字幕 → \"飞利浦剃须刀\"\n")
+                .append("   - Azure检测\"车\" → 结合字幕 → \"小米汽车\"\n")
+                .append("   - Azure检测\"海报\" → 结合场景 → \"产品展示架\"\n")
+                .append("   - Azure检测\"人\" → 结合字幕 → \"销售人员\" 或 \"产品演示者\"\n")
+                .append("4. 不好的示例：\"车\"、\"人\"、\"刀\"、\"海报\"（太通用，必须细化）\n")
+                .append("5. 名称必须是**具体描述性的2-8个中文字**\n")
+                .append("6. **每个要素只提取一次**，不要重复\n")
+                .append("7. 限制在1-5个最重要的要素\n\n");
                 
                 System.out.println("[QWEN-AZURE-HINTS] ✅ Azure object hints included: " + azureObjectHints);
             } else {
-                // WITHOUT Azure hints - free detection
-                sb.append("任务1：检测场景中的主要物体并提供边界框\n")
-                .append("请检测图像中最重要的2-5个物体，为每个物体提供：\n")
-                .append("- id: 使用格式 \"obj1\", \"obj2\", \"obj3\" 等\n")
-                .append("- labelZh: 简体中文标签（≤4字）\n")
-                .append("- conf: 置信度（0~1）\n")
-                .append("- box: 边界框 [x, y, width, height]，坐标范围 0-1000\n")
-                .append("注意：优先检测与场景主题相关的物体（如产品、人物、关键道具）。\n\n");
+                // WITHOUT Azure hints - free detection (now combined with keyElements)
+                sb.append("任务1：提取关键要素（keyElements）并提供边界框\n")
+                .append("**重要规则**：\n")
+                .append("1. **必须结合字幕/语音内容提取具体的要素** - 如果上面有【场景语音内容】，必须从中提取品牌、型号、特征\n")
+                .append("2. 名称必须是**具体描述性的2-8个中文字**，禁止通用词（如"车"、"人"、"物"）\n")
+                .append("3. 好的具体示例：\n")
+                .append("   - 不要说\"车\" → 应该说\"小米汽车\" 或 \"红色轿车\"\n")
+                .append("   - 不要说\"刀\" → 应该说\"飞利浦剃须刀\" 或 \"电动剃须刀\"\n")
+                .append("   - 不要说\"人\" → 应该说\"销售人员\" 或 \"产品演示者\"\n")
+                .append("   - 不要说\"屏\" → 应该说\"产品展示屏\" 或 \"LED显示屏\"\n")
+                .append("4. **优先使用字幕中提到的品牌名、产品名、特征词**\n")
+                .append("5. 如果字幕没有提供细节，根据视觉特征添加修饰词（颜色、大小、用途等）\n")
+                .append("6. **每个要素只提取一次**，不要重复相同或相似的名称\n")
+                .append("7. 限制在1-5个最重要的要素，不要过多\n\n");
                 
-                System.out.println("[QWEN-AZURE-HINTS] ⚠️ No Azure hints - using free object detection");
+                System.out.println("[QWEN-AZURE-HINTS] ⚠️ No Azure hints - using free keyElements detection");
             }
             
             sb.append("任务2：场景分析\n")
@@ -536,22 +548,26 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             .append("返回JSON格式：\n")
             .append("{\n")
             .append("  \"keyElements\": [\n")
-            .append("    {\"name\":\"汽车\",\"box\":[100,150,300,200],\"conf\":0.95},\n")
-            .append("    {\"name\":\"屏幕\",\"box\":[400,200,200,150],\"conf\":0.90},\n")
+            .append("    {\"name\":\"小米汽车\",\"box\":[100,150,300,200],\"conf\":0.95},\n")
+            .append("    {\"name\":\"飞利浦剃须刀\",\"box\":[400,200,200,150],\"conf\":0.90},\n")
+            .append("    {\"name\":\"产品演示者\",\"box\":[50,100,180,400],\"conf\":0.88},\n")
             .append("    {\"name\":\"销售场景\",\"box\":null,\"conf\":0.85}\n")
             .append("  ],\n")
             .append("  \"sceneAnalysis\": \"详细的场景分析文字...\"\n")
             .append("}\n\n")
             .append("说明：\n")
-            .append("- keyElements: 场景的关键要素（既包括具体物体，也包括抽象概念）\n")
-            .append("- name: 关键要素名称（简体中文，≤6字）\n")
+            .append("- keyElements: 场景的关键要素（必须结合字幕内容，使用具体名称）\n")
+            .append("- name: 关键要素名称（简体中文，2-8字，必须具体描述，包含品牌/型号/特征）\n")
             .append("- box: 边界框 [x, y, width, height]，如果是抽象概念则为 null\n")
             .append("- conf: 置信度（0~1）\n")
             .append("- box格式: [x, y, width, height]，左上角为原点，范围0-1000\n\n")
             .append("注意：\n")
             .append("1. 具体物体（如汽车、人物）应提供边界框\n")
             .append("2. 抽象概念（如销售场景、宣传氛围）box设为null\n")
-            .append("3. box坐标系统：左上角为原点，x向右，y向下，范围0-1000");
+            .append("3. box坐标系统：左上角为原点，x向右，y向下，范围0-1000\n")
+            .append("4. **禁止通用名称**（车、人、刀、屏），必须具体化（小米汽车、销售人员、飞利浦剃须刀、LED显示屏）\n")
+            .append("5. **每个要素只出现一次**，不要重复\n")
+            .append("6. **优先使用字幕中的品牌名、产品名**，如果没有则根据视觉特征添加修饰词");
 
             Map<String, Object> request = new HashMap<>();
             request.put("model", qwenModel);

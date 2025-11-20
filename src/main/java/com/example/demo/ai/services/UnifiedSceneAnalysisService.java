@@ -221,13 +221,16 @@ public class UnifiedSceneAnalysisService {
                 
                 // Use keyElementsWithBoxes from VL result (unified format)
                 if (firstResult.keyElementsWithBoxes != null && !firstResult.keyElementsWithBoxes.isEmpty()) {
-                    result.setKeyElementsWithBoxes(firstResult.keyElementsWithBoxes);
+                    // Deduplicate keyElements by name (case-insensitive), keeping highest confidence
+                    List<Scene.KeyElement> deduplicated = deduplicateKeyElements(firstResult.keyElementsWithBoxes);
+                    result.setKeyElementsWithBoxes(deduplicated);
                     
                     // Set shortLabelZh from first keyElement
-                    result.setShortLabelZh(firstResult.keyElementsWithBoxes.get(0).getName());
+                    result.setShortLabelZh(deduplicated.get(0).getName());
                     
-                    log.info("[UNIFIED] ✅ Extracted {} keyElements from Qwen VL", firstResult.keyElementsWithBoxes.size());
-                    for (Scene.KeyElement ke : firstResult.keyElementsWithBoxes) {
+                    log.info("[UNIFIED] ✅ Extracted {} keyElements from Qwen VL (after deduplication: {})", 
+                        firstResult.keyElementsWithBoxes.size(), deduplicated.size());
+                    for (Scene.KeyElement ke : deduplicated) {
                         if (ke.getBox() != null && ke.getBox().size() >= 4) {
                             log.info("[UNIFIED]    - {} at [{},{},{},{}] conf:{}", 
                                 ke.getName(), ke.getBox().get(0), ke.getBox().get(1), ke.getBox().get(2), ke.getBox().get(3), ke.getConfidence());
@@ -251,5 +254,31 @@ public class UnifiedSceneAnalysisService {
         return result;
     }
     
+    /**
+     * Deduplicate keyElements by name (case-insensitive), keeping the one with highest confidence
+     */
+    private List<Scene.KeyElement> deduplicateKeyElements(List<Scene.KeyElement> elements) {
+        if (elements == null || elements.isEmpty()) {
+            return elements;
+        }
+        
+        // Use a map to track best element for each name (case-insensitive)
+        Map<String, Scene.KeyElement> bestByName = new java.util.LinkedHashMap<>();
+        
+        for (Scene.KeyElement element : elements) {
+            String nameLower = element.getName().toLowerCase();
+            
+            // If we haven't seen this name, or this one has higher confidence, keep it
+            if (!bestByName.containsKey(nameLower) || 
+                element.getConfidence() > bestByName.get(nameLower).getConfidence()) {
+                bestByName.put(nameLower, element);
+            } else {
+                log.info("[UNIFIED-DEDUP] Removing duplicate: {} (conf: {}) - keeping existing with conf: {}", 
+                    element.getName(), element.getConfidence(), bestByName.get(nameLower).getConfidence());
+            }
+        }
+        
+        return new ArrayList<>(bestByName.values());
+    }
 
 }
