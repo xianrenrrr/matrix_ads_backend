@@ -1153,11 +1153,12 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             textContent.put("text", sb.toString());
             content.add(textContent);
             
-            // Add image with correct format
+            // Add image with correct format (convert to data URL to avoid download timeout)
             Map<String, Object> imageContent = new HashMap<>();
             imageContent.put("type", "image_url");
             Map<String, Object> imageUrl = new HashMap<>();
-            imageUrl.put("url", keyframeUrl);
+            String dataUrl = toDataUrlSafe(keyframeUrl);  // Convert to base64 data URL
+            imageUrl.put("url", dataUrl);
             imageContent.put("image_url", imageUrl);
             content.add(imageContent);
             
