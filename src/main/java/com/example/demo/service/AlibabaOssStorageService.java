@@ -578,4 +578,24 @@ public class AlibabaOssStorageService {
         System.out.println("[OSS] Downloaded " + tempFiles.size() + " files");
         return tempFiles;
     }
+    
+    /**
+     * Download OSS file to byte array (for base64 encoding)
+     * 
+     * @param ossUrl OSS URL to download
+     * @return byte array of file content
+     */
+    public byte[] downloadToByteArray(String ossUrl) throws IOException {
+        String signedUrl = generateSignedUrl(ossUrl, 2, TimeUnit.HOURS);
+        
+        try (java.io.InputStream in = new java.net.URL(signedUrl).openStream();
+             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = in.read(buffer)) != -1) {
+                out.write(buffer, 0, bytesRead);
+            }
+            return out.toByteArray();
+        }
+    }
 }

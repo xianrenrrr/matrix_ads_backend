@@ -32,6 +32,9 @@ public class QwenSceneComparisonService {
     @Autowired
     private KeyframeExtractionService keyframeExtractionService;
     
+    @Autowired
+    private com.example.demo.service.AlibabaOssStorageService ossStorageService;
+    
     private final ObjectMapper objectMapper = new ObjectMapper();
     
     @Value("${AI_QWEN_ENDPOINT:${qwen.api.base:}}")
@@ -479,22 +482,14 @@ public class QwenSceneComparisonService {
     
     /**
      * Convert remote image URL to data:image/jpeg;base64,.... If download fails, return original URL.
+     * Uses OSS service for authenticated downloads.
      */
     private String toDataUrlSafe(String imageUrl) {
         try {
-            java.net.URL url = new java.net.URL(imageUrl);
-            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(15000);
-            try (java.io.InputStream in = conn.getInputStream(); 
-                 java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream()) {
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
-                String b64 = java.util.Base64.getEncoder().encodeToString(bos.toByteArray());
-                return "data:image/jpeg;base64," + b64;
-            }
+            // Use OSS service for authenticated download
+            byte[] imageBytes = ossStorageService.downloadToByteArray(imageUrl);
+            String b64 = java.util.Base64.getEncoder().encodeToString(imageBytes);
+            return "data:image/jpeg;base64," + b64;
         } catch (Exception e) {
             log.warn("[DIRECT-COMPARISON] Failed to convert image to data URL: {}", e.getMessage());
             // Fallback to original URL if we cannot embed
