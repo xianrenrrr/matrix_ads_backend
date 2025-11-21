@@ -555,6 +555,11 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             .append("  ],\n")
             .append("  \"sceneAnalysis\": \"详细的场景分析文字...\"\n")
             .append("}\n\n")
+            .append("box坐标示例（范围0-1000）：\n")
+            .append("- 左上角小物体: [50, 50, 150, 100] (x=50, y=50, 宽=150, 高=100)\n")
+            .append("- 中间偏下偏右: [550, 650, 200, 150] (x=550, y=650, 宽=200, 高=150)\n")
+            .append("- 右下角: [750, 800, 200, 150] (x=750, y=800, 宽=200, 高=150)\n")
+            .append("- 画面中央大物体: [300, 300, 400, 400] (x=300, y=300, 宽=400, 高=400)\n\n")
             .append("说明：\n")
             .append("- keyElements: 场景的关键要素（必须结合字幕内容，使用具体名称）\n")
             .append("- name: 关键要素名称（简体中文，2-8字，必须具体描述，包含品牌/型号/特征）\n")
@@ -1136,7 +1141,13 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             sb.append("}\n\n");
             sb.append("说明：\n");
             sb.append("- box格式: [x, y, width, height]，坐标范围 0-1000\n");
-            sb.append("- 如果找不到该物体，返回 {\"found\": false}\n");
+            sb.append("- 左上角为原点(0,0)，x向右增加，y向下增加\n");
+            sb.append("- 如果找不到该物体，返回 {\"found\": false}\n\n");
+            sb.append("坐标示例：\n");
+            sb.append("- 左上角小物体: [50, 50, 150, 100]\n");
+            sb.append("- 中间偏下偏右: [550, 650, 200, 150]\n");
+            sb.append("- 右下角: [750, 800, 200, 150]\n");
+            sb.append("- 画面中央大物体: [300, 300, 400, 400]\n");
             
             Map<String, Object> request = new HashMap<>();
             request.put("model", qwenModel);
