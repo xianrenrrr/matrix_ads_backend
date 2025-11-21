@@ -278,19 +278,21 @@ public class QwenSceneComparisonService {
         // Content with 2 images + text
         List<Map<String, Object>> content = new ArrayList<>();
         
-        // Image 1: Template
+        // Image 1: Template (convert to data URL to avoid download timeout)
         Map<String, Object> img1 = new HashMap<>();
         img1.put("type", "image_url");
         Map<String, String> img1Url = new HashMap<>();
-        img1Url.put("url", templateImageUrl);
+        String templateDataUrl = toDataUrlSafe(templateImageUrl);
+        img1Url.put("url", templateDataUrl);
         img1.put("image_url", img1Url);
         content.add(img1);
         
-        // Image 2: User
+        // Image 2: User (convert to data URL to avoid download timeout)
         Map<String, Object> img2 = new HashMap<>();
         img2.put("type", "image_url");
         Map<String, String> img2Url = new HashMap<>();
-        img2Url.put("url", userImageUrl);
+        String userDataUrl = toDataUrlSafe(userImageUrl);
+        img2Url.put("url", userDataUrl);
         img2.put("image_url", img2Url);
         content.add(img2);
         
@@ -473,5 +475,30 @@ public class QwenSceneComparisonService {
             return base; // assume already a full chat URL
         }
         return def;
+    }
+    
+    /**
+     * Convert remote image URL to data:image/jpeg;base64,.... If download fails, return original URL.
+     */
+    private String toDataUrlSafe(String imageUrl) {
+        try {
+            java.net.URL url = new java.net.URL(imageUrl);
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(15000);
+            try (java.io.InputStream in = conn.getInputStream(); 
+                 java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream()) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+                String b64 = java.util.Base64.getEncoder().encodeToString(bos.toByteArray());
+                return "data:image/jpeg;base64," + b64;
+            }
+        } catch (Exception e) {
+            log.warn("[DIRECT-COMPARISON] Failed to convert image to data URL: {}", e.getMessage());
+            // Fallback to original URL if we cannot embed
+            return imageUrl;
+        }
     }
 }
