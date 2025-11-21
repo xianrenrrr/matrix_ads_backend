@@ -1147,17 +1147,19 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             
             List<Map<String, Object>> content = new ArrayList<>();
             
-            // Add image
-            Map<String, Object> imageContent = new HashMap<>();
-            imageContent.put("type", "image");
-            imageContent.put("image", keyframeUrl);
-            content.add(imageContent);
-            
-            // Add text
+            // Add text first
             Map<String, Object> textContent = new HashMap<>();
             textContent.put("type", "text");
             textContent.put("text", sb.toString());
             content.add(textContent);
+            
+            // Add image with correct format
+            Map<String, Object> imageContent = new HashMap<>();
+            imageContent.put("type", "image_url");
+            Map<String, Object> imageUrl = new HashMap<>();
+            imageUrl.put("url", keyframeUrl);
+            imageContent.put("image_url", imageUrl);
+            content.add(imageContent);
             
             message.put("content", content);
             messages.add(message);
