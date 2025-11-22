@@ -235,20 +235,25 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
      * Create concatenated BGM file that loops to match video duration using signed URLs
      */
     private java.io.File createBGMConcatFileFromUrls(List<String> bgmUrls, double videoDuration) throws Exception {
+        // Download BGM files locally first
+        List<java.io.File> localBgmFiles = ossStorageService.downloadMultipleToTempFiles(bgmUrls, "bgm-", ".mp3");
+        
         // Calculate total BGM duration
         double totalBGMDuration = 0;
-        for (String bgmUrl : bgmUrls) {
-            totalBGMDuration += getVideoDurationFromUrl(bgmUrl);
+        for (java.io.File bgmFile : localBgmFiles) {
+            totalBGMDuration += getVideoDurationFromFile(bgmFile);
         }
         
-        // Create concat list with looping
+        // Create concat list with looping using local file paths
         java.io.File concatList = java.io.File.createTempFile("bgm-concat-", ".txt");
         try (java.io.PrintWriter pw = new java.io.PrintWriter(concatList, java.nio.charset.StandardCharsets.UTF_8)) {
             double currentDuration = 0;
             while (currentDuration < videoDuration) {
-                for (String bgmUrl : bgmUrls) {
-                    pw.println("file '" + bgmUrl + "'");
-                    currentDuration += getVideoDurationFromUrl(bgmUrl);
+                for (java.io.File bgmFile : localBgmFiles) {
+                    // Use absolute path and escape single quotes
+                    String path = bgmFile.getAbsolutePath().replace("'", "'\\''");
+                    pw.println("file '" + path + "'");
+                    currentDuration += getVideoDurationFromFile(bgmFile);
                     if (currentDuration >= videoDuration) break;
                 }
             }
@@ -263,7 +268,12 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
         );
         Process proc = pb.start();
         int exitCode = proc.waitFor();
+        
+        // Clean up
         concatList.delete();
+        for (java.io.File bgmFile : localBgmFiles) {
+            bgmFile.delete();
+        }
         
         if (exitCode != 0) {
             throw new RuntimeException("Failed to concatenate BGM files");
