@@ -30,6 +30,9 @@ public class ContentCreatorVideoController {
     @Autowired
     private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
     
+    @Autowired
+    private com.example.demo.dao.SceneSubmissionDao sceneSubmissionDao;
+    
     /**
      * Get user's pending assignments (待录制)
      * Returns templates that need recording:
@@ -367,11 +370,14 @@ public class ContentCreatorVideoController {
     
     /**
      * Generate signed URL for video download
-     * TODO: Implement actual signed URL generation with expiry
+     * Uses the same method as content manager for consistency
      */
     private String generateSignedUrl(String videoUrl) {
-        // For now, return the original URL
-        // In production, generate a signed URL with expiry time
-        return videoUrl;
+        try {
+            return sceneSubmissionDao.getSignedUrl(videoUrl);
+        } catch (Exception e) {
+            log.error("Failed to generate signed URL for {}: {}", videoUrl, e.getMessage());
+            return videoUrl;
+        }
     }
 }

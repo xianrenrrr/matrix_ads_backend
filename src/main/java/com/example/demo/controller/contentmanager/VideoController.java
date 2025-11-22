@@ -113,6 +113,8 @@ public class VideoController {
             @RequestParam(required = false, defaultValue = "white") String subtitleColor,
             @RequestParam(required = false, defaultValue = "24") Integer subtitleSize,
             @RequestParam(required = false, defaultValue = "center") String subtitlePosition,
+            @RequestParam(required = false) List<String> bgmUrls,
+            @RequestParam(required = false, defaultValue = "0.3") Double bgmVolume,
             @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
@@ -184,8 +186,16 @@ public class VideoController {
         }
         
         // Use assignmentId (not templateId) because submittedVideos uses assignmentId in composite key
-        String compiledVideoUrl = videoCompilationService.compileVideoWithSubtitles(
-            assignmentId, creatorId, publisherId, subtitleOptions);
+        String compiledVideoUrl;
+        if (bgmUrls != null && !bgmUrls.isEmpty()) {
+            log.info("Publishing video with {} BGM file(s) at volume {}", bgmUrls.size(), bgmVolume);
+            compiledVideoUrl = videoCompilationService.compileVideoWithBGMAndSubtitles(
+                assignmentId, creatorId, publisherId, bgmUrls, bgmVolume, subtitleOptions);
+        } else {
+            log.info("Publishing video without BGM");
+            compiledVideoUrl = videoCompilationService.compileVideoWithSubtitles(
+                assignmentId, creatorId, publisherId, subtitleOptions);
+        }
         com.example.demo.model.CompiledVideo compiledVideo = new com.example.demo.model.CompiledVideo(assignmentId, creatorId, publisherId);
         compiledVideo.setVideoUrl(compiledVideoUrl);
         compiledVideo.setStatus("published");
