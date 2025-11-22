@@ -235,8 +235,19 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
      * Create concatenated BGM file that loops to match video duration using signed URLs
      */
     private java.io.File createBGMConcatFileFromUrls(List<String> bgmUrls, double videoDuration) throws Exception {
+        System.out.println("[BGM] Starting BGM concatenation for " + bgmUrls.size() + " file(s)");
+        
         // Download BGM files locally first
-        List<java.io.File> localBgmFiles = ossStorageService.downloadMultipleToTempFiles(bgmUrls, "bgm-", ".mp3");
+        List<java.io.File> localBgmFiles;
+        try {
+            System.out.println("[BGM] Downloading BGM files...");
+            localBgmFiles = ossStorageService.downloadMultipleToTempFiles(bgmUrls, "bgm-", ".mp3");
+            System.out.println("[BGM] Successfully downloaded " + localBgmFiles.size() + " BGM file(s)");
+        } catch (Exception e) {
+            System.err.println("[BGM] Failed to download BGM files: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Failed to download BGM files: " + e.getMessage(), e);
+        }
         
         // Calculate total BGM duration
         double totalBGMDuration = 0;
@@ -260,13 +271,26 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
         }
         
         // Concatenate BGM files
+        System.out.println("[BGM] Creating concatenated BGM file (target duration: " + videoDuration + "s)");
         java.io.File concatenatedBGM = java.io.File.createTempFile("bgm-full-", ".mp3");
         ProcessBuilder pb = new ProcessBuilder(
             "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concatList.getAbsolutePath(),
             "-t", String.valueOf(videoDuration), // Trim to video duration
             "-c", "copy", concatenatedBGM.getAbsolutePath()
         );
+        pb.redirectErrorStream(true);
         Process proc = pb.start();
+        
+        // Capture FFmpeg output
+        StringBuilder ffmpegOutput = new StringBuilder();
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(proc.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                ffmpegOutput.append(line).append("\n");
+            }
+        }
+        
         int exitCode = proc.waitFor();
         
         // Clean up
@@ -276,8 +300,12 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
         }
         
         if (exitCode != 0) {
-            throw new RuntimeException("Failed to concatenate BGM files");
+            System.err.println("[BGM] FFmpeg concatenation failed with exit code " + exitCode);
+            System.err.println("[BGM] FFmpeg output:\n" + ffmpegOutput.toString());
+            throw new RuntimeException("Failed to concatenate BGM files. FFmpeg exit code: " + exitCode);
         }
+        
+        System.out.println("[BGM] Successfully created concatenated BGM file: " + concatenatedBGM.getAbsolutePath());
         
         return concatenatedBGM;
     }
