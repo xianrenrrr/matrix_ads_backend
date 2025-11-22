@@ -232,7 +232,15 @@ public class ContentManager {
                                 if (sceneId != null) {
                                     SceneSubmission sceneSubmission = sceneSubmissionDao.findById(sceneId);
                                     if (sceneSubmission != null && sceneSubmission.getThumbnailUrl() != null) {
-                                        data.put("thumbnailUrl", sceneSubmission.getThumbnailUrl());
+                                        String thumbnailUrl = sceneSubmission.getThumbnailUrl();
+                                        // Generate signed URL for thumbnail
+                                        try {
+                                            String signedThumbnail = sceneSubmissionDao.getSignedUrl(thumbnailUrl);
+                                            data.put("thumbnailUrl", signedThumbnail);
+                                        } catch (Exception e) {
+                                            // Fallback to original URL if signing fails
+                                            data.put("thumbnailUrl", thumbnailUrl);
+                                        }
                                     }
                                 }
                             }
