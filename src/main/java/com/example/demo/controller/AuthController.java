@@ -108,7 +108,11 @@ public class AuthController {
             throw new NoSuchElementException("User not found");
         }
         
-        if (!password.equals(user.getPassword())) {
+        // Verify password using BCrypt
+        org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder passwordEncoder = 
+            new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
+        
+        if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new IllegalArgumentException("Invalid credentials");
         }
         
