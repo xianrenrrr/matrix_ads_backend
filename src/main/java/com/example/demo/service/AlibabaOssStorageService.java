@@ -539,7 +539,17 @@ public class AlibabaOssStorageService {
      * @return Local temp file
      */
     public java.io.File downloadToTempFile(String ossUrl, String prefix, String suffix) throws IOException {
-        String signedUrl = generateSignedUrl(ossUrl, 2, TimeUnit.HOURS);
+        // Check if URL is already signed (has query parameters)
+        String signedUrl;
+        if (ossUrl.contains("?x-oss-")) {
+            // Already signed, use as-is
+            signedUrl = ossUrl;
+            System.out.println("[OSS] Using pre-signed URL");
+        } else {
+            // Not signed, generate signature
+            signedUrl = generateSignedUrl(ossUrl, 2, TimeUnit.HOURS);
+        }
+        
         java.io.File tempFile = java.io.File.createTempFile(prefix, suffix);
         
         System.out.println("[OSS] Downloading " + ossUrl + " to " + tempFile.getAbsolutePath());
