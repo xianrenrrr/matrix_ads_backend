@@ -253,7 +253,8 @@ public class ContentManager {
                 String status = (String) data.getOrDefault("publishStatus", "pending");
                 if ("approved".equalsIgnoreCase(status)) {
                     approved.add(data);
-                } else if ("published".equalsIgnoreCase(status)) {
+                } else if ("published".equalsIgnoreCase(status) || "downloaded".equalsIgnoreCase(status)) {
+                    // Both published and downloaded go into published array
                     published.add(data);
                 } else if ("rejected".equalsIgnoreCase(status)) {
                     rejected.add(data);
