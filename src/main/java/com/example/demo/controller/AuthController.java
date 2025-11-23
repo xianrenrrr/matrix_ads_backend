@@ -65,7 +65,7 @@ public class AuthController {
             }
             user.setNotifications(new java.util.HashMap<>()); // Map<String, Notification>
             
-            // Use createUser to encode password with BCrypt
+            // Save user with plain text password
             userDao.createUser(user);
             user.setPassword(null); // Don't return password
             
@@ -108,11 +108,8 @@ public class AuthController {
             throw new NoSuchElementException("User not found");
         }
         
-        // Verify password using BCrypt
-        org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder passwordEncoder = 
-            new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
-        
-        if (!passwordEncoder.matches(password, user.getPassword())) {
+        // Compare passwords directly (no encoding)
+        if (!password.equals(user.getPassword())) {
             throw new IllegalArgumentException("Invalid credentials");
         }
         

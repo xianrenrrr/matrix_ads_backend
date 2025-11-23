@@ -4,7 +4,6 @@ import com.example.demo.model.User;
 import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Repository;
 import java.util.concurrent.ExecutionException;
 import java.util.UUID;
@@ -15,7 +14,6 @@ public class UserDaoImpl implements UserDao {
     private Firestore db;
     
     private static final String COLLECTION_NAME = "users";
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
 
     @Override
@@ -207,7 +205,7 @@ public class UserDaoImpl implements UserDao {
     }
     
     /**
-     * Create a new user with password encoding
+     * Create a new user with plain text password
      * Returns the generated user ID
      */
     public String createUser(User user) {
@@ -217,10 +215,8 @@ public class UserDaoImpl implements UserDao {
                 user.setId(UUID.randomUUID().toString());
             }
             
-            // Encode password if not already encoded
-            if (user.getPassword() != null && !user.getPassword().startsWith("$2a$")) {
-                user.setPassword(passwordEncoder.encode(user.getPassword()));
-            }
+            // Store password as plain text (no encoding)
+            // Password is already set in the user object
             
             // Save to Firestore
             DocumentReference docRef = db.collection(COLLECTION_NAME).document(user.getId());
@@ -234,11 +230,7 @@ public class UserDaoImpl implements UserDao {
     }
     
     /**
-     * Authenticate user and return user with role information
-     * Handles:
-     * 1. BCrypt-encoded passwords (normal case)
-     * 2. Plain text passwords (backward compatibility)
-     * 3. Direct BCrypt hash input (for testing/debugging)
+     * Authenticate user with plain text password comparison
      */
     public User authenticateUser(String username, String password) {
         try {
@@ -249,30 +241,17 @@ public class UserDaoImpl implements UserDao {
             
             String storedPassword = user.getPassword();
             
-            // Check if password is BCrypt encoded (starts with $2a$, $2b$, or $2y$)
-            if (storedPassword != null && storedPassword.startsWith("$2")) {
-                // Case 1: User provided the BCrypt hash directly (for testing/debugging)
-                if (password.equals(storedPassword)) {
-                    System.out.println("Authentication: Direct BCrypt hash match");
-                    return user;
-                }
-                
-                // Case 2: Normal BCrypt password verification
-                if (passwordEncoder.matches(password, storedPassword)) {
-                    System.out.println("Authentication: BCrypt password match");
-                    return user;
-                }
-            } else {
-                // Case 3: Plain text password - direct comparison for backward compatibility
-                if (password.equals(storedPassword)) {
-                    System.out.println("Authentication: Plain text password match");
-                    return user;
-                }
+            // Simple plain text password comparison
+            if (password.equals(storedPassword)) {
+                System.out.println("Authentication: Password match for user: " + username);
+                return user;
             }
             
+            System.out.println("Authentication: Password mismatch for user: " + username);
             return null;
+            
         } catch (Exception e) {
-            System.err.println("Error authenticating user: " + e.getMessage());
+            System.err.println("Authentication error: " + e.getMessage());
             return null;
         }
     }
