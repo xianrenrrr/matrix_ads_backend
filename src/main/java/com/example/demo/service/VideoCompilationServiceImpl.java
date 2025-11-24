@@ -398,10 +398,14 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                 throw new NoSuchElementException("Template snapshot not found in assignment: " + templateId);
             }
             
+            // Get video format from template (e.g., "1080p 16:9" or "1080p 9:16")
+            String videoFormat = template.getVideoFormat();
+            System.out.println("[Compile] 📐 Template video format: " + videoFormat);
+            
             String destObject = String.format("videos/%s/%s/compiled_subtitled.mp4", userId, compositeVideoId);
             
             // Compile with subtitles and optional BGM
-            return ffmpegConcatWithSubtitlesAndBGM(sourceUrls, template.getScenes(), bgmUrls, bgmVolume, subtitleOptions, destObject);
+            return ffmpegConcatWithSubtitlesAndBGM(sourceUrls, template.getScenes(), bgmUrls, bgmVolume, subtitleOptions, videoFormat, destObject);
             
         } catch (Exception e) {
             throw new RuntimeException("Failed to compile video with subtitles: " + e.getMessage(), e);
@@ -417,6 +421,7 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
         List<String> bgmUrls,
         double bgmVolume,
         SubtitleBurningService.SubtitleOptions subtitleOptions,
+        String videoFormat,
         String destObject
     ) throws Exception {
         
@@ -461,10 +466,19 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                 System.out.println("[Compile]   - scenes: " + (scenes != null ? scenes.size() + " scenes" : "null"));
             }
             
+            // Detect if videos need rotation based on template videoFormat
+            // If format is "16:9" (landscape), force rotation from portrait to landscape
+            boolean needsRotation = videoFormat != null && videoFormat.contains("16:9");
+            if (needsRotation) {
+                System.out.println("[Compile] 🔄 Template requires 16:9 landscape format, will apply rotation");
+            } else {
+                System.out.println("[Compile] 📐 Template format: " + videoFormat + ", no rotation needed");
+            }
+            
             // Build FFmpeg command
             List<String> ffmpegCmd = new ArrayList<>();
             ffmpegCmd.add("ffmpeg");
-            ffmpegCmd.add("-noautorotate"); // Prevent auto-rotation
+            ffmpegCmd.add("-noautorotate"); // Prevent auto-rotation, we'll handle it manually
             ffmpegCmd.add("-y");
             ffmpegCmd.add("-f");
             ffmpegCmd.add("concat");
@@ -496,12 +510,23 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             // Build filter complex
             StringBuilder filterComplex = new StringBuilder();
             boolean hasFilters = false;
+            String videoLabel = "[0:v]";
+            
+            // Add rotation filter if needed (portrait to landscape)
+            if (needsRotation) {
+                System.out.println("[Compile] 🔄 Applying rotation: portrait → landscape");
+                filterComplex.append("[0:v]transpose=1[vrot]"); // transpose=1 rotates 90° clockwise
+                videoLabel = "[vrot]";
+                hasFilters = true;
+            }
             
             // Add subtitle filter if SRT exists
             if (srtPath != null) {
+                if (hasFilters) filterComplex.append(";");
                 String subtitleFilter = subtitleBurningService.buildSubtitleFilter(srtPath, subtitleOptions);
                 System.out.println("[Compile] 📝 Subtitle filter: " + subtitleFilter);
-                filterComplex.append("[0:v]").append(subtitleFilter).append("[v]");
+                filterComplex.append(videoLabel).append(subtitleFilter).append("[v]");
+                videoLabel = "[v]";
                 hasFilters = true;
             }
             
@@ -518,13 +543,8 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                 ffmpegCmd.add(filterComplex.toString());
                 
                 // Map outputs
-                if (srtPath != null) {
-                    ffmpegCmd.add("-map");
-                    ffmpegCmd.add("[v]");
-                } else {
-                    ffmpegCmd.add("-map");
-                    ffmpegCmd.add("0:v");
-                }
+                ffmpegCmd.add("-map");
+                ffmpegCmd.add(videoLabel);
                 
                 if (bgmFile != null) {
                     ffmpegCmd.add("-map");
