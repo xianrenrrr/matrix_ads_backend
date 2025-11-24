@@ -398,14 +398,6 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                 throw new NoSuchElementException("Template snapshot not found in assignment: " + templateId);
             }
             
-            // Calculate dynamic subtitle alignment based on box positions and aspect ratio
-            String sourceAspect = template.getVideoFormat(); // e.g., "16:9" or "9:16"
-            if (subtitleOptions != null) {
-                int calculatedAlignment = subtitleBurningService.calculateSubtitleAlignment(template.getScenes(), sourceAspect);
-                subtitleOptions.alignment = calculatedAlignment;
-                System.out.println("🎯 Dynamic subtitle alignment calculated: " + calculatedAlignment + " for aspect ratio: " + sourceAspect);
-            }
-            
             String destObject = String.format("videos/%s/%s/compiled_subtitled.mp4", userId, compositeVideoId);
             
             // Compile with subtitles and optional BGM
