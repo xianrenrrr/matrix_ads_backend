@@ -515,7 +515,7 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             // Add rotation filter if needed (portrait to landscape)
             if (needsRotation) {
                 System.out.println("[Compile] 🔄 Applying rotation: portrait → landscape");
-                filterComplex.append("[0:v]transpose=1[vrot]"); // transpose=1 rotates 90° clockwise
+                filterComplex.append("[0:v]transpose=2[vrot]"); // transpose=2 rotates 90° counter-clockwise (270° clockwise)
                 videoLabel = "[vrot]";
                 hasFilters = true;
             }
