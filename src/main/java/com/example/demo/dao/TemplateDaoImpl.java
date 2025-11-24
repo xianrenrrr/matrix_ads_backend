@@ -72,7 +72,7 @@ public class TemplateDaoImpl implements TemplateDao {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(100);
-            // criteria.setIndexName("userId_index"); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
+            criteria.setIndexName("userId_index");
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn("userId", PrimaryKeyValue.fromString(userId));
@@ -166,7 +166,7 @@ public class TemplateDaoImpl implements TemplateDao {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(100);
-            // criteria.setIndexName("folderId_index"); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
+            criteria.setIndexName("folderId_index");
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn("folderId", PrimaryKeyValue.fromString(folderId));

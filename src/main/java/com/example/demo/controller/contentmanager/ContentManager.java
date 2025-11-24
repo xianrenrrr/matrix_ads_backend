@@ -176,10 +176,10 @@ public class ContentManager {
             // Enrich with user information
             if (uploadedBy != null) {
                 try {
-                    com.example.demo.model.User uploaderUser = userDao.findById(uploadedBy);
-                    if (uploaderUser != null) {
-                        data.put("uploaderName", uploaderUser.getUsername());
-                        data.put("uploaderCity", uploaderUser.getCity());
+                    com.example.demo.model.User user = userDao.findById(uploadedBy);
+                    if (user != null) {
+                        data.put("uploaderName", user.getUsername());
+                        data.put("uploaderCity", user.getCity());
                     }
                 } catch (Exception e) {
                     // Continue without user info if fetch fails
@@ -239,15 +239,16 @@ public class ContentManager {
                 }
             
             String status = (String) data.getOrDefault("publishStatus", "pending");
-            if ("approved".equalsIgnoreCase(status)) {
-                approved.add(data);
-            } else if ("published".equalsIgnoreCase(status) || "downloaded".equalsIgnoreCase(status)) {
-                // Both published and downloaded go into published array
-                published.add(data);
-            } else if ("rejected".equalsIgnoreCase(status)) {
-                rejected.add(data);
-            } else {
-                pending.add(data);
+                if ("approved".equalsIgnoreCase(status)) {
+                    approved.add(data);
+                } else if ("published".equalsIgnoreCase(status) || "downloaded".equalsIgnoreCase(status)) {
+                    // Both published and downloaded go into published array
+                    published.add(data);
+                } else if ("rejected".equalsIgnoreCase(status)) {
+                    rejected.add(data);
+                } else {
+                    pending.add(data);
+                }
             }
         }
         
@@ -336,7 +337,6 @@ public class ContentManager {
                         scene.getSceneNumber(), startMs, endMs);
                 }
             }
-        }
         
         boolean updated = templateDao.updateTemplate(templateId, updatedTemplate);
         
@@ -351,10 +351,9 @@ public class ContentManager {
     }
 
     @DeleteMapping("/{templateId}")
-    public ResponseEntity<ApiResponse<Void>> deleteTemplate(
-            @PathVariable String templateId,
-            @RequestParam String userId,
-            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+    public ResponseEntity<ApiResponse<Void>> deleteTemplate(@PathVariable String templateId, 
+                                                               @RequestParam String userId,
+                                                               @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
         // Permission check
@@ -402,9 +401,8 @@ public class ContentManager {
      * GET /content-manager/templates/submitted-videos/{compositeVideoId}
      */
     @GetMapping("/submitted-videos/{compositeVideoId}")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getSubmittedVideo(
-            @PathVariable String compositeVideoId,
-            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getSubmittedVideo(@PathVariable String compositeVideoId,
+                                                                               @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
         // Get video using DAO

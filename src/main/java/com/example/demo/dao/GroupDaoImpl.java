@@ -59,7 +59,7 @@ public class GroupDaoImpl implements GroupDao {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(1);
-            // criteria.setIndexName("token_index"); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
+            criteria.setIndexName("token_index");
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn("token", PrimaryKeyValue.fromString(token));
@@ -107,7 +107,7 @@ public class GroupDaoImpl implements GroupDao {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(100);
-            // criteria.setIndexName("managerId_index"); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
+            criteria.setIndexName("managerId_index");
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn("managerId", PrimaryKeyValue.fromString(managerId));
@@ -135,7 +135,7 @@ public class GroupDaoImpl implements GroupDao {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(100);
-            // criteria.setIndexName("status_index"); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
+            criteria.setIndexName("status_index");
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn("status", PrimaryKeyValue.fromString(status));

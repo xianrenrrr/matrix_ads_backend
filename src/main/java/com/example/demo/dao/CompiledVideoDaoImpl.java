@@ -67,6 +67,7 @@ public class CompiledVideoDaoImpl implements CompiledVideoDao {
         }
     }
     
+    @Override
     public void delete(String id) {
         try {
             PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
@@ -122,99 +123,6 @@ public class CompiledVideoDaoImpl implements CompiledVideoDao {
             } catch (Exception e) {
                 throw new RuntimeException("Failed to serialize column: " + name, e);
             }
-        }
-    }
-    
-    @Override
-    public CompiledVideo findByTemplateIdAndUserId(String templateId, String userId) {
-        try {
-            // Query all rows and filter in memory (not optimal but works)
-            // In production, you'd want a secondary index on templateId+userId
-            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
-            criteria.setMaxVersions(1);
-            criteria.setLimit(1000); // Reasonable limit
-            
-            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-            startKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MIN);
-            criteria.setInclusiveStartPrimaryKey(startKey.build());
-            
-            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-            endKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MAX);
-            criteria.setExclusiveEndPrimaryKey(endKey.build());
-            
-            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
-            
-            for (Row row : response.getRows()) {
-                CompiledVideo video = rowToCompiledVideo(row);
-                if (video != null && templateId.equals(video.getTemplateId()) && userId.equals(video.getUserId())) {
-                    return video;
-                }
-            }
-            return null;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to find compiled video", e);
-        }
-    }
-    
-    @Override
-    public int getCompletedVideoCountByUser(String userId) {
-        try {
-            // Query and count in memory
-            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
-            criteria.setMaxVersions(1);
-            criteria.setLimit(1000);
-            
-            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-            startKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MIN);
-            criteria.setInclusiveStartPrimaryKey(startKey.build());
-            
-            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-            endKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MAX);
-            criteria.setExclusiveEndPrimaryKey(endKey.build());
-            
-            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
-            
-            int count = 0;
-            for (Row row : response.getRows()) {
-                CompiledVideo video = rowToCompiledVideo(row);
-                if (video != null && userId.equals(video.getUserId()) && "completed".equals(video.getStatus())) {
-                    count++;
-                }
-            }
-            return count;
-        } catch (Exception e) {
-            return 0;
-        }
-    }
-    
-    @Override
-    public int getPublishedVideoCountByUser(String userId) {
-        try {
-            // Query and count in memory
-            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
-            criteria.setMaxVersions(1);
-            criteria.setLimit(1000);
-            
-            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-            startKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MIN);
-            criteria.setInclusiveStartPrimaryKey(startKey.build());
-            
-            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-            endKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MAX);
-            criteria.setExclusiveEndPrimaryKey(endKey.build());
-            
-            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
-            
-            int count = 0;
-            for (Row row : response.getRows()) {
-                CompiledVideo video = rowToCompiledVideo(row);
-                if (video != null && userId.equals(video.getUserId()) && "published".equals(video.getStatus())) {
-                    count++;
-                }
-            }
-            return count;
-        } catch (Exception e) {
-            return 0;
         }
     }
 }

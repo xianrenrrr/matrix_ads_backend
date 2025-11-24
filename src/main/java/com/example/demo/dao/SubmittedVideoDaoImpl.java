@@ -18,35 +18,6 @@ public class SubmittedVideoDaoImpl implements SubmittedVideoDao {
     private static final String TABLE_NAME = "submittedVideos";
     
     @Override
-    public String save(SubmittedVideo video) {
-        try {
-            if (video.getId() == null) {
-                video.setId(UUID.randomUUID().toString());
-            }
-            
-            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(video.getId()));
-            
-            RowPutChange rowPutChange = new RowPutChange(TABLE_NAME, primaryKeyBuilder.build());
-            
-            @SuppressWarnings("unchecked")
-            Map<String, Object> dataMap = objectMapper.convertValue(video, Map.class);
-            dataMap.remove("id");
-            
-            for (Map.Entry<String, Object> entry : dataMap.entrySet()) {
-                if (entry.getValue() != null) {
-                    addColumn(rowPutChange, entry.getKey(), entry.getValue());
-                }
-            }
-            
-            tablestoreClient.putRow(new PutRowRequest(rowPutChange));
-            return video.getId();
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to save submitted video", e);
-        }
-    }
-    
-    @Override
     public SubmittedVideo findById(String compositeVideoId) {
         try {
             PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
@@ -235,27 +206,6 @@ public class SubmittedVideoDaoImpl implements SubmittedVideoDao {
             return video;
         } catch (Exception e) {
             throw new RuntimeException("Failed to convert row to SubmittedVideo", e);
-        }
-    }
-    
-    private void addColumn(RowPutChange rowPutChange, String name, Object value) {
-        if (value instanceof String) {
-            rowPutChange.addColumn(name, ColumnValue.fromString((String) value));
-        } else if (value instanceof Long) {
-            rowPutChange.addColumn(name, ColumnValue.fromLong((Long) value));
-        } else if (value instanceof Integer) {
-            rowPutChange.addColumn(name, ColumnValue.fromLong(((Integer) value).longValue()));
-        } else if (value instanceof Boolean) {
-            rowPutChange.addColumn(name, ColumnValue.fromBoolean((Boolean) value));
-        } else if (value instanceof Date) {
-            rowPutChange.addColumn(name, ColumnValue.fromLong(((Date) value).getTime()));
-        } else {
-            try {
-                String jsonValue = objectMapper.writeValueAsString(value);
-                rowPutChange.addColumn(name, ColumnValue.fromString(jsonValue));
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to serialize column: " + name, e);
-            }
         }
     }
 }

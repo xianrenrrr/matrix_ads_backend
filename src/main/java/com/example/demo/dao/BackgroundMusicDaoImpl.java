@@ -14,14 +14,11 @@ public class BackgroundMusicDaoImpl implements BackgroundMusicDao {
     @Autowired
     private SyncClient tablestoreClient;
     
-    @Autowired(required = false)
-    private com.example.demo.service.AlibabaOssStorageService ossStorageService;
-    
     private final ObjectMapper objectMapper = new ObjectMapper();
     private static final String TABLE_NAME = "backgroundMusic";
     
     @Override
-    public String saveBackgroundMusic(BackgroundMusic bgm) {
+    public String save(BackgroundMusic bgm) {
         try {
             if (bgm.getId() == null) {
                 bgm.setId(UUID.randomUUID().toString());
@@ -50,7 +47,7 @@ public class BackgroundMusicDaoImpl implements BackgroundMusicDao {
     }
     
     @Override
-    public BackgroundMusic getBackgroundMusic(String id) {
+    public BackgroundMusic findById(String id) {
         try {
             PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(id));
@@ -71,12 +68,12 @@ public class BackgroundMusicDaoImpl implements BackgroundMusicDao {
     }
     
     @Override
-    public List<BackgroundMusic> getBackgroundMusicByUserId(String userId) {
+    public List<BackgroundMusic> findByUserId(String userId) {
         try {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(100);
-            // criteria.setIndexName("userId_index"); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
+            criteria.setIndexName("userId_index");
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn("userId", PrimaryKeyValue.fromString(userId));
@@ -98,6 +95,7 @@ public class BackgroundMusicDaoImpl implements BackgroundMusicDao {
         }
     }
     
+    @Override
     public void delete(String id) {
         try {
             PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
@@ -153,50 +151,6 @@ public class BackgroundMusicDaoImpl implements BackgroundMusicDao {
             } catch (Exception e) {
                 throw new RuntimeException("Failed to serialize column: " + name, e);
             }
-        }
-    }
-    
-    @Override
-    public BackgroundMusic uploadAndSaveBackgroundMusic(org.springframework.web.multipart.MultipartFile file, String userId, String title, String description) throws Exception {
-        // Create BackgroundMusic object
-        BackgroundMusic bgm = new BackgroundMusic();
-        bgm.setId(UUID.randomUUID().toString());
-        bgm.setUserId(userId);
-        bgm.setTitle(title);
-        bgm.setDescription(description);
-        bgm.setUploadedAt(new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'").format(new Date()));
-        
-        // Upload file to OSS if storage service is available
-        if (ossStorageService != null) {
-            try {
-                String audioPath = "bgm/" + userId + "/" + bgm.getId() + "_" + file.getOriginalFilename();
-                String contentType = file.getContentType() != null ? file.getContentType() : "audio/mpeg";
-                String audioUrl = ossStorageService.uploadFile(file.getInputStream(), audioPath, contentType);
-                bgm.setAudioUrl(audioUrl);
-                
-                // TODO: Calculate audio duration if needed
-                // bgm.setDurationSeconds(calculateDuration(file));
-            } catch (Exception e) {
-                throw new Exception("Failed to upload background music: " + e.getMessage(), e);
-            }
-        }
-        
-        // Save to Tablestore
-        saveBackgroundMusic(bgm);
-        return bgm;
-    }
-    
-    @Override
-    public boolean deleteBackgroundMusic(String id) {
-        try {
-            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(id));
-            
-            RowDeleteChange rowDeleteChange = new RowDeleteChange(TABLE_NAME, primaryKeyBuilder.build());
-            tablestoreClient.deleteRow(new DeleteRowRequest(rowDeleteChange));
-            return true;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to delete background music", e);
         }
     }
 }
