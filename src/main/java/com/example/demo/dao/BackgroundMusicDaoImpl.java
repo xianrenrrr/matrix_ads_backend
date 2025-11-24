@@ -1,156 +1,153 @@
 package com.example.demo.dao;
 
 import com.example.demo.model.BackgroundMusic;
-import com.alicloud.openservices.tablestore.SyncClient;
-import com.alicloud.openservices.tablestore.model.*;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 @Repository
 public class BackgroundMusicDaoImpl implements BackgroundMusicDao {
     
-    @Autowired
-    private SyncClient tablestoreClient;
+    @Autowired(required = false)
+    private Firestore db;
     
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private static final String TABLE_NAME = "backgroundMusic";
+    @Autowired(required = false)
+    private com.example.demo.service.AlibabaOssStorageService ossStorageService;
+    
+    private static final String COLLECTION = "background_music";
     
     @Override
-    public String save(BackgroundMusic bgm) {
+    public String saveBackgroundMusic(BackgroundMusic bgm) throws ExecutionException, InterruptedException {
+        if (db == null) throw new IllegalStateException("Firestore not initialized");
+        
+        if (bgm.getId() == null || bgm.getId().isEmpty()) {
+            DocumentReference docRef = db.collection(COLLECTION).document();
+            bgm.setId(docRef.getId());
+        }
+        
+        db.collection(COLLECTION).document(bgm.getId()).set(bgm).get();
+        return bgm.getId();
+    }
+    
+    @Override
+    public BackgroundMusic getBackgroundMusic(String id) throws ExecutionException, InterruptedException {
+        if (db == null) return null;
+        
+        DocumentSnapshot doc = db.collection(COLLECTION).document(id).get().get();
+        if (!doc.exists()) return null;
+        
+        return doc.toObject(BackgroundMusic.class);
+    }
+    
+    @Override
+    public List<BackgroundMusic> getBackgroundMusicByUserId(String userId) throws ExecutionException, InterruptedException {
+        if (db == null) return new ArrayList<>();
+        
+        QuerySnapshot querySnapshot = db.collection(COLLECTION)
+            .whereEqualTo("userId", userId)
+            .orderBy("uploadedAt", Query.Direction.DESCENDING)
+            .get()
+            .get();
+        
+        List<BackgroundMusic> bgmList = new ArrayList<>();
+        for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
+            bgmList.add(doc.toObject(BackgroundMusic.class));
+        }
+        return bgmList;
+    }
+    
+    @Override
+    public boolean deleteBackgroundMusic(String id) throws ExecutionException, InterruptedException {
+        if (db == null) return false;
+        
+        db.collection(COLLECTION).document(id).delete().get();
+        return true;
+    }
+    
+    @Override
+    public BackgroundMusic uploadAndSaveBackgroundMusic(org.springframework.web.multipart.MultipartFile file, String userId, String title, String description) throws Exception {
+        if (ossStorageService == null) {
+            throw new IllegalStateException("AlibabaOssStorageService not available");
+        }
+        
+        // Validate file
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("File is empty");
+        }
+        
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("audio/")) {
+            throw new IllegalArgumentException("File must be an audio file");
+        }
+        
+        // Generate BGM ID
+        String bgmId = java.util.UUID.randomUUID().toString();
+        
+        // Extract audio duration using FFprobe
+        long durationSeconds = extractAudioDuration(file);
+        
+        // Upload to OSS
+        String objectName = String.format("bgm/%s/%s/%s", userId, bgmId, file.getOriginalFilename());
+        java.io.File tempFile = java.io.File.createTempFile("bgm-upload-", file.getOriginalFilename());
         try {
-            if (bgm.getId() == null) {
-                bgm.setId(UUID.randomUUID().toString());
-            }
+            file.transferTo(tempFile);
+            String audioUrl = ossStorageService.uploadFile(tempFile, objectName, file.getContentType());
             
-            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(bgm.getId()));
+            // Create BGM record
+            BackgroundMusic bgm = new BackgroundMusic();
+            bgm.setId(bgmId);
+            bgm.setUserId(userId);
+            bgm.setTitle(title != null && !title.isBlank() ? title : file.getOriginalFilename());
+            bgm.setDescription(description);
+            bgm.setAudioUrl(audioUrl);
+            bgm.setDurationSeconds(durationSeconds);
+            bgm.setUploadedAt(java.time.LocalDateTime.now().toString());
             
-            RowPutChange rowPutChange = new RowPutChange(TABLE_NAME, primaryKeyBuilder.build());
-            
-            @SuppressWarnings("unchecked")
-            Map<String, Object> dataMap = objectMapper.convertValue(bgm, Map.class);
-            dataMap.remove("id");
-            
-            for (Map.Entry<String, Object> entry : dataMap.entrySet()) {
-                if (entry.getValue() != null) {
-                    addColumn(rowPutChange, entry.getKey(), entry.getValue());
+            saveBackgroundMusic(bgm);
+            return bgm;
+        } finally {
+            tempFile.delete();
+        }
+    }
+    
+    private long extractAudioDuration(org.springframework.web.multipart.MultipartFile file) throws Exception {
+        java.io.File tempAudio = java.io.File.createTempFile("bgm-", ".mp3");
+        
+        try {
+            // Copy file to temp location
+            try (java.io.InputStream is = file.getInputStream();
+                 java.io.FileOutputStream fos = new java.io.FileOutputStream(tempAudio)) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = is.read(buffer)) != -1) {
+                    fos.write(buffer, 0, bytesRead);
                 }
             }
             
-            tablestoreClient.putRow(new PutRowRequest(rowPutChange));
-            return bgm.getId();
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to save background music", e);
-        }
-    }
-    
-    @Override
-    public BackgroundMusic findById(String id) {
-        try {
-            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(id));
+            // Use FFprobe to get duration
+            ProcessBuilder pb = new ProcessBuilder(
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", tempAudio.getAbsolutePath()
+            );
             
-            SingleRowQueryCriteria criteria = new SingleRowQueryCriteria(TABLE_NAME, primaryKeyBuilder.build());
-            criteria.setMaxVersions(1);
+            Process proc = pb.start();
+            java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(proc.getInputStream())
+            );
+            String durationStr = reader.readLine();
+            proc.waitFor();
             
-            GetRowResponse response = tablestoreClient.getRow(new GetRowRequest(criteria));
-            Row row = response.getRow();
-            
-            if (row != null) {
-                return rowToBGM(row);
+            if (durationStr != null && !durationStr.isEmpty()) {
+                return (long) Double.parseDouble(durationStr);
             }
-            return null;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to find background music", e);
-        }
-    }
-    
-    @Override
-    public List<BackgroundMusic> findByUserId(String userId) {
-        try {
-            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
-            criteria.setMaxVersions(1);
-            criteria.setLimit(100);
-            criteria.setIndexName("userId_index");
+            return 0;
             
-            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-            startKey.addPrimaryKeyColumn("userId", PrimaryKeyValue.fromString(userId));
-            criteria.setInclusiveStartPrimaryKey(startKey.build());
-            
-            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-            endKey.addPrimaryKeyColumn("userId", PrimaryKeyValue.fromString(userId));
-            criteria.setExclusiveEndPrimaryKey(endKey.build());
-            
-            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
-            
-            List<BackgroundMusic> results = new ArrayList<>();
-            for (Row row : response.getRows()) {
-                results.add(rowToBGM(row));
-            }
-            return results;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to find background music by userId", e);
-        }
-    }
-    
-    @Override
-    public void delete(String id) {
-        try {
-            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(id));
-            
-            RowDeleteChange rowDeleteChange = new RowDeleteChange(TABLE_NAME, primaryKeyBuilder.build());
-            tablestoreClient.deleteRow(new DeleteRowRequest(rowDeleteChange));
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to delete background music", e);
-        }
-    }
-    
-    private BackgroundMusic rowToBGM(Row row) {
-        try {
-            Map<String, Object> dataMap = new HashMap<>();
-            
-            for (PrimaryKeyColumn column : row.getPrimaryKey().getPrimaryKeyColumns()) {
-                dataMap.put(column.getName(), column.getValue().asString());
-            }
-            
-            for (Column column : row.getColumns()) {
-                String columnName = column.getName();
-                ColumnValue columnValue = column.getValue();
-                
-                if (columnValue.getType() == ColumnType.STRING) {
-                    dataMap.put(columnName, columnValue.asString());
-                } else if (columnValue.getType() == ColumnType.INTEGER) {
-                    dataMap.put(columnName, columnValue.asLong());
-                } else if (columnValue.getType() == ColumnType.BOOLEAN) {
-                    dataMap.put(columnName, columnValue.asBoolean());
-                }
-            }
-            
-            return objectMapper.convertValue(dataMap, BackgroundMusic.class);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to convert row to BackgroundMusic", e);
-        }
-    }
-    
-    private void addColumn(RowPutChange rowPutChange, String name, Object value) {
-        if (value instanceof String) {
-            rowPutChange.addColumn(name, ColumnValue.fromString((String) value));
-        } else if (value instanceof Long) {
-            rowPutChange.addColumn(name, ColumnValue.fromLong((Long) value));
-        } else if (value instanceof Integer) {
-            rowPutChange.addColumn(name, ColumnValue.fromLong(((Integer) value).longValue()));
-        } else if (value instanceof Boolean) {
-            rowPutChange.addColumn(name, ColumnValue.fromBoolean((Boolean) value));
-        } else {
-            try {
-                String jsonValue = objectMapper.writeValueAsString(value);
-                rowPutChange.addColumn(name, ColumnValue.fromString(jsonValue));
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to serialize column: " + name, e);
-            }
+        } finally {
+            tempAudio.delete();
         }
     }
 }

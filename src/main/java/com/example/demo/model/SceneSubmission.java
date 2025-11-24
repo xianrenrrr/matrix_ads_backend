@@ -14,7 +14,7 @@ public class SceneSubmission {
     private String userId;                      // Content creator who submitted
     private int sceneNumber;                    // Scene order in template (1, 2, 3...)
     private String sceneTitle;                  // Title from template scene
-    private String videoUrl;                    // OSS Storage URL for scene video
+    private String videoUrl;                    // Firebase Storage URL for scene video
     private String thumbnailUrl;                // Auto-generated thumbnail
     private String status;                      // "pending", "approved" (simplified to just 2 statuses)
     private Date submittedAt;                   // Initial submission timestamp

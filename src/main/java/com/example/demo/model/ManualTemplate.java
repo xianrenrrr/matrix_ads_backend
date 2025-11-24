@@ -26,7 +26,7 @@ public class ManualTemplate {
     private String folderId;  // Folder ID for organization (null = root folder)
     private java.util.Date createdAt;  // Template creation timestamp for IAM permission checks
     
-    // Additional database fields
+    // Additional database fields to prevent Firestore warnings
     private List<String> submittedVideos;
 
     public ManualTemplate() {

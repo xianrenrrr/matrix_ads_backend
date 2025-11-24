@@ -1,8 +1,8 @@
 package com.example.demo.service;
 
 import com.example.demo.dao.SceneSubmissionDao;
-import com.example.demo.dao.SubmittedVideoDao;
-import com.example.demo.model.SubmittedVideo;
+import com.google.cloud.firestore.DocumentSnapshot;
+import com.google.cloud.firestore.Firestore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -18,7 +18,7 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
     private com.example.demo.service.AlibabaOssStorageService ossStorageService;
 
     @Autowired
-    private SubmittedVideoDao submittedVideoDao;
+    private Firestore db;
 
     @Autowired
     private SceneSubmissionDao sceneSubmissionDao;
@@ -29,13 +29,13 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
     public String compileVideo(String templateId, String userId, String compiledBy) {
         try {
             String compositeVideoId = userId + "_" + templateId;
-            SubmittedVideo video = submittedVideoDao.findById(compositeVideoId);
-            if (video == null) {
+            DocumentSnapshot videoSnap = db.collection("submittedVideos").document(compositeVideoId).get().get();
+            if (!videoSnap.exists()) {
                 throw new NoSuchElementException("submittedVideos not found: " + compositeVideoId);
             }
 
             // Gather sceneIds in numeric order from submittedVideos.scenes
-            Map<String, Object> scenesMap = video.getScenes();
+            Map<String, Object> scenesMap = (Map<String, Object>) videoSnap.get("scenes");
             if (scenesMap == null || scenesMap.isEmpty()) {
                 throw new IllegalStateException("No scenes to compile for: " + compositeVideoId);
             }

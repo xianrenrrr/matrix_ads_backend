@@ -3,11 +3,10 @@ package com.example.demo.service;
 import com.example.demo.dao.TemplateDao;
 import com.example.demo.dao.SceneSubmissionDao;
 import com.example.demo.dao.VideoDao;
-import com.example.demo.dao.SubmittedVideoDao;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSubmission;
-import com.example.demo.model.SubmittedVideo;
+import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -24,7 +23,7 @@ public class TemplateCascadeDeletionService {
     @Autowired private VideoDao videoDao;
     @Autowired(required = false) private com.example.demo.service.AlibabaOssStorageService storageService;
     @Autowired(required = false) private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
-    @Autowired private SubmittedVideoDao submittedVideoDao;
+    @Autowired private Firestore db;
 
 
     @Value("${deletion.cascade.enabled:true}")
@@ -114,7 +113,7 @@ public class TemplateCascadeDeletionService {
             System.err.println("[CASCADE] Storage hard-delete enabled but AlibabaOssStorageService unavailable; skipping storage deletion.");
         }
 
-        // 2) Database docs
+        // 2) Firestore docs
         // 2a) sceneSubmissions
         try {
             sceneSubmissionDao.deleteScenesByTemplateId(templateId);
@@ -123,17 +122,10 @@ public class TemplateCascadeDeletionService {
         }
 
         // 2b) submittedVideos docs
-        // Note: submittedVideos are now keyed by assignmentId, not templateId
-        // They will be cleaned up when assignments are deleted
         try {
-            // Get all assignments for this template and delete their submitted videos
-            if (templateAssignmentDao != null) {
-                List<com.example.demo.model.TemplateAssignment> assignments = templateAssignmentDao.getAssignmentsByTemplate(templateId);
-                for (com.example.demo.model.TemplateAssignment assignment : assignments) {
-                    // Delete submitted videos for this assignment
-                    // Note: This is a simplified approach - in production you'd want to query by assignmentId
-                    System.out.println("[CASCADE] Submitted videos for assignment " + assignment.getId() + " will be cleaned up");
-                }
+            Query q = db.collection("submittedVideos").whereEqualTo("templateId", templateId);
+            for (DocumentSnapshot snap : q.get().get().getDocuments()) {
+                snap.getReference().delete();
             }
         } catch (Exception e) {
             System.err.println("[CASCADE] submittedVideos delete warn: " + e);

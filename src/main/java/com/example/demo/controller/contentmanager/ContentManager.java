@@ -19,16 +19,15 @@ import java.util.*;
 @RequestMapping("/content-manager/templates")
 public class ContentManager {
     @Autowired
-    private I18nService i18nService;
+    private com.google.cloud.firestore.Firestore db;
     
+    @Autowired
+    private I18nService i18nService;
     @Autowired
     private TemplateDao templateDao;
     
     @Autowired
     private UserDao userDao;
-    
-    @Autowired
-    private com.example.demo.dao.SubmittedVideoDao submittedVideoDao;
     
     @Autowired
     private com.example.demo.service.PermissionService permissionService;
@@ -134,7 +133,8 @@ public class ContentManager {
             if (group.getMemberIds() != null) memberIds.addAll(group.getMemberIds());
         }
         
-        // Query submitted videos by assignment IDs
+        // Optimize: Query only relevant submissions using whereIn (Firestore limit: 10 items per whereIn)
+        // If more than 10 assignmentIds, we need to batch the queries
         List<Map<String, Object>> pending = new ArrayList<>();
         List<Map<String, Object>> approved = new ArrayList<>();
         List<Map<String, Object>> published = new ArrayList<>();
@@ -150,63 +150,75 @@ public class ContentManager {
             return ResponseEntity.ok(ApiResponse.ok(i18nService.getMessage("operation.success", language), result));
         }
         
-        // Query submitted videos by assignment IDs using DAO
+        // Firestore whereIn limit is 10, so batch if needed
         List<String> assignmentIdList = new ArrayList<>(assignmentIds);
-        List<com.example.demo.model.SubmittedVideo> submittedVideos = submittedVideoDao.findByAssignmentIds(assignmentIdList);
+        int batchSize = 10;
         
-        for (com.example.demo.model.SubmittedVideo video : submittedVideos) {
-            String uploadedBy = video.getUploadedBy();
+        for (int i = 0; i < assignmentIdList.size(); i += batchSize) {
+            List<String> batch = assignmentIdList.subList(i, Math.min(i + batchSize, assignmentIdList.size()));
             
-            // Filter by member (user must be in one of manager's groups)
-            if (!memberIds.contains(uploadedBy)) continue;
+            // Query with filter - MUCH faster than getting all submissions!
+            com.google.cloud.firestore.Query query = db.collection("submittedVideos")
+                .whereIn("assignmentId", batch);
             
-            // Convert to Map for response
-            Map<String, Object> data = new HashMap<>();
-            data.put("id", video.getId());
-            data.put("uploadedBy", uploadedBy);
-            data.put("assignmentId", video.getAssignmentId());
-            data.put("scenes", video.getScenes());
-            data.put("progress", video.getProgress());
-            data.put("publishStatus", video.getPublishStatus());
-            data.put("approvedAt", video.getApprovedAt());
-            data.put("lastUpdated", video.getLastUpdated());
-            data.put("createdAt", video.getCreatedAt());
-            data.put("compiledVideoUrl", video.getCompiledVideoUrl());
+            com.google.api.core.ApiFuture<com.google.cloud.firestore.QuerySnapshot> querySnapshot = query.get();
             
-            // Enrich with user information
-            if (uploadedBy != null) {
-                try {
-                    com.example.demo.model.User user = userDao.findById(uploadedBy);
-                    if (user != null) {
-                        data.put("uploaderName", user.getUsername());
-                        data.put("uploaderCity", user.getCity());
+            for (com.google.cloud.firestore.DocumentSnapshot doc : querySnapshot.get().getDocuments()) {
+                Map<String, Object> data = doc.getData();
+                if (data == null) continue;
+                
+                String uploadedBy = (String) data.get("uploadedBy");
+                
+                // Filter by member (user must be in one of manager's groups)
+                if (!memberIds.contains(uploadedBy)) continue;
+                
+                // Add document ID for frontend use
+                data.put("id", doc.getId());
+                
+                // Enrich with user information
+                if (uploadedBy != null) {
+                    try {
+                        com.google.cloud.firestore.DocumentSnapshot userDoc = db.collection("users").document(uploadedBy).get().get();
+                        if (userDoc.exists()) {
+                            String username = userDoc.getString("username");
+                            String city = userDoc.getString("city");
+                            data.put("uploaderName", username);
+                            data.put("uploaderCity", city);
+                        }
+                    } catch (Exception e) {
+                        // Continue without user info if fetch fails
                     }
-                } catch (Exception e) {
-                    // Continue without user info if fetch fails
                 }
-            }
-            
-            // Enrich with template information
-            String assignmentId = video.getAssignmentId();
-            ManualTemplate template = null;
-            if (assignmentId != null) {
-                // Get template from assignment snapshot
-                try {
-                    com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
-                    if (assignment != null) {
-                        template = assignment.getTemplateSnapshot();
+                
+                // Enrich with template information
+                String assignmentId = (String) data.get("assignmentId");
+                String templateId = (String) data.get("templateId");
+                ManualTemplate template = null;
+                if (assignmentId != null) {
+                    // NEW: Get template from assignment snapshot
+                    try {
+                        com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
+                        if (assignment != null) {
+                            template = assignment.getTemplateSnapshot();
+                        }
+                    } catch (Exception e) {
+                        // Continue without template info if fetch fails
                     }
-                } catch (Exception e) {
-                    // Continue without template info if fetch fails
+                } else if (templateId != null) {
+                    // LEGACY: Get template directly
+                    try {
+                        template = templateDao.getTemplate(templateId);
+                    } catch (Exception e) {
+                        // Continue without template info if fetch fails
+                    }
                 }
-            }
-            
-            if (template != null) {
-                data.put("templateTitle", template.getTemplateTitle());
-            }
-            
-            // Fetch thumbnail from first scene if not already present
-            if (!data.containsKey("thumbnailUrl") || data.get("thumbnailUrl") == null) {
+                
+                if (template != null) {
+                    data.put("templateTitle", template.getTemplateTitle());
+                }
+                
+                // Fetch thumbnail from first scene if not already present
+                if (!data.containsKey("thumbnailUrl") || data.get("thumbnailUrl") == null) {
                     try {
                         @SuppressWarnings("unchecked")
                         Map<String, Object> scenes = (Map<String, Object>) data.get("scenes");
@@ -237,8 +249,8 @@ public class ContentManager {
                         // Continue without thumbnail if fetch fails
                     }
                 }
-            
-            String status = (String) data.getOrDefault("publishStatus", "pending");
+                
+                String status = (String) data.getOrDefault("publishStatus", "pending");
                 if ("approved".equalsIgnoreCase(status)) {
                     approved.add(data);
                 } else if ("published".equalsIgnoreCase(status) || "downloaded".equalsIgnoreCase(status)) {
@@ -337,6 +349,7 @@ public class ContentManager {
                         scene.getSceneNumber(), startMs, endMs);
                 }
             }
+            }
         
         boolean updated = templateDao.updateTemplate(templateId, updatedTemplate);
         
@@ -367,7 +380,7 @@ public class ContentManager {
             return ResponseEntity.status(403).body(ApiResponse.fail(reason));
         }
         
-        // Cascade delete: storage first, then database docs and relationships
+        // Cascade delete: storage first, then Firestore docs and relationships
         templateCascadeDeletionService.deleteTemplateAssetsAndDocs(templateId);
         
         // Determine who owns the template in created_Templates
@@ -405,35 +418,26 @@ public class ContentManager {
                                                                                @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
         
-        // Get video using DAO
-        com.example.demo.model.SubmittedVideo video = submittedVideoDao.findById(compositeVideoId);
+        // Get video document from submittedVideos collection
+        com.google.cloud.firestore.DocumentSnapshot videoDoc = db.collection("submittedVideos").document(compositeVideoId).get().get();
         
-        if (video == null) {
+        if (!videoDoc.exists()) {
             throw new NoSuchElementException("No submission found for ID: " + compositeVideoId);
         }
         
-        // Convert to Map for response
-        Map<String, Object> videoData = new HashMap<>();
-        videoData.put("id", video.getId());
-        videoData.put("uploadedBy", video.getUploadedBy());
-        videoData.put("assignmentId", video.getAssignmentId());
-        videoData.put("scenes", video.getScenes());
-        videoData.put("progress", video.getProgress());
-        videoData.put("publishStatus", video.getPublishStatus());
-        videoData.put("approvedAt", video.getApprovedAt());
-        videoData.put("lastUpdated", video.getLastUpdated());
-        videoData.put("createdAt", video.getCreatedAt());
-        videoData.put("compiledVideoUrl", video.getCompiledVideoUrl());
+        Map<String, Object> videoData = new HashMap<>(videoDoc.getData());
         
         // Get user's group to check auto-reject threshold
-        String uploadedBy = video.getUploadedBy();
+        // Note: This endpoint is only called by managers viewing their submissions
+        // So we don't need managerId param - we infer it from the submission
+        String uploadedBy = (String) videoData.get("uploadedBy");
         double autoRejectThreshold = 0.0;  // Default: no filtering
         ManualTemplate template = null;  // Store template for subtitle segments
         
         if (uploadedBy != null) {
             try {
                 // Get assignment to find the manager, then get their groups
-                String assignmentId = video.getAssignmentId();
+                String assignmentId = (String) videoData.get("assignmentId");
                 if (assignmentId != null) {
                     com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
                     if (assignment != null) {

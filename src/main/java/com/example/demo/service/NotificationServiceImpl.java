@@ -3,6 +3,9 @@ package com.example.demo.service;
 import com.example.demo.dao.UserDao;
 import com.example.demo.model.User;
 import com.example.demo.model.SceneSubmission;
+import com.google.cloud.firestore.Firestore;
+import com.google.cloud.firestore.DocumentReference;
+import com.google.cloud.firestore.FieldValue;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +21,9 @@ public class NotificationServiceImpl implements NotificationService {
     
     @Autowired
     private UserDao userDao;
+    
+    @Autowired
+    private Firestore db;
     
     @Override
     public Map<String, Object> sendNotification(String event, Map<String, Object> data) throws ExecutionException, InterruptedException {
@@ -301,13 +307,24 @@ public class NotificationServiceImpl implements NotificationService {
             // Generate unique notification ID
             String notificationId = UUID.randomUUID().toString();
             
-            // Save notification using DAO
-            userDao.addNotification(userId, notificationId, notification);
+            // Save to user's notifications subcollection
+            DocumentReference userRef = db.collection("users").document(userId);
+            userRef.update("notifications." + notificationId, notification).get();
+            
+            // Also increment unread count
+            userRef.update("unreadNotifications", FieldValue.increment(1)).get();
             
             System.out.println("Notification saved for user " + userId + ": " + notification.get("message"));
             
         } catch (Exception e) {
             System.err.println("Error saving notification for user " + userId + ": " + e.getMessage());
+            // If user document doesn't exist, create it
+            if (e.getMessage().contains("NOT_FOUND")) {
+                Map<String, Object> userData = new HashMap<>();
+                userData.put("notifications", Map.of(UUID.randomUUID().toString(), notification));
+                userData.put("unreadNotifications", 1);
+                db.collection("users").document(userId).set(userData).get();
+            }
         }
     }
     

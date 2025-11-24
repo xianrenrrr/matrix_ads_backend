@@ -28,7 +28,4 @@ public interface UserDao {
     User authenticateUser(String username, String password);
     java.util.List<User> findByCreatedBy(String managerId);
     void delete(String userId);
-    
-    // Notifications
-    void addNotification(String userId, String notificationId, java.util.Map<String, Object> notification);
 }

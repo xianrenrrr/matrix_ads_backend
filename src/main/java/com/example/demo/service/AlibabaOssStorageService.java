@@ -23,8 +23,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * Alibaba Cloud OSS Storage Service
  * 
- * Primary storage service integrated with Alibaba Cloud AI services
- * (Video Recognition, Qwen, etc.)
+ * Replaces Firebase Storage with Alibaba Cloud OSS for better integration
+ * with Alibaba Cloud AI services (Video Recognition, Qwen, etc.)
  * 
  * Bucket: xpectra
  * Region: cn-shanghai (华东2 - 上海)
@@ -112,7 +112,7 @@ public class AlibabaOssStorageService {
     }
     
     /**
-     * Upload video with thumbnail
+     * Upload video with thumbnail (matches Firebase interface)
      */
     public UploadResult uploadVideoWithThumbnail(MultipartFile file, String userId, String videoId) 
             throws IOException, InterruptedException {
@@ -363,8 +363,8 @@ public class AlibabaOssStorageService {
     /**
      * Generate signed URL with custom expiration
      * 
-     * Signed URLs work seamlessly with Alibaba Cloud AI services
-     * since all services are in the same cloud infrastructure.
+     * For Alibaba Cloud AI services, signed URLs work perfectly (unlike Firebase)
+     * because all services are in the same cloud.
      */
     public String generateSignedUrl(String ossUrl, long duration, TimeUnit unit) {
         try {
