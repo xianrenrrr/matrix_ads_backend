@@ -127,9 +127,6 @@ public class SceneSubmission {
     public String getFormat() { return format; }
     public void setFormat(String format) { this.format = format; }
     
-    public String getAspectRatio() { return aspectRatio; }
-    public void setAspectRatio(String aspectRatio) { this.aspectRatio = aspectRatio; }
-    
     public int getResubmissionCount() { return resubmissionCount; }
     public void setResubmissionCount(int resubmissionCount) { this.resubmissionCount = resubmissionCount; }
     
