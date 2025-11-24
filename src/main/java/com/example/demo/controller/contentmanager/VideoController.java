@@ -153,16 +153,16 @@ public class VideoController {
         subtitleOptions.textColor = subtitleColor;
         subtitleOptions.fontSize = subtitleSize;
         
-        // Map position to alignment (always centered horizontally)
-        // Top: 8, Middle: 5, Bottom: 2
+        // Map position to alignment
+        // Testing: 2 works for bottom-center, so use 2,5,8 but check if issue is elsewhere
         if ("top".equalsIgnoreCase(subtitlePosition)) {
-            subtitleOptions.alignment = 8;  // Top center
+            subtitleOptions.alignment = 8;  // Bottom-center in ASS (7,8,9 = bottom row)
         } else if ("middle".equalsIgnoreCase(subtitlePosition) || "center".equalsIgnoreCase(subtitlePosition)) {
-            subtitleOptions.alignment = 5;  // Middle center
+            subtitleOptions.alignment = 5;  // Middle-center in ASS (4,5,6 = middle row)
         } else if ("bottom".equalsIgnoreCase(subtitlePosition)) {
-            subtitleOptions.alignment = 2;  // Bottom center
+            subtitleOptions.alignment = 2;  // Top-center in ASS (1,2,3 = top row) - THIS WORKS!
         } else {
-            subtitleOptions.alignment = 2;  // Default: bottom center
+            subtitleOptions.alignment = 2;  // Default: bottom
         }
         
         log.info("Publishing video with subtitle options: color={}, size={}, position={} (alignment={})", 

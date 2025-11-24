@@ -109,7 +109,10 @@ public class SubtitleBurningService {
             }
             
             // Alignment (1=left, 2=center, 3=right, bottom row)
-            filter.append("Alignment=").append(options.alignment);
+            filter.append("Alignment=").append(options.alignment).append(",");
+            
+            // Force zero margins to ensure alignment works properly
+            filter.append("MarginL=0,MarginR=0,MarginV=20");
             
             filter.append("'");
         }
