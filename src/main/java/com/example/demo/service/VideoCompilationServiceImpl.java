@@ -464,6 +464,7 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
             // Build FFmpeg command
             List<String> ffmpegCmd = new ArrayList<>();
             ffmpegCmd.add("ffmpeg");
+            ffmpegCmd.add("-noautorotate"); // Prevent auto-rotation
             ffmpegCmd.add("-y");
             ffmpegCmd.add("-f");
             ffmpegCmd.add("concat");
