@@ -9,7 +9,7 @@ public interface TemplateDao {
 
 
     /**
-     * Saves a new template to the templates table (Firestore collection: templates).
+     * Saves a new template to the templates table.
      * @param template the template to save
      * @return the generated template ID
      */

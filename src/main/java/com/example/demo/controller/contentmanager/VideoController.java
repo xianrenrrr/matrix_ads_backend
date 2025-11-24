@@ -54,12 +54,11 @@ public class VideoController {
     @Autowired
     private I18nService i18nService;
 
-
-    @Autowired(required = false)
-    private com.google.cloud.firestore.Firestore db;
-    
     @Autowired
     private com.example.demo.dao.UserDao userDao;
+    
+    @Autowired
+    private com.example.demo.dao.SubmittedVideoDao submittedVideoDao;
     
 
 
@@ -117,19 +116,19 @@ public class VideoController {
             @RequestParam(required = false, defaultValue = "0.3") Double bgmVolume,
             @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) throws Exception {
         String language = i18nService.detectLanguageFromHeader(acceptLanguage);
-        com.google.cloud.firestore.DocumentReference videoRef = db.collection("submittedVideos").document(videoId);
-        com.google.cloud.firestore.DocumentSnapshot videoSnap = videoRef.get().get();
-        if (!videoSnap.exists()) {
+        
+        com.example.demo.model.SubmittedVideo submittedVideo = submittedVideoDao.findById(videoId);
+        if (submittedVideo == null) {
             throw new NoSuchElementException("Video not found with ID: " + videoId);
         }
         
-        String currentStatus = (String) videoSnap.get("publishStatus");
+        String currentStatus = submittedVideo.getPublishStatus();
         if (!"approved".equals(currentStatus)) {
             throw new IllegalArgumentException("Can only publish approved videos");
         }
         
-        String creatorId = (String) videoSnap.get("uploadedBy");
-        String assignmentId = (String) videoSnap.get("assignmentId");
+        String creatorId = submittedVideo.getUploadedBy();
+        String assignmentId = submittedVideo.getAssignmentId();
         
         if (assignmentId == null || assignmentId.isEmpty()) {
             throw new IllegalArgumentException("Assignment ID not found in submitted video");
@@ -202,20 +201,20 @@ public class VideoController {
         compiledVideoDao.save(compiledVideo);
         
         // Update status to published
-        videoRef.update("publishStatus", "published", 
-                       "publishedAt", com.google.cloud.firestore.FieldValue.serverTimestamp(), 
-                       "publishedBy", publisherId,
-                       "compiledVideoUrl", compiledVideoUrl);
+        submittedVideo.setPublishStatus("published");
+        submittedVideo.setCompiledVideoUrl(compiledVideoUrl);
+        submittedVideo.setLastUpdated(new java.util.Date());
+        submittedVideoDao.update(submittedVideo);
         
         // Send notification to creator
-        com.google.cloud.firestore.DocumentReference userRef = db.collection("users").document(creatorId);
         String notifId = java.util.UUID.randomUUID().toString();
         java.util.Map<String, Object> notif = new java.util.HashMap<>();
         notif.put("type", "video_published");
         notif.put("message", "Your video has been published!");
         notif.put("timestamp", System.currentTimeMillis());
         notif.put("read", false);
-        userRef.update("notifications." + notifId, notif);
+        userDao.addNotification(creatorId, notifId, notif);
+        
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, "Video compiled and published successfully."));
     }

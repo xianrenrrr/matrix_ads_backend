@@ -103,18 +103,15 @@ public class Scene {
         this.sceneDurationInSeconds = sceneDurationInSeconds;
     }
 
-    // Helper methods for Duration compatibility - excluded from Firestore
-    @com.google.cloud.firestore.annotation.Exclude
+    // Helper methods for Duration compatibility
     public Duration getSceneDuration() {
         return Duration.ofSeconds(sceneDurationInSeconds);
     }
 
-    @com.google.cloud.firestore.annotation.Exclude
     public void setSceneDuration(Duration duration) {
         this.sceneDurationInSeconds = duration != null ? duration.getSeconds() : 0;
     }
 
-    @com.google.cloud.firestore.annotation.Exclude
     public void setSceneDuration(int durationSeconds) {
         this.sceneDurationInSeconds = durationSeconds;
     }
@@ -175,23 +172,19 @@ public class Scene {
         this.audioNotes = audioNotes;
     }
     
-    // Getters and setters for new AI fields - excluded from Firestore
-    @com.google.cloud.firestore.annotation.Exclude
+    // Getters and setters for new AI fields
     public Duration getStartTime() {
         return startTimeMs != null ? Duration.ofMillis(startTimeMs) : null;
     }
 
-    @com.google.cloud.firestore.annotation.Exclude
     public void setStartTime(Duration startTime) {
         this.startTimeMs = startTime != null ? startTime.toMillis() : null;
     }
 
-    @com.google.cloud.firestore.annotation.Exclude
     public Duration getEndTime() {
         return endTimeMs != null ? Duration.ofMillis(endTimeMs) : null;
     }
 
-    @com.google.cloud.firestore.annotation.Exclude
     public void setEndTime(Duration endTime) {
         this.endTimeMs = endTime != null ? endTime.toMillis() : null;
     }

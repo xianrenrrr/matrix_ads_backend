@@ -2,10 +2,11 @@ package com.example.demo.controller.contentmanager;
 
 import com.example.demo.dao.SceneSubmissionDao;
 import com.example.demo.dao.TemplateDao;
+import com.example.demo.dao.SubmittedVideoDao;
 import com.example.demo.model.SceneSubmission;
 import com.example.demo.model.ManualTemplate;
+import com.example.demo.model.SubmittedVideo;
 import com.example.demo.api.ApiResponse;
-import com.google.cloud.firestore.Firestore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,10 +29,13 @@ public class SceneReviewController {
     private TemplateDao templateDao;
 
     @Autowired
-    private Firestore db;
+    private SubmittedVideoDao submittedVideoDao;
 
     @Autowired
     private com.example.demo.service.I18nService i18nService;
+    
+    @Autowired
+    private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
     
     // REMOVED getSubmittedVideo() - DUPLICATE of ContentManager.java endpoint
     // Frontend uses: /content-manager/templates/submitted-videos/{compositeVideoId}
@@ -86,72 +90,63 @@ public class SceneReviewController {
      */
     @SuppressWarnings("unchecked")
     private void updateSceneStatusInSubmittedVideos(String assignmentId, String userId, int sceneNumber, String newStatus) throws Exception {
-            // Create composite video ID using assignmentId (not templateId!)
-            String compositeVideoId = userId + "_" + assignmentId;
+        // Create composite video ID using assignmentId (not templateId!)
+        String compositeVideoId = userId + "_" + assignmentId;
+        
+        // Get the submitted video using DAO
+        SubmittedVideo video = submittedVideoDao.findById(compositeVideoId);
+        
+        if (video != null) {
+            Map<String, Object> scenes = video.getScenes();
             
-            // Get the submitted video document
-            var videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
-            var videoDoc = videoDocRef.get().get();
-            
-            if (videoDoc.exists()) {
-                Map<String, Object> videoData = videoDoc.getData();
-                Map<String, Object> scenes = (Map<String, Object>) videoData.get("scenes");
-                
-                if (scenes != null) {
-                    // Update the specific scene status
-                    Map<String, Object> sceneData = (Map<String, Object>) scenes.get(String.valueOf(sceneNumber));
-                    if (sceneData != null) {
-                        sceneData.put("status", newStatus);
-                        
-                        // Update the document
-                        Map<String, Object> updates = new HashMap<>();
-                        updates.put("scenes." + sceneNumber + ".status", newStatus);
-                        updates.put("lastUpdated", com.google.cloud.firestore.FieldValue.serverTimestamp());
-                        
-                        // Recalculate progress (only pending and approved now)
-                        int approvedCount = 0;
-                        int pendingCount = 0;
-                        
-                        for (Object sceneObj : scenes.values()) {
-                            if (sceneObj instanceof Map) {
-                                Map<String, Object> scene = (Map<String, Object>) sceneObj;
-                                String status = (String) scene.get("status");
-                                if ("approved".equals(status)) approvedCount++;
-                                else if ("pending".equals(status)) pendingCount++;
-                            }
+            if (scenes != null) {
+                // Update the specific scene status
+                Map<String, Object> sceneData = (Map<String, Object>) scenes.get(String.valueOf(sceneNumber));
+                if (sceneData != null) {
+                    sceneData.put("status", newStatus);
+                    
+                    // Recalculate progress (only pending and approved now)
+                    int approvedCount = 0;
+                    int pendingCount = 0;
+                    
+                    for (Object sceneObj : scenes.values()) {
+                        if (sceneObj instanceof Map) {
+                            Map<String, Object> scene = (Map<String, Object>) sceneObj;
+                            String status = (String) scene.get("status");
+                            if ("approved".equals(status)) approvedCount++;
+                            else if ("pending".equals(status)) pendingCount++;
                         }
-                        
-                        // Get actual template scene count from assignment
-                        int templateTotalScenes = getTemplateTotalScenes(assignmentId);
-                        
-                        updates.put("progress", Map.of(
-                            "totalScenes", templateTotalScenes,
-                            "approved", approvedCount,
-                            "pending", pendingCount,
-                            "completionPercentage", templateTotalScenes > 0 ? (double) approvedCount / templateTotalScenes * 100 : 0
-                        ));
-                        
-                        // Update publishStatus if all template scenes are approved
-                        if (approvedCount == templateTotalScenes && templateTotalScenes > 0) {
-                            String currentPublishStatus = (String) videoData.get("publishStatus");
-                            if (!"approved".equals(currentPublishStatus) && !"published".equals(currentPublishStatus)) {
-                                updates.put("publishStatus", "approved");
-                                updates.put("approvedAt", com.google.cloud.firestore.FieldValue.serverTimestamp());
-                                System.out.println("✅ All scenes approved! Updated publishStatus to 'approved' for video: " + compositeVideoId);
-                            }
-                        }
-                        
-                        videoDocRef.update(updates);
-                        System.out.println("Updated scene " + sceneNumber + " status to '" + newStatus + "' in submittedVideos: " + compositeVideoId);
                     }
+                    
+                    // Get actual template scene count from assignment
+                    int templateTotalScenes = getTemplateTotalScenes(assignmentId);
+                    
+                    Map<String, Object> progress = new HashMap<>();
+                    progress.put("totalScenes", templateTotalScenes);
+                    progress.put("approved", approvedCount);
+                    progress.put("pending", pendingCount);
+                    progress.put("completionPercentage", templateTotalScenes > 0 ? (double) approvedCount / templateTotalScenes * 100 : 0);
+                    video.setProgress(progress);
+                    
+                    // Update publishStatus if all template scenes are approved
+                    if (approvedCount == templateTotalScenes && templateTotalScenes > 0) {
+                        String currentPublishStatus = video.getPublishStatus();
+                        if (!"approved".equals(currentPublishStatus) && !"published".equals(currentPublishStatus)) {
+                            video.setPublishStatus("approved");
+                            video.setApprovedAt(new Date());
+                            System.out.println("✅ All scenes approved! Updated publishStatus to 'approved' for video: " + compositeVideoId);
+                        }
+                    }
+                    
+                    video.setLastUpdated(new Date());
+                    submittedVideoDao.update(video);
+                    System.out.println("Updated scene " + sceneNumber + " status to '" + newStatus + "' in submittedVideos: " + compositeVideoId);
                 }
+            }
         } else {
             System.err.println("SubmittedVideo not found for update: " + compositeVideoId);
         }
     }
-    
-    @Autowired
-    private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
     
     private int getTemplateTotalScenes(String assignmentId) throws Exception {
         // Get template from assignment snapshot

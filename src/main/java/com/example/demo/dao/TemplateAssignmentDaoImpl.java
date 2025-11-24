@@ -1,261 +1,165 @@
 package com.example.demo.dao;
 
 import com.example.demo.model.TemplateAssignment;
-import com.google.cloud.firestore.Firestore;
-import com.google.cloud.firestore.DocumentReference;
-import com.google.cloud.firestore.DocumentSnapshot;
-import com.google.cloud.firestore.QuerySnapshot;
-import com.google.gson.Gson;
+import com.alicloud.openservices.tablestore.SyncClient;
+import com.alicloud.openservices.tablestore.model.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
-
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
+import java.util.*;
 
 @Repository
 public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
     
     @Autowired
-    private Firestore db;
+    private SyncClient tablestoreClient;
     
-    private static final String COLLECTION_NAME = "templateAssignments";
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String TABLE_NAME = "templateAssignments";
     
     @Override
-    public String createAssignment(TemplateAssignment assignment) throws Exception {
-        DocumentReference docRef = db.collection(COLLECTION_NAME).document();
-        assignment.setId(docRef.getId());
-        
-        Map<String, Object> data = assignmentToMap(assignment);
-        docRef.set(data).get();
-        
-        return assignment.getId();
+    public String createAssignment(TemplateAssignment assignment) {
+        try {
+            if (assignment.getId() == null) {
+                assignment.setId(UUID.randomUUID().toString());
+            }
+            
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(assignment.getId()));
+            
+            RowPutChange rowPutChange = new RowPutChange(TABLE_NAME, primaryKeyBuilder.build());
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> dataMap = objectMapper.convertValue(assignment, Map.class);
+            dataMap.remove("id");
+            
+            for (Map.Entry<String, Object> entry : dataMap.entrySet()) {
+                if (entry.getValue() != null) {
+                    addColumn(rowPutChange, entry.getKey(), entry.getValue());
+                }
+            }
+            
+            tablestoreClient.putRow(new PutRowRequest(rowPutChange));
+            return assignment.getId();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create assignment", e);
+        }
     }
     
     @Override
-    public TemplateAssignment getAssignment(String assignmentId) throws Exception {
-        DocumentSnapshot doc = db.collection(COLLECTION_NAME).document(assignmentId).get().get();
-        if (!doc.exists()) {
+    public TemplateAssignment getAssignment(String id) {
+        try {
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(id));
+            
+            SingleRowQueryCriteria criteria = new SingleRowQueryCriteria(TABLE_NAME, primaryKeyBuilder.build());
+            criteria.setMaxVersions(1);
+            
+            GetRowResponse response = tablestoreClient.getRow(new GetRowRequest(criteria));
+            Row row = response.getRow();
+            
+            if (row != null) {
+                return rowToAssignment(row);
+            }
             return null;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to get assignment", e);
         }
-        return mapToAssignment(doc);
     }
     
     @Override
-    public List<TemplateAssignment> getAssignmentsByTemplate(String templateId) throws Exception {
-        QuerySnapshot querySnapshot = db.collection(COLLECTION_NAME)
-            .whereEqualTo("masterTemplateId", templateId)
-            .get()
-            .get();
-        
-        List<TemplateAssignment> assignments = new ArrayList<>();
-        for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
-            assignments.add(mapToAssignment(doc));
-        }
-        return assignments;
+    public List<TemplateAssignment> getAssignmentsByTemplate(String masterTemplateId) {
+        return queryByIndex("masterTemplateId_index", "masterTemplateId", masterTemplateId);
     }
     
     @Override
-    public List<TemplateAssignment> getAssignmentsByGroup(String groupId) throws Exception {
-        QuerySnapshot querySnapshot = db.collection(COLLECTION_NAME)
-            .whereEqualTo("groupId", groupId)
-            .get()
-            .get();
-        
-        // Filter out expired assignments in memory
-        List<TemplateAssignment> assignments = new ArrayList<>();
-        for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
-            TemplateAssignment assignment = mapToAssignment(doc);
-            if (!assignment.isExpired()) {
-                assignments.add(assignment);
+    public List<TemplateAssignment> getAssignmentsByGroup(String groupId) {
+        return queryByIndex("groupId_index", "groupId", groupId);
+    }
+    
+    @Override
+    public void deleteAssignment(String id) {
+        try {
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(id));
+            
+            RowDeleteChange rowDeleteChange = new RowDeleteChange(TABLE_NAME, primaryKeyBuilder.build());
+            tablestoreClient.deleteRow(new DeleteRowRequest(rowDeleteChange));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to delete assignment", e);
+        }
+    }
+    
+    private List<TemplateAssignment> queryByIndex(String indexName, String columnName, String value) {
+        try {
+            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
+            criteria.setMaxVersions(1);
+            criteria.setLimit(100);
+            criteria.setIndexName(indexName);
+            
+            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            startKey.addPrimaryKeyColumn(columnName, PrimaryKeyValue.fromString(value));
+            criteria.setInclusiveStartPrimaryKey(startKey.build());
+            
+            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            endKey.addPrimaryKeyColumn(columnName, PrimaryKeyValue.fromString(value));
+            criteria.setExclusiveEndPrimaryKey(endKey.build());
+            
+            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
+            
+            List<TemplateAssignment> results = new ArrayList<>();
+            for (Row row : response.getRows()) {
+                results.add(rowToAssignment(row));
             }
+            return results;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to query by index: " + indexName, e);
         }
-        
-        System.out.println("✅ Loaded " + assignments.size() + " active assignments for group: " + groupId);
-        return assignments;
     }
     
-    @Override
-    public List<TemplateAssignment> getExpiredAssignments() throws Exception {
-        Date now = new Date();
-        QuerySnapshot querySnapshot = db.collection(COLLECTION_NAME)
-            .whereLessThan("expiresAt", now)
-            .get()
-            .get();
-        
-        List<TemplateAssignment> assignments = new ArrayList<>();
-        for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
-            TemplateAssignment assignment = mapToAssignment(doc);
-            if (assignment.isExpired()) {
-                assignments.add(assignment);
+    private TemplateAssignment rowToAssignment(Row row) {
+        try {
+            Map<String, Object> dataMap = new HashMap<>();
+            
+            for (PrimaryKeyColumn column : row.getPrimaryKey().getPrimaryKeyColumns()) {
+                dataMap.put(column.getName(), column.getValue().asString());
             }
-        }
-        return assignments;
-    }
-    
-    @Override
-    public List<TemplateAssignment> getExpiringSoonAssignments(int daysThreshold) throws Exception {
-        // Get all assignments and filter in memory
-        QuerySnapshot querySnapshot = db.collection(COLLECTION_NAME)
-            .get()
-            .get();
-        
-        List<TemplateAssignment> assignments = new ArrayList<>();
-        for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
-            TemplateAssignment assignment = mapToAssignment(doc);
-            if (!assignment.isExpired()) {
-                long daysUntilExpiry = assignment.getDaysUntilExpiry();
-                if (daysUntilExpiry > 0 && daysUntilExpiry <= daysThreshold) {
-                    assignments.add(assignment);
+            
+            for (Column column : row.getColumns()) {
+                String columnName = column.getName();
+                ColumnValue columnValue = column.getValue();
+                
+                if (columnValue.getType() == ColumnType.STRING) {
+                    dataMap.put(columnName, columnValue.asString());
+                } else if (columnValue.getType() == ColumnType.INTEGER) {
+                    dataMap.put(columnName, columnValue.asLong());
+                } else if (columnValue.getType() == ColumnType.BOOLEAN) {
+                    dataMap.put(columnName, columnValue.asBoolean());
                 }
             }
+            
+            return objectMapper.convertValue(dataMap, TemplateAssignment.class);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to convert row to TemplateAssignment", e);
         }
-        return assignments;
     }
     
-    @Override
-    public void updateAssignment(TemplateAssignment assignment) throws Exception {
-        Map<String, Object> data = assignmentToMap(assignment);
-        db.collection(COLLECTION_NAME).document(assignment.getId()).set(data).get();
-    }
-    
-    @Override
-    public void deleteAssignment(String assignmentId) throws Exception {
-        db.collection(COLLECTION_NAME).document(assignmentId).delete().get();
-    }
-    
-    @Override
-    public boolean hasActiveAssignment(String templateId, String groupId) throws Exception {
-        QuerySnapshot querySnapshot = db.collection(COLLECTION_NAME)
-            .whereEqualTo("masterTemplateId", templateId)
-            .whereEqualTo("groupId", groupId)
-            .whereEqualTo("status", "active")
-            .get()
-            .get();
-        
-        return !querySnapshot.isEmpty();
-    }
-    
-    @Override
-    public void deleteAssignmentsByTemplate(String templateId) throws Exception {
-        // Get all assignments for this template
-        QuerySnapshot querySnapshot = db.collection(COLLECTION_NAME)
-            .whereEqualTo("masterTemplateId", templateId)
-            .get()
-            .get();
-        
-        // Delete each assignment
-        for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
-            doc.getReference().delete().get();
-        }
-        
-        System.out.println("[CASCADE] Deleted " + querySnapshot.size() + " assignments for template: " + templateId);
-    }
-    
-    // Helper methods
-    private Map<String, Object> assignmentToMap(TemplateAssignment assignment) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("masterTemplateId", assignment.getMasterTemplateId());
-        data.put("groupId", assignment.getGroupId());
-        data.put("templateSnapshot", assignment.getTemplateSnapshot());
-        data.put("pushedAt", assignment.getPushedAt());
-        data.put("expiresAt", assignment.getExpiresAt());
-        data.put("durationDays", assignment.getDurationDays());
-        data.put("pushedBy", assignment.getPushedBy());
-        data.put("lastRenewed", assignment.getLastRenewed());
-        return data;
-    }
-    
-    private TemplateAssignment mapToAssignment(DocumentSnapshot doc) {
-        TemplateAssignment assignment = new TemplateAssignment();
-        assignment.setId(doc.getId());
-        assignment.setMasterTemplateId(doc.getString("masterTemplateId"));
-        assignment.setGroupId(doc.getString("groupId"));
-        
-        // Get templateSnapshot field specifically
-        Object templateSnapshotData = doc.get("templateSnapshot");
-        if (templateSnapshotData != null) {
-            try {
-                // Use Gson with proper configuration for Firestore Timestamp objects
-                com.google.gson.GsonBuilder gsonBuilder = new com.google.gson.GsonBuilder();
-                
-                // Register custom deserializer for Date fields (handles Firestore Timestamps)
-                gsonBuilder.registerTypeAdapter(java.util.Date.class, new com.google.gson.JsonDeserializer<java.util.Date>() {
-                    @Override
-                    public java.util.Date deserialize(com.google.gson.JsonElement json, java.lang.reflect.Type typeOfT, 
-                                                      com.google.gson.JsonDeserializationContext context) {
-                        if (json.isJsonPrimitive() && json.getAsJsonPrimitive().isString()) {
-                            // Handle string dates
-                            try {
-                                return new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ").parse(json.getAsString());
-                            } catch (Exception e) {
-                                return null;
-                            }
-                        } else if (json.isJsonObject()) {
-                            // Handle Firestore Timestamp objects {seconds: ..., nanoseconds: ...}
-                            com.google.gson.JsonObject obj = json.getAsJsonObject();
-                            if (obj.has("seconds")) {
-                                long seconds = obj.get("seconds").getAsLong();
-                                return new java.util.Date(seconds * 1000);
-                            }
-                        } else if (json.isJsonPrimitive() && json.getAsJsonPrimitive().isNumber()) {
-                            // Handle epoch milliseconds
-                            return new java.util.Date(json.getAsLong());
-                        }
-                        return null;
-                    }
-                });
-                
-                com.google.gson.Gson gson = gsonBuilder.create();
-                
-                String json = gson.toJson(templateSnapshotData);
-                
-                // Log for debugging
-                System.out.println("=== DESERIALIZING TEMPLATE SNAPSHOT ===");
-                System.out.println("Assignment ID: " + doc.getId());
-                System.out.println("JSON length: " + json.length());
-                System.out.println("JSON preview: " + (json.length() > 300 ? json.substring(0, 300) + "..." : json));
-                
-                com.example.demo.model.ManualTemplate snapshot = 
-                    gson.fromJson(json, com.example.demo.model.ManualTemplate.class);
-                
-                if (snapshot != null) {
-                    System.out.println("✅ Snapshot deserialized successfully");
-                    System.out.println("   - Template ID: " + snapshot.getId());
-                    System.out.println("   - Title: " + snapshot.getTemplateTitle());
-                    System.out.println("   - Scenes: " + (snapshot.getScenes() != null ? snapshot.getScenes().size() : "null"));
-                    System.out.println("   - Total duration: " + snapshot.getTotalVideoLength());
-                    
-                    if (snapshot.getScenes() != null && !snapshot.getScenes().isEmpty()) {
-                        System.out.println("   - First scene: " + snapshot.getScenes().get(0).getSceneTitle());
-                        System.out.println("   - First scene duration: " + snapshot.getScenes().get(0).getSceneDurationInSeconds());
-                    }
-                } else {
-                    System.err.println("❌ Snapshot is null after deserialization");
-                }
-                
-                assignment.setTemplateSnapshot(snapshot);
-            } catch (Exception e) {
-                System.err.println("❌ Error converting templateSnapshot: " + e.getMessage());
-                e.printStackTrace();
-                // Set null if conversion fails
-                assignment.setTemplateSnapshot(null);
-            }
+    private void addColumn(RowPutChange rowPutChange, String name, Object value) {
+        if (value instanceof String) {
+            rowPutChange.addColumn(name, ColumnValue.fromString((String) value));
+        } else if (value instanceof Long) {
+            rowPutChange.addColumn(name, ColumnValue.fromLong((Long) value));
+        } else if (value instanceof Integer) {
+            rowPutChange.addColumn(name, ColumnValue.fromLong(((Integer) value).longValue()));
+        } else if (value instanceof Boolean) {
+            rowPutChange.addColumn(name, ColumnValue.fromBoolean((Boolean) value));
         } else {
-            System.err.println("⚠️  templateSnapshot field is null in Firestore document: " + doc.getId());
+            try {
+                String jsonValue = objectMapper.writeValueAsString(value);
+                rowPutChange.addColumn(name, ColumnValue.fromString(jsonValue));
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to serialize column: " + name, e);
+            }
         }
-        
-        assignment.setPushedAt(doc.getDate("pushedAt"));
-        assignment.setExpiresAt(doc.getDate("expiresAt"));
-        
-        Long durationDays = doc.getLong("durationDays");
-        assignment.setDurationDays(durationDays != null ? durationDays.intValue() : null);
-        
-        assignment.setPushedBy(doc.getString("pushedBy"));
-        assignment.setLastRenewed(doc.getDate("lastRenewed"));
-        
-        return assignment;
     }
 }

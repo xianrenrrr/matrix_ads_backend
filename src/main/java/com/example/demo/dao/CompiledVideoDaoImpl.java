@@ -1,82 +1,128 @@
 package com.example.demo.dao;
 
 import com.example.demo.model.CompiledVideo;
-import com.google.api.core.ApiFuture;
-import com.google.cloud.firestore.*;
+import com.alicloud.openservices.tablestore.SyncClient;
+import com.alicloud.openservices.tablestore.model.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
+import java.util.*;
 
-import java.util.concurrent.ExecutionException;
-
-/**
- * Simple compiled video DAO implementation
- */
 @Repository
 public class CompiledVideoDaoImpl implements CompiledVideoDao {
     
-    private static final String COLLECTION_NAME = "compiledVideos";
-    
     @Autowired
-    private Firestore db;
+    private SyncClient tablestoreClient;
+    
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String TABLE_NAME = "compiledVideos";
     
     @Override
-    public String save(CompiledVideo compiledVideo) throws ExecutionException, InterruptedException {
-        CollectionReference collection = db.collection(COLLECTION_NAME);
-        
-        if (compiledVideo.getId() == null) {
-            DocumentReference docRef = collection.document();
-            compiledVideo.setId(docRef.getId());
-            docRef.set(compiledVideo);
-            return compiledVideo.getId();
+    public String save(CompiledVideo video) {
+        try {
+            if (video.getId() == null) {
+                video.setId(UUID.randomUUID().toString());
+            }
+            
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(video.getId()));
+            
+            RowPutChange rowPutChange = new RowPutChange(TABLE_NAME, primaryKeyBuilder.build());
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> dataMap = objectMapper.convertValue(video, Map.class);
+            dataMap.remove("id");
+            
+            for (Map.Entry<String, Object> entry : dataMap.entrySet()) {
+                if (entry.getValue() != null) {
+                    addColumn(rowPutChange, entry.getKey(), entry.getValue());
+                }
+            }
+            
+            tablestoreClient.putRow(new PutRowRequest(rowPutChange));
+            return video.getId();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to save compiled video", e);
+        }
+    }
+    
+    @Override
+    public CompiledVideo findById(String id) {
+        try {
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(id));
+            
+            SingleRowQueryCriteria criteria = new SingleRowQueryCriteria(TABLE_NAME, primaryKeyBuilder.build());
+            criteria.setMaxVersions(1);
+            
+            GetRowResponse response = tablestoreClient.getRow(new GetRowRequest(criteria));
+            Row row = response.getRow();
+            
+            if (row != null) {
+                return rowToCompiledVideo(row);
+            }
+            return null;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to find compiled video", e);
+        }
+    }
+    
+    @Override
+    public void delete(String id) {
+        try {
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(id));
+            
+            RowDeleteChange rowDeleteChange = new RowDeleteChange(TABLE_NAME, primaryKeyBuilder.build());
+            tablestoreClient.deleteRow(new DeleteRowRequest(rowDeleteChange));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to delete compiled video", e);
+        }
+    }
+    
+    private CompiledVideo rowToCompiledVideo(Row row) {
+        try {
+            Map<String, Object> dataMap = new HashMap<>();
+            
+            for (PrimaryKeyColumn column : row.getPrimaryKey().getPrimaryKeyColumns()) {
+                dataMap.put(column.getName(), column.getValue().asString());
+            }
+            
+            for (Column column : row.getColumns()) {
+                String columnName = column.getName();
+                ColumnValue columnValue = column.getValue();
+                
+                if (columnValue.getType() == ColumnType.STRING) {
+                    dataMap.put(columnName, columnValue.asString());
+                } else if (columnValue.getType() == ColumnType.INTEGER) {
+                    dataMap.put(columnName, columnValue.asLong());
+                } else if (columnValue.getType() == ColumnType.BOOLEAN) {
+                    dataMap.put(columnName, columnValue.asBoolean());
+                }
+            }
+            
+            return objectMapper.convertValue(dataMap, CompiledVideo.class);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to convert row to CompiledVideo", e);
+        }
+    }
+    
+    private void addColumn(RowPutChange rowPutChange, String name, Object value) {
+        if (value instanceof String) {
+            rowPutChange.addColumn(name, ColumnValue.fromString((String) value));
+        } else if (value instanceof Long) {
+            rowPutChange.addColumn(name, ColumnValue.fromLong((Long) value));
+        } else if (value instanceof Integer) {
+            rowPutChange.addColumn(name, ColumnValue.fromLong(((Integer) value).longValue()));
+        } else if (value instanceof Boolean) {
+            rowPutChange.addColumn(name, ColumnValue.fromBoolean((Boolean) value));
         } else {
-            collection.document(compiledVideo.getId()).set(compiledVideo);
-            return compiledVideo.getId();
+            try {
+                String jsonValue = objectMapper.writeValueAsString(value);
+                rowPutChange.addColumn(name, ColumnValue.fromString(jsonValue));
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to serialize column: " + name, e);
+            }
         }
-    }
-    
-    @Override
-    public CompiledVideo findById(String id) throws ExecutionException, InterruptedException {
-        DocumentReference docRef = db.collection(COLLECTION_NAME).document(id);
-        ApiFuture<DocumentSnapshot> future = docRef.get();
-        DocumentSnapshot document = future.get();
-        
-        if (document.exists()) {
-            CompiledVideo video = document.toObject(CompiledVideo.class);
-            video.setId(document.getId());
-            return video;
-        }
-        return null;
-    }
-    
-    @Override
-    public CompiledVideo findByTemplateIdAndUserId(String templateId, String userId) throws ExecutionException, InterruptedException {
-        Query query = db.collection(COLLECTION_NAME)
-                .whereEqualTo("templateId", templateId)
-                .whereEqualTo("userId", userId)
-                .limit(1);
-        
-        ApiFuture<QuerySnapshot> querySnapshot = query.get();
-        for (QueryDocumentSnapshot document : querySnapshot.get().getDocuments()) {
-            CompiledVideo video = document.toObject(CompiledVideo.class);
-            video.setId(document.getId());
-            return video;
-        }
-        return null;
-    }
-    
-    @Override
-    public int getCompletedVideoCountByUser(String userId) throws ExecutionException, InterruptedException {
-        Query query = db.collection(COLLECTION_NAME)
-                .whereEqualTo("userId", userId)
-                .whereEqualTo("status", "completed");
-        return query.get().get().size();
-    }
-    
-    @Override
-    public int getPublishedVideoCountByUser(String userId) throws ExecutionException, InterruptedException {
-        Query query = db.collection(COLLECTION_NAME)
-                .whereEqualTo("userId", userId)
-                .whereEqualTo("status", "published");
-        return query.get().get().size();
     }
 }

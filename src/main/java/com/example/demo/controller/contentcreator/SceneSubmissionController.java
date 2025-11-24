@@ -8,10 +8,6 @@ import com.example.demo.api.ApiResponse;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Video;
 // ComparisonAIService removed - using QwenSceneComparisonService
-import com.google.cloud.firestore.Firestore;
-import com.google.cloud.firestore.DocumentReference;
-import com.google.cloud.firestore.DocumentSnapshot;
-import com.google.cloud.firestore.FieldValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,7 +30,13 @@ public class SceneSubmissionController {
     private TemplateDao templateDao;
     
     @Autowired
-    private Firestore db;
+    private com.example.demo.dao.UserDao userDao;
+    
+    @Autowired
+    private com.example.demo.dao.GroupDao groupDao;
+    
+    @Autowired
+    private com.example.demo.dao.SubmittedVideoDao submittedVideoDao;
     
     // ComparisonAIService removed - using QwenSceneComparisonService
     
@@ -200,13 +202,21 @@ public class SceneSubmissionController {
     }
     @GetMapping("/submitted-videos/{compositeVideoId}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getSubmittedVideo(@PathVariable String compositeVideoId) throws Exception {
-        DocumentSnapshot videoDoc = db.collection("submittedVideos").document(compositeVideoId).get().get();
+        com.example.demo.model.SubmittedVideo video = submittedVideoDao.findById(compositeVideoId);
         
-        if (!videoDoc.exists()) {
+        if (video == null) {
             throw new NoSuchElementException("No submission found");
         }
         
-        Map<String, Object> videoData = new HashMap<>(videoDoc.getData());
+        // Convert to Map for response
+        Map<String, Object> videoData = new HashMap<>();
+        videoData.put("id", video.getId());
+        videoData.put("uploadedBy", video.getUploadedBy());
+        videoData.put("assignmentId", video.getAssignmentId());
+        videoData.put("publishStatus", video.getPublishStatus());
+        videoData.put("progress", video.getProgress());
+        videoData.put("createdAt", video.getCreatedAt());
+        videoData.put("lastUpdated", video.getLastUpdated());
         
         @SuppressWarnings("unchecked")
         Map<String, Object> scenes = (Map<String, Object>) videoData.get("scenes");
@@ -292,18 +302,18 @@ public class SceneSubmissionController {
 
     @SuppressWarnings("unchecked")
     private void updateSubmittedVideoWithScene(String compositeVideoId, String assignmentId, String userId, SceneSubmission sceneSubmission) throws Exception {
-        DocumentReference videoDocRef = db.collection("submittedVideos").document(compositeVideoId);
-        DocumentSnapshot videoDoc = videoDocRef.get().get();
+        com.example.demo.model.SubmittedVideo video = submittedVideoDao.findById(compositeVideoId);
         
         Map<String, Object> sceneData = new HashMap<>();
         sceneData.put("sceneId", sceneSubmission.getId());
         sceneData.put("status", sceneSubmission.getStatus());
         
-        if (videoDoc.exists()) {
-            Map<String, Object> currentScenes = (Map<String, Object>) videoDoc.get("scenes");
+        if (video != null) {
+            Map<String, Object> currentScenes = video.getScenes();
             if (currentScenes == null) currentScenes = new HashMap<>();
             
             currentScenes.put(String.valueOf(sceneSubmission.getSceneNumber()), sceneData);
+            video.setScenes(currentScenes);
             
             int templateTotalScenes = getTemplateTotalScenes(assignmentId);
             int approvedScenes = 0;
@@ -317,23 +327,21 @@ public class SceneSubmissionController {
                 }
             }
             
-            Map<String, Object> updates = new HashMap<>();
-            updates.put("scenes", currentScenes);
-            updates.put("lastUpdated", FieldValue.serverTimestamp());
-            updates.put("progress", Map.of(
-                "totalScenes", templateTotalScenes,
-                "approved", approvedScenes,
-                "pending", pendingScenes,
-                "completionPercentage", templateTotalScenes > 0 ? (double) approvedScenes / templateTotalScenes * 100 : 0
-            ));
+            Map<String, Object> progress = new HashMap<>();
+            progress.put("totalScenes", templateTotalScenes);
+            progress.put("approved", approvedScenes);
+            progress.put("pending", pendingScenes);
+            progress.put("completionPercentage", templateTotalScenes > 0 ? (double) approvedScenes / templateTotalScenes * 100 : 0);
+            video.setProgress(progress);
+            video.setLastUpdated(new Date());
             
             // Auto-update publishStatus if all scenes approved
             if (approvedScenes == templateTotalScenes && templateTotalScenes > 0) {
-                updates.put("publishStatus", "approved");
-                updates.put("approvedAt", FieldValue.serverTimestamp());
+                video.setPublishStatus("approved");
+                video.setApprovedAt(new Date());
             }
             
-            videoDocRef.update(updates);
+            submittedVideoDao.update(video);
         } else {
             Map<String, Object> videoData = new HashMap<>();
             videoData.put("videoId", compositeVideoId);
@@ -379,19 +387,16 @@ public class SceneSubmissionController {
     @SuppressWarnings("unchecked")
     private boolean checkGroupAIThreshold(String userId, double similarityScore) {
         try {
-            // Get user's group
-            DocumentSnapshot userDoc = db.collection("users").document(userId).get().get();
-            if (!userDoc.exists()) return false;
+            // Get user's group using DAO
+            com.example.demo.model.User user = userDao.findById(userId);
+            if (user == null || user.getGroupId() == null) return false;
             
-            String groupId = userDoc.getString("groupId");
-            if (groupId == null) return false;
+            // Get group's AI threshold using DAO
+            com.example.demo.model.Group group = groupDao.findById(user.getGroupId());
+            if (group == null) return false;
             
-            // Get group's AI threshold
-            DocumentSnapshot groupDoc = db.collection("groups").document(groupId).get().get();
-            if (!groupDoc.exists()) return false;
-            
-            Double aiThreshold = groupDoc.getDouble("aiApprovalThreshold");
-            Boolean aiAutoApprovalEnabled = groupDoc.getBoolean("aiAutoApprovalEnabled");
+            Double aiThreshold = group.getAiApprovalThreshold();
+            Boolean aiAutoApprovalEnabled = group.getAiAutoApprovalEnabled();
             
             // Convert similarity score to percentage (0-100) for comparison
             double similarityPercentage = similarityScore * 100;
@@ -412,16 +417,14 @@ public class SceneSubmissionController {
      */
     private String determineAutoStatus(String userId, double similarityScore) {
         try {
-            DocumentSnapshot userDoc = db.collection("users").document(userId).get().get();
-            if (!userDoc.exists()) return null;
-            String groupId = userDoc.getString("groupId");
-            if (groupId == null) return null;
+            com.example.demo.model.User user = userDao.findById(userId);
+            if (user == null || user.getGroupId() == null) return null;
+            
+            com.example.demo.model.Group group = groupDao.findById(user.getGroupId());
+            if (group == null) return null;
 
-            DocumentSnapshot groupDoc = db.collection("groups").document(groupId).get().get();
-            if (!groupDoc.exists()) return null;
-
-            Double aiThreshold = groupDoc.getDouble("aiApprovalThreshold");
-            Boolean aiAutoApprovalEnabled = groupDoc.getBoolean("aiAutoApprovalEnabled");
+            Double aiThreshold = group.getAiApprovalThreshold();
+            Boolean aiAutoApprovalEnabled = group.getAiAutoApprovalEnabled();
             if (aiAutoApprovalEnabled == null || !aiAutoApprovalEnabled || aiThreshold == null) return null;
 
             double similarityPercentage = similarityScore * 100.0;

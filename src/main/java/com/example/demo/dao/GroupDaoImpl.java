@@ -1,64 +1,81 @@
 package com.example.demo.dao;
 
 import com.example.demo.model.Group;
-import com.google.api.core.ApiFuture;
-import com.google.cloud.firestore.*;
+import com.alicloud.openservices.tablestore.SyncClient;
+import com.alicloud.openservices.tablestore.model.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.ExecutionException;
+import java.util.*;
 
 @Repository
 public class GroupDaoImpl implements GroupDao {
     
     @Autowired
-    private Firestore db;
-
-    private static final String COLLECTION_NAME = "groups";
+    private SyncClient tablestoreClient;
+    
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String TABLE_NAME = "groups";
 
     @Override
     public void save(Group group) {
         try {
-            CollectionReference groupsRef = db.collection(COLLECTION_NAME);
             if (group.getId() == null || group.getId().isEmpty()) {
-                // Auto-generate ID for new groups
-                DocumentReference docRef = groupsRef.document();
-                group.setId(docRef.getId());
+                group.setId(UUID.randomUUID().toString());
             }
-            ApiFuture<WriteResult> result = groupsRef.document(group.getId()).set(group);
-            result.get(); // Wait for completion
-        } catch (InterruptedException | ExecutionException e) {
+            
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(group.getId()));
+            
+            RowPutChange rowPutChange = new RowPutChange(TABLE_NAME, primaryKeyBuilder.build());
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> groupMap = objectMapper.convertValue(group, Map.class);
+            groupMap.remove("id");
+            
+            for (Map.Entry<String, Object> entry : groupMap.entrySet()) {
+                if (entry.getValue() != null) {
+                    addColumn(rowPutChange, entry.getKey(), entry.getValue());
+                }
+            }
+            
+            tablestoreClient.putRow(new PutRowRequest(rowPutChange));
+        } catch (Exception e) {
             throw new RuntimeException("Failed to save group", e);
         }
     }
 
     @Override
     public void update(Group group) {
-        try {
-            if (group.getId() == null || group.getId().isEmpty()) {
-                throw new IllegalArgumentException("Group ID cannot be null or empty for update");
-            }
-            CollectionReference groupsRef = db.collection(COLLECTION_NAME);
-            ApiFuture<WriteResult> result = groupsRef.document(group.getId()).set(group);
-            result.get(); // Wait for completion
-        } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Failed to update group", e);
+        if (group.getId() == null || group.getId().isEmpty()) {
+            throw new IllegalArgumentException("Group ID cannot be null or empty for update");
         }
+        save(group);
     }
 
     @Override
     public Group findByToken(String token) {
         try {
-            CollectionReference groupsRef = db.collection(COLLECTION_NAME);
-            Query query = groupsRef.whereEqualTo("token", token).limit(1);
-            ApiFuture<QuerySnapshot> querySnapshot = query.get();
-            for (DocumentSnapshot document : querySnapshot.get().getDocuments()) {
-                return document.toObject(Group.class);
+            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
+            criteria.setMaxVersions(1);
+            criteria.setLimit(1);
+            criteria.setIndexName("token_index");
+            
+            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            startKey.addPrimaryKeyColumn("token", PrimaryKeyValue.fromString(token));
+            criteria.setInclusiveStartPrimaryKey(startKey.build());
+            
+            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            endKey.addPrimaryKeyColumn("token", PrimaryKeyValue.fromString(token));
+            criteria.setExclusiveEndPrimaryKey(endKey.build());
+            
+            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
+            
+            if (!response.getRows().isEmpty()) {
+                return rowToGroup(response.getRows().get(0));
             }
             return null;
-        } catch (InterruptedException | ExecutionException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Failed to fetch group by token", e);
         }
     }
@@ -66,14 +83,20 @@ public class GroupDaoImpl implements GroupDao {
     @Override
     public Group findById(String id) {
         try {
-            DocumentReference docRef = db.collection(COLLECTION_NAME).document(id);
-            ApiFuture<DocumentSnapshot> future = docRef.get();
-            DocumentSnapshot document = future.get();
-            if (document.exists()) {
-                return document.toObject(Group.class);
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(id));
+            
+            SingleRowQueryCriteria criteria = new SingleRowQueryCriteria(TABLE_NAME, primaryKeyBuilder.build());
+            criteria.setMaxVersions(1);
+            
+            GetRowResponse response = tablestoreClient.getRow(new GetRowRequest(criteria));
+            Row row = response.getRow();
+            
+            if (row != null) {
+                return rowToGroup(row);
             }
             return null;
-        } catch (InterruptedException | ExecutionException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Failed to fetch group by ID", e);
         }
     }
@@ -81,34 +104,55 @@ public class GroupDaoImpl implements GroupDao {
     @Override
     public List<Group> findByManagerId(String managerId) {
         try {
-            CollectionReference groupsRef = db.collection(COLLECTION_NAME);
-            Query query = groupsRef.whereEqualTo("managerId", managerId);
-            ApiFuture<QuerySnapshot> querySnapshot = query.get();
+            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
+            criteria.setMaxVersions(1);
+            criteria.setLimit(100);
+            criteria.setIndexName("managerId_index");
+            
+            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            startKey.addPrimaryKeyColumn("managerId", PrimaryKeyValue.fromString(managerId));
+            criteria.setInclusiveStartPrimaryKey(startKey.build());
+            
+            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            endKey.addPrimaryKeyColumn("managerId", PrimaryKeyValue.fromString(managerId));
+            criteria.setExclusiveEndPrimaryKey(endKey.build());
+            
+            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
             
             List<Group> groups = new ArrayList<>();
-            for (DocumentSnapshot document : querySnapshot.get().getDocuments()) {
-                groups.add(document.toObject(Group.class));
+            for (Row row : response.getRows()) {
+                groups.add(rowToGroup(row));
             }
             return groups;
-        } catch (InterruptedException | ExecutionException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Failed to fetch groups by manager ID", e);
         }
     }
 
-
     @Override
     public List<Group> findByStatus(String status) {
         try {
-            CollectionReference groupsRef = db.collection(COLLECTION_NAME);
-            Query query = groupsRef.whereEqualTo("status", status);
-            ApiFuture<QuerySnapshot> querySnapshot = query.get();
+            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
+            criteria.setMaxVersions(1);
+            criteria.setLimit(100);
+            criteria.setIndexName("status_index");
+            
+            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            startKey.addPrimaryKeyColumn("status", PrimaryKeyValue.fromString(status));
+            criteria.setInclusiveStartPrimaryKey(startKey.build());
+            
+            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            endKey.addPrimaryKeyColumn("status", PrimaryKeyValue.fromString(status));
+            criteria.setExclusiveEndPrimaryKey(endKey.build());
+            
+            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
             
             List<Group> groups = new ArrayList<>();
-            for (DocumentSnapshot document : querySnapshot.get().getDocuments()) {
-                groups.add(document.toObject(Group.class));
+            for (Row row : response.getRows()) {
+                groups.add(rowToGroup(row));
             }
             return groups;
-        } catch (InterruptedException | ExecutionException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Failed to fetch groups by status", e);
         }
     }
@@ -116,9 +160,12 @@ public class GroupDaoImpl implements GroupDao {
     @Override
     public void delete(String id) {
         try {
-            ApiFuture<WriteResult> writeResult = db.collection(COLLECTION_NAME).document(id).delete();
-            writeResult.get(); // Wait for completion
-        } catch (InterruptedException | ExecutionException e) {
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(id));
+            
+            RowDeleteChange rowDeleteChange = new RowDeleteChange(TABLE_NAME, primaryKeyBuilder.build());
+            tablestoreClient.deleteRow(new DeleteRowRequest(rowDeleteChange));
+        } catch (Exception e) {
             throw new RuntimeException("Failed to delete group", e);
         }
     }
@@ -126,84 +173,40 @@ public class GroupDaoImpl implements GroupDao {
     @Override
     public void updateStatus(String id, String status) {
         try {
-            DocumentReference docRef = db.collection(COLLECTION_NAME).document(id);
-            ApiFuture<WriteResult> result = docRef.update("status", status);
-            result.get(); // Wait for completion
-        } catch (InterruptedException | ExecutionException e) {
+            Group group = findById(id);
+            if (group != null) {
+                group.setStatus(status);
+                save(group);
+            }
+        } catch (Exception e) {
             throw new RuntimeException("Failed to update group status", e);
         }
     }
     
     @Override
     public String getUserGroupId(String userId) {
-        try {
-            
-            // First, check the user document for groupId field (new approach)
-            DocumentReference userRef = db.collection("users").document(userId);
-            DocumentSnapshot userDoc = userRef.get().get();
-            
-            if (userDoc.exists()) {
-                String groupId = userDoc.getString("groupId");
-                if (groupId != null && !groupId.trim().isEmpty()) {
-                    return groupId;
-                }
-            }
-            
-            
-            // Fallback: Try to find by recipientId (which should be the userId) 
-            // since content creators don't have email addresses
-            Query query = db.collection(COLLECTION_NAME)
-                .whereEqualTo("recipientId", userId)
-                .whereEqualTo("status", "accepted")
-                .limit(1);
-                
-            ApiFuture<QuerySnapshot> querySnapshot = query.get();
-            QuerySnapshot snapshot = querySnapshot.get();
-            
-            
-            if (!snapshot.isEmpty()) {
-                String groupId = snapshot.getDocuments().get(0).getString("groupId");
-                return groupId;
-            }
-            
-            // If not found, also try by recipientEmail for backward compatibility
-            query = db.collection(COLLECTION_NAME)
-                .whereEqualTo("recipientEmail", userId)
-                .whereEqualTo("status", "accepted")
-                .limit(1);
-                
-            querySnapshot = query.get();
-            snapshot = querySnapshot.get();
-            
-            
-            if (!snapshot.isEmpty()) {
-                String groupId = snapshot.getDocuments().get(0).getString("groupId");
-                return groupId;
-            }
-            
-            return null;
-        } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Failed to get user group ID", e);
-        }
+        // TableStore doesn't support complex queries easily
+        // This would need a secondary index or different approach
+        throw new UnsupportedOperationException("getUserGroupId not implemented for TableStore yet");
     }
     
     @Override
     public void addTemplateToGroup(String groupId, String templateId) {
         try {
-            DocumentReference groupRef = db.collection(COLLECTION_NAME).document(groupId);
-            
-            // First check if group exists and has assignedTemplates field
-            DocumentSnapshot groupDoc = groupRef.get().get();
-            if (!groupDoc.exists()) {
+            Group group = findById(groupId);
+            if (group == null) {
                 throw new RuntimeException("Group " + groupId + " does not exist");
             }
             
-            // Check if assignedTemplates field exists, if not it will be created by arrayUnion
-            ApiFuture<WriteResult> result = groupRef.update("assignedTemplates", FieldValue.arrayUnion(templateId));
-            result.get();
+            if (group.getAssignedTemplates() == null) {
+                group.setAssignedTemplates(new ArrayList<>());
+            }
             
-        } catch (InterruptedException | ExecutionException e) {
-            System.err.println("Failed to add template " + templateId + " to group " + groupId + ": " + e.getMessage());
+            if (!group.getAssignedTemplates().contains(templateId)) {
+                group.getAssignedTemplates().add(templateId);
+                save(group);
+            }
+        } catch (Exception e) {
             throw new RuntimeException("Failed to add template to group", e);
         }
     }
@@ -211,11 +214,59 @@ public class GroupDaoImpl implements GroupDao {
     @Override
     public void removeTemplateFromGroup(String groupId, String templateId) {
         try {
-            DocumentReference groupRef = db.collection(COLLECTION_NAME).document(groupId);
-            ApiFuture<WriteResult> result = groupRef.update("assignedTemplates", FieldValue.arrayRemove(templateId));
-            result.get(); // Wait for completion
-        } catch (InterruptedException | ExecutionException e) {
+            Group group = findById(groupId);
+            if (group != null && group.getAssignedTemplates() != null) {
+                group.getAssignedTemplates().remove(templateId);
+                save(group);
+            }
+        } catch (Exception e) {
             throw new RuntimeException("Failed to remove template from group", e);
+        }
+    }
+    
+    private Group rowToGroup(Row row) {
+        try {
+            Map<String, Object> dataMap = new HashMap<>();
+            
+            for (PrimaryKeyColumn column : row.getPrimaryKey().getPrimaryKeyColumns()) {
+                dataMap.put(column.getName(), column.getValue().asString());
+            }
+            
+            for (Column column : row.getColumns()) {
+                String columnName = column.getName();
+                ColumnValue columnValue = column.getValue();
+                
+                if (columnValue.getType() == ColumnType.STRING) {
+                    dataMap.put(columnName, columnValue.asString());
+                } else if (columnValue.getType() == ColumnType.INTEGER) {
+                    dataMap.put(columnName, columnValue.asLong());
+                } else if (columnValue.getType() == ColumnType.BOOLEAN) {
+                    dataMap.put(columnName, columnValue.asBoolean());
+                }
+            }
+            
+            return objectMapper.convertValue(dataMap, Group.class);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to convert row to Group", e);
+        }
+    }
+    
+    private void addColumn(RowPutChange rowPutChange, String name, Object value) {
+        if (value instanceof String) {
+            rowPutChange.addColumn(name, ColumnValue.fromString((String) value));
+        } else if (value instanceof Long) {
+            rowPutChange.addColumn(name, ColumnValue.fromLong((Long) value));
+        } else if (value instanceof Integer) {
+            rowPutChange.addColumn(name, ColumnValue.fromLong(((Integer) value).longValue()));
+        } else if (value instanceof Boolean) {
+            rowPutChange.addColumn(name, ColumnValue.fromBoolean((Boolean) value));
+        } else {
+            try {
+                String jsonValue = objectMapper.writeValueAsString(value);
+                rowPutChange.addColumn(name, ColumnValue.fromString(jsonValue));
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to serialize column: " + name, e);
+            }
         }
     }
 }

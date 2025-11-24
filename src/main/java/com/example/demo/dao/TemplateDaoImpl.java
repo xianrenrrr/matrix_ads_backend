@@ -1,272 +1,145 @@
 package com.example.demo.dao;
 
 import com.example.demo.model.ManualTemplate;
-import com.example.demo.model.Video;
-import com.google.api.core.ApiFuture;
-import com.google.cloud.firestore.*;
+import com.alicloud.openservices.tablestore.SyncClient;
+import com.alicloud.openservices.tablestore.model.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ExecutionException;
+import java.util.*;
 
 @Repository
 public class TemplateDaoImpl implements TemplateDao {
 
-    @Autowired(required = false)
-    private Firestore db;
+    @Autowired
+    private SyncClient tablestoreClient;
     
-    private void checkFirestore() {
-        if (db == null) {
-            throw new IllegalStateException("Firestore is not available in development mode. Please configure Firebase credentials or use a different data source.");
-        }
-    }
-
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String TABLE_NAME = "templates";
 
     @Override
-    public String createTemplate(ManualTemplate template) throws ExecutionException, InterruptedException {
-        checkFirestore();
-        DocumentReference docRef = db.collection("templates").document();
-        template.setId(docRef.getId()); // Assign generated ID to the template
-
-        // If videoId is provided, ensure it's saved in the template
-        if (template.getVideoId() != null && !template.getVideoId().isEmpty()) {
-            // Verify the video exists
-            DocumentReference videoRef = db.collection("videos").document(template.getVideoId());
-            ApiFuture<DocumentSnapshot> videoFuture = videoRef.get();
-            DocumentSnapshot videoDocument = videoFuture.get();
-
-            if (videoDocument.exists()) {
-                // Update video with template ID
-                Video video = videoDocument.toObject(Video.class);
-                video.setTemplateId(template.getId());
-                videoRef.set(video).get();
+    public String createTemplate(ManualTemplate template) {
+        try {
+            if (template.getId() == null || template.getId().isEmpty()) {
+                template.setId(UUID.randomUUID().toString());
             }
+            
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(template.getId()));
+            
+            RowPutChange rowPutChange = new RowPutChange(TABLE_NAME, primaryKeyBuilder.build());
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> templateMap = objectMapper.convertValue(template, Map.class);
+            templateMap.remove("id");
+            
+            for (Map.Entry<String, Object> entry : templateMap.entrySet()) {
+                if (entry.getValue() != null) {
+                    addColumn(rowPutChange, entry.getKey(), entry.getValue());
+                }
+            }
+            
+            tablestoreClient.putRow(new PutRowRequest(rowPutChange));
+            return template.getId();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create template", e);
         }
-
-        // Save the template
-        ApiFuture<WriteResult> result = docRef.set(template);
-        result.get(); // Wait for write to complete
-
-        // NOTE: User's created_Templates field is updated separately via UserDao.addCreatedTemplate()
-        // This avoids duplicate logic and potential conflicts
-
-        return template.getId();
     }
 
     @Override
-    public ManualTemplate getTemplate(String id) throws ExecutionException, InterruptedException {
-        checkFirestore();
-        DocumentReference docRef = db.collection("templates").document(id);
-        ApiFuture<DocumentSnapshot> future = docRef.get();
-        DocumentSnapshot document = future.get();
-        if (document.exists()) {
-            return document.toObject(ManualTemplate.class);
-        } else {
+    public ManualTemplate getTemplate(String id) {
+        try {
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(id));
+            
+            SingleRowQueryCriteria criteria = new SingleRowQueryCriteria(TABLE_NAME, primaryKeyBuilder.build());
+            criteria.setMaxVersions(1);
+            
+            GetRowResponse response = tablestoreClient.getRow(new GetRowRequest(criteria));
+            Row row = response.getRow();
+            
+            if (row != null) {
+                return rowToTemplate(row);
+            }
             return null;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to get template", e);
         }
     }
 
-    public List<ManualTemplate> getTemplatesByUserId(String userId) throws ExecutionException, InterruptedException {
-        // Fetch the user's templates list from users collection
-        DocumentReference userRef = db.collection("users").document(userId);
-        DocumentSnapshot userSnap = userRef.get().get();
-        List<ManualTemplate> templates = new ArrayList<>();
-        if (userSnap.exists() && userSnap.contains("created_Templates")) {
-            Object raw = userSnap.get("created_Templates");
-            List<String> templateIds = new ArrayList<>();
-            if (raw instanceof Map<?, ?>) {
-                for (Object key : ((Map<?, ?>) raw).keySet()) {
-                    templateIds.add((String) key);
-                }
+    public List<ManualTemplate> getTemplatesByUserId(String userId) {
+        try {
+            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
+            criteria.setMaxVersions(1);
+            criteria.setLimit(100);
+            criteria.setIndexName("userId_index");
+            
+            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            startKey.addPrimaryKeyColumn("userId", PrimaryKeyValue.fromString(userId));
+            criteria.setInclusiveStartPrimaryKey(startKey.build());
+            
+            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            endKey.addPrimaryKeyColumn("userId", PrimaryKeyValue.fromString(userId));
+            criteria.setExclusiveEndPrimaryKey(endKey.build());
+            
+            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
+            
+            List<ManualTemplate> templates = new ArrayList<>();
+            for (Row row : response.getRows()) {
+                templates.add(rowToTemplate(row));
             }
-            // Batch fetch templates from templates collection using whereIn (10 at a time)
-            List<ManualTemplate> templatesBatch = new ArrayList<>();
-            for (int i = 0; i < templateIds.size(); i += 10) {
-                List<String> batchIds = templateIds.subList(i, Math.min(i + 10, templateIds.size()));
-                Query query = db.collection("templates").whereIn(FieldPath.documentId(), batchIds);
-                List<QueryDocumentSnapshot> docs = query.get().get().getDocuments();
-                for (QueryDocumentSnapshot doc : docs) {
-                    ManualTemplate template = doc.toObject(ManualTemplate.class);
-                    templatesBatch.add(template);
-                }
-            }
-            templates.addAll(templatesBatch);
+            return templates;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to get templates by userId", e);
         }
-        return templates;
     }
 
     @Override
-    public List<ManualTemplate> getAllTemplates() throws ExecutionException, InterruptedException {
-        ApiFuture<QuerySnapshot> future = db.collection("templates").get();
-        List<QueryDocumentSnapshot> documents = future.get().getDocuments();
-        List<ManualTemplate> templates = new ArrayList<>();
-        for (QueryDocumentSnapshot document : documents) {
-            ManualTemplate template = document.toObject(ManualTemplate.class);
-            templates.add(template);
+    public List<ManualTemplate> getAllTemplates() {
+        try {
+            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
+            criteria.setMaxVersions(1);
+            criteria.setLimit(1000);
+            
+            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            startKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MIN);
+            criteria.setInclusiveStartPrimaryKey(startKey.build());
+            
+            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            endKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MAX);
+            criteria.setExclusiveEndPrimaryKey(endKey.build());
+            
+            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
+            
+            List<ManualTemplate> templates = new ArrayList<>();
+            for (Row row : response.getRows()) {
+                templates.add(rowToTemplate(row));
+            }
+            return templates;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to get all templates", e);
         }
-        return templates;
     }
 
     @Override
-    public boolean updateTemplate(String templateId, ManualTemplate manualTemplate) throws ExecutionException, InterruptedException {
+    public boolean updateTemplate(String templateId, ManualTemplate manualTemplate) {
         if (templateId == null || templateId.isEmpty()) {
             throw new IllegalArgumentException("Template ID must not be null or empty for update.");
         }
-        manualTemplate.setId(templateId); // Ensure object has the correct ID
-        DocumentReference docRef = db.collection("templates").document(templateId);
-        ApiFuture<WriteResult> result = docRef.set(manualTemplate);
-        result.get(); // Wait for write to complete
+        manualTemplate.setId(templateId);
+        createTemplate(manualTemplate);
         return true;
     }
 
     @Override
-    public List<ManualTemplate> getTemplatesAssignedToGroup(String groupId) throws ExecutionException, InterruptedException {
-        checkFirestore();
-        
-        // Fast approach: Get assignedTemplates from group document
-        DocumentReference groupRef = db.collection("groups").document(groupId);
-        DocumentSnapshot groupDoc = groupRef.get().get();
-        
-        if (!groupDoc.exists()) {
-            return new ArrayList<>();
-        }
-        
-        // Get the assignedTemplates array from the group
-        @SuppressWarnings("unchecked")
-        List<String> templateIds = (List<String>) groupDoc.get("assignedTemplates");
-        
-        if (templateIds == null || templateIds.isEmpty()) {
-            return new ArrayList<>();
-        }
-        
-        // Fetch all templates by their IDs
-        List<ManualTemplate> templates = new ArrayList<>();
-        for (String templateId : templateIds) {
-            ManualTemplate template = getTemplate(templateId);
-            if (template != null) {
-                templates.add(template);
-            } else {
-                System.out.println("DEBUG: Template " + templateId + " not found");
-            }
-        }
-        
-        return templates;
+    public List<ManualTemplate> getTemplatesAssignedToGroup(String groupId) {
+        // This requires getting group first, then fetching templates
+        throw new UnsupportedOperationException("getTemplatesAssignedToGroup not implemented for TableStore yet");
     }
     
     @Override
-    public List<Map<String, Object>> getTemplateSummariesForGroup(String groupId) throws ExecutionException, InterruptedException {
-        checkFirestore();
-        
-        // Get assignedTemplates from group document
-        DocumentReference groupRef = db.collection("groups").document(groupId);
-        DocumentSnapshot groupDoc = groupRef.get().get();
-        
-        if (!groupDoc.exists()) {
-            return new ArrayList<>();
-        }
-        
-        @SuppressWarnings("unchecked")
-        List<String> templateIds = (List<String>) groupDoc.get("assignedTemplates");
-        
-        if (templateIds == null || templateIds.isEmpty()) {
-            return new ArrayList<>();
-        }
-        
-        // Fetch templates in parallel for better performance
-        List<Map<String, Object>> summaries = new ArrayList<>();
-        CollectionReference templatesRef = db.collection("templates");
-        
-        // Create parallel futures for all template reads
-        List<ApiFuture<DocumentSnapshot>> templateFutures = new ArrayList<>();
-        for (String templateId : templateIds) {
-            templateFutures.add(templatesRef.document(templateId).get());
-        }
-        
-        // Wait for all template reads to complete
-        List<DocumentSnapshot> templateDocs = com.google.api.core.ApiFutures.allAsList(templateFutures).get();
-        
-        // Collect video IDs for parallel thumbnail fetch
-        List<String> videoIds = new ArrayList<>();
-        for (DocumentSnapshot templateDoc : templateDocs) {
-            if (templateDoc.exists()) {
-                String videoId = templateDoc.getString("videoId");
-                if (videoId != null && !videoId.isEmpty()) {
-                    videoIds.add(videoId);
-                } else {
-                    videoIds.add(null); // Placeholder to maintain index alignment
-                }
-            }
-        }
-        
-        // Fetch all videos in parallel
-        List<ApiFuture<DocumentSnapshot>> videoFutures = new ArrayList<>();
-        CollectionReference videosRef = db.collection("exampleVideos");
-        for (String videoId : videoIds) {
-            if (videoId != null) {
-                videoFutures.add(videosRef.document(videoId).get());
-            } else {
-                videoFutures.add(null); // Placeholder
-            }
-        }
-        
-        // Wait for all video reads (handle nulls)
-        List<DocumentSnapshot> videoDocs = new ArrayList<>();
-        for (ApiFuture<DocumentSnapshot> future : videoFutures) {
-            if (future != null) {
-                videoDocs.add(future.get());
-            } else {
-                videoDocs.add(null);
-            }
-        }
-        
-        // Process all results
-        for (int i = 0; i < templateDocs.size(); i++) {
-            DocumentSnapshot templateDoc = templateDocs.get(i);
-            
-            if (templateDoc.exists()) {
-                Map<String, Object> summary = new java.util.HashMap<>();
-                summary.put("id", templateDoc.getId());
-                summary.put("templateTitle", templateDoc.getString("templateTitle"));
-                
-                // Get scene count
-                Object scenesObj = templateDoc.get("scenes");
-                int sceneCount = 0;
-                if (scenesObj instanceof List) {
-                    sceneCount = ((List<?>) scenesObj).size();
-                }
-                summary.put("sceneCount", sceneCount);
-                
-                // Calculate duration from scenes
-                int totalDurationSeconds = 0;
-                if (scenesObj instanceof List) {
-                    @SuppressWarnings("unchecked")
-                    List<Map<String, Object>> scenes = (List<Map<String, Object>>) scenesObj;
-                    for (Map<String, Object> scene : scenes) {
-                        Object startMs = scene.get("startTimeMs");
-                        Object endMs = scene.get("endTimeMs");
-                        if (startMs instanceof Number && endMs instanceof Number) {
-                            long duration = ((Number) endMs).longValue() - ((Number) startMs).longValue();
-                            totalDurationSeconds += (int) (duration / 1000);
-                        }
-                    }
-                }
-                summary.put("duration", totalDurationSeconds);
-                
-                // Get thumbnail from template's thumbnailUrl field
-                String thumbnail = null;
-                String thumbnailUrl = templateDoc.getString("thumbnailUrl");
-                if (thumbnailUrl != null && !thumbnailUrl.isEmpty()) {
-                    thumbnail = convertToProxyUrl(thumbnailUrl);
-                }
-                summary.put("thumbnail", thumbnail);
-                
-                summaries.add(summary);
-            }
-        }
-        
-        return summaries;
+    public List<Map<String, Object>> getTemplateSummariesForGroup(String groupId) {
+        throw new UnsupportedOperationException("getTemplateSummariesForGroup not implemented for TableStore yet");
     }
 
     @Override
@@ -275,61 +148,89 @@ public class TemplateDaoImpl implements TemplateDao {
             throw new IllegalArgumentException("Template ID must not be null or empty for delete.");
         }
         try {
-            db.collection("templates").document(id).delete().get(); // Wait until delete completes
-            return true; // Successful deletion
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(id));
+            
+            RowDeleteChange rowDeleteChange = new RowDeleteChange(TABLE_NAME, primaryKeyBuilder.build());
+            tablestoreClient.deleteRow(new DeleteRowRequest(rowDeleteChange));
+            return true;
         } catch (Exception e) {
             e.printStackTrace();
-            return false; // Deletion failed
+            return false;
         }
     }
     
     @Override
-    public List<ManualTemplate> getTemplatesByFolder(String folderId) throws ExecutionException, InterruptedException {
-        checkFirestore();
-        
-        Query query = db.collection("templates").whereEqualTo("folderId", folderId);
-        QuerySnapshot snapshot = query.get().get();
-        
-        List<ManualTemplate> templates = new ArrayList<>();
-        for (QueryDocumentSnapshot doc : snapshot.getDocuments()) {
-            templates.add(doc.toObject(ManualTemplate.class));
+    public List<ManualTemplate> getTemplatesByFolder(String folderId) {
+        try {
+            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
+            criteria.setMaxVersions(1);
+            criteria.setLimit(100);
+            criteria.setIndexName("folderId_index");
+            
+            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            startKey.addPrimaryKeyColumn("folderId", PrimaryKeyValue.fromString(folderId));
+            criteria.setInclusiveStartPrimaryKey(startKey.build());
+            
+            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            endKey.addPrimaryKeyColumn("folderId", PrimaryKeyValue.fromString(folderId));
+            criteria.setExclusiveEndPrimaryKey(endKey.build());
+            
+            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
+            
+            List<ManualTemplate> templates = new ArrayList<>();
+            for (Row row : response.getRows()) {
+                templates.add(rowToTemplate(row));
+            }
+            return templates;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to get templates by folder", e);
         }
-        
-        return templates;
     }
     
-    /**
-     * Convert GCS URL to proxy URL to avoid 403 errors
-     * Returns relative URL that works for both web and mini app
-     * Example: https://storage.googleapis.com/bucket/path/file.jpg -> /images/proxy?path=path/file.jpg
-     * Client should prepend their API base URL
-     */
-    private String convertToProxyUrl(String gcsUrl) {
-        if (gcsUrl == null || gcsUrl.isEmpty()) {
-            return null;
-        }
-        
+    private ManualTemplate rowToTemplate(Row row) {
         try {
-            // Extract the path after the bucket name
-            // Format: https://storage.googleapis.com/bucket-name/path/to/file.jpg
-            String prefix = "https://storage.googleapis.com/";
-            if (gcsUrl.startsWith(prefix)) {
-                String afterPrefix = gcsUrl.substring(prefix.length());
-                // Remove bucket name (first segment)
-                int firstSlash = afterPrefix.indexOf('/');
-                if (firstSlash > 0) {
-                    String path = afterPrefix.substring(firstSlash + 1);
-                    // URL encode the path for safe transmission
-                    String encodedPath = java.net.URLEncoder.encode(path, "UTF-8");
-                    // Return relative URL - client will prepend their API base URL
-                    return "/images/proxy?path=" + encodedPath;
+            Map<String, Object> dataMap = new HashMap<>();
+            
+            for (PrimaryKeyColumn column : row.getPrimaryKey().getPrimaryKeyColumns()) {
+                dataMap.put(column.getName(), column.getValue().asString());
+            }
+            
+            for (Column column : row.getColumns()) {
+                String columnName = column.getName();
+                ColumnValue columnValue = column.getValue();
+                
+                if (columnValue.getType() == ColumnType.STRING) {
+                    dataMap.put(columnName, columnValue.asString());
+                } else if (columnValue.getType() == ColumnType.INTEGER) {
+                    dataMap.put(columnName, columnValue.asLong());
+                } else if (columnValue.getType() == ColumnType.BOOLEAN) {
+                    dataMap.put(columnName, columnValue.asBoolean());
                 }
             }
+            
+            return objectMapper.convertValue(dataMap, ManualTemplate.class);
         } catch (Exception e) {
-            System.err.println("Failed to convert GCS URL to proxy URL: " + e.getMessage());
+            throw new RuntimeException("Failed to convert row to ManualTemplate", e);
         }
-        
-        return null;
     }
-
+    
+    private void addColumn(RowPutChange rowPutChange, String name, Object value) {
+        if (value instanceof String) {
+            rowPutChange.addColumn(name, ColumnValue.fromString((String) value));
+        } else if (value instanceof Long) {
+            rowPutChange.addColumn(name, ColumnValue.fromLong((Long) value));
+        } else if (value instanceof Integer) {
+            rowPutChange.addColumn(name, ColumnValue.fromLong(((Integer) value).longValue()));
+        } else if (value instanceof Boolean) {
+            rowPutChange.addColumn(name, ColumnValue.fromBoolean((Boolean) value));
+        } else {
+            try {
+                String jsonValue = objectMapper.writeValueAsString(value);
+                rowPutChange.addColumn(name, ColumnValue.fromString(jsonValue));
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to serialize column: " + name, e);
+            }
+        }
+    }
 }

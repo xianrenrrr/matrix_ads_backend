@@ -22,10 +22,6 @@ public class UserController {
     
     @Autowired
     private I18nService i18nService;
-    
-    @Autowired
-    private com.google.cloud.firestore.Firestore db;
-
 
     @Autowired
     private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
