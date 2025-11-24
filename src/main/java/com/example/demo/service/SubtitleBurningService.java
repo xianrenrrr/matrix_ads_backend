@@ -162,6 +162,91 @@ public class SubtitleBurningService {
     }
     
     /**
+     * Calculate subtitle alignment based on box positions and aspect ratio
+     * For 16:9 landscape: right side = top (alignment 8), left side = bottom (alignment 2)
+     * For 9:16 portrait: right side = right (alignment 3), left side = left (alignment 1)
+     * 
+     * @param scenes List of scenes with keyElementsWithBoxes
+     * @param sourceAspect Video aspect ratio (e.g., "16:9" or "9:16")
+     * @return Alignment value (1=bottom-left, 2=bottom-center, 3=bottom-right, 7=top-left, 8=top-center, 9=top-right)
+     */
+    public int calculateSubtitleAlignment(List<Scene> scenes, String sourceAspect) {
+        boolean isLandscape = isLandscapeAspect(sourceAspect);
+        
+        // Calculate average X position of all boxes
+        double totalX = 0;
+        int boxCount = 0;
+        
+        for (Scene scene : scenes) {
+            if (scene.getKeyElementsWithBoxes() != null) {
+                for (var element : scene.getKeyElementsWithBoxes()) {
+                    if (element.getBox() != null && element.getBox().length == 4) {
+                        // Box format: [x, y, width, height] in normalized coordinates (0-1)
+                        double x = element.getBox()[0];
+                        double width = element.getBox()[2];
+                        double centerX = x + width / 2;
+                        totalX += centerX;
+                        boxCount++;
+                    }
+                }
+            }
+        }
+        
+        if (boxCount == 0) {
+            // No boxes found, use default bottom-center
+            return 2;
+        }
+        
+        double avgX = totalX / boxCount;
+        
+        if (isLandscape) {
+            // For 16:9 landscape (phone held vertically, video rotated):
+            // Right side (avgX > 0.5) becomes TOP when rotated → subtitles on LEFT (bottom when rotated) = alignment 2 (bottom-center)
+            // Left side (avgX < 0.5) becomes BOTTOM when rotated → subtitles on RIGHT (top when rotated) = alignment 8 (top-center)
+            if (avgX > 0.5) {
+                log.info("📍 Boxes on RIGHT side (top when rotated) → Subtitles on LEFT/BOTTOM: alignment=2");
+                return 2;  // Bottom-center
+            } else {
+                log.info("📍 Boxes on LEFT side (bottom when rotated) → Subtitles on RIGHT/TOP: alignment=8");
+                return 8;  // Top-center
+            }
+        } else {
+            // For 9:16 portrait:
+            // Right side (avgX > 0.5) → subtitles on left = alignment 1 (bottom-left)
+            // Left side (avgX < 0.5) → subtitles on right = alignment 3 (bottom-right)
+            if (avgX > 0.5) {
+                log.info("📍 Boxes on RIGHT side → Subtitles on LEFT: alignment=1");
+                return 1;  // Bottom-left
+            } else {
+                log.info("📍 Boxes on LEFT side → Subtitles on RIGHT: alignment=3");
+                return 3;  // Bottom-right
+            }
+        }
+    }
+    
+    /**
+     * Check if aspect ratio is landscape (width > height)
+     */
+    private boolean isLandscapeAspect(String sourceAspect) {
+        if (sourceAspect == null || sourceAspect.isEmpty()) {
+            return false;
+        }
+        
+        String[] parts = sourceAspect.split(":");
+        if (parts.length != 2) {
+            return false;
+        }
+        
+        try {
+            double width = Double.parseDouble(parts[0].trim());
+            double height = Double.parseDouble(parts[1].trim());
+            return width > height;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+    
+    /**
      * Subtitle styling options
      */
     public static class SubtitleOptions {
