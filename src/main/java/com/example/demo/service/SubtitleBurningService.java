@@ -180,10 +180,10 @@ public class SubtitleBurningService {
         for (Scene scene : scenes) {
             if (scene.getKeyElementsWithBoxes() != null) {
                 for (var element : scene.getKeyElementsWithBoxes()) {
-                    if (element.getBox() != null && element.getBox().length == 4) {
+                    if (element.getBox() != null && element.getBox().size() == 4) {
                         // Box format: [x, y, width, height] in normalized coordinates (0-1)
-                        double x = element.getBox()[0];
-                        double width = element.getBox()[2];
+                        double x = element.getBox().get(0);
+                        double width = element.getBox().get(2);
                         double centerX = x + width / 2;
                         totalX += centerX;
                         boxCount++;
