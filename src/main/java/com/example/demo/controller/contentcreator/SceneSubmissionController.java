@@ -343,28 +343,28 @@ public class SceneSubmissionController {
             
             submittedVideoDao.update(video);
         } else {
-            Map<String, Object> videoData = new HashMap<>();
-            videoData.put("videoId", compositeVideoId);
-            videoData.put("assignmentId", assignmentId);
-            videoData.put("uploadedBy", userId);
-            videoData.put("publishStatus", "pending");
-            videoData.put("createdAt", FieldValue.serverTimestamp());
-            videoData.put("lastUpdated", FieldValue.serverTimestamp());
+            // Create new submitted video using DAO
+            com.example.demo.model.SubmittedVideo newVideo = new com.example.demo.model.SubmittedVideo();
+            newVideo.setId(compositeVideoId);
+            newVideo.setAssignmentId(assignmentId);
+            newVideo.setUploadedBy(userId);
+            newVideo.setPublishStatus("pending");
+            newVideo.setCreatedAt(new java.util.Date());
+            newVideo.setLastUpdated(new java.util.Date());
             
             Map<String, Object> scenes = new HashMap<>();
             scenes.put(String.valueOf(sceneSubmission.getSceneNumber()), sceneData);
-            videoData.put("scenes", scenes);
+            newVideo.setScenes(scenes);
             
             int templateTotalScenes = getTemplateTotalScenes(assignmentId);
-            videoData.put("progress", Map.of(
-                "totalScenes", templateTotalScenes,
-                "approved", 0,
-                "pending", 1,
-                "completionPercentage", 0.0
-            ));
+            Map<String, Object> progress = new HashMap<>();
+            progress.put("totalScenes", templateTotalScenes);
+            progress.put("approved", 0);
+            progress.put("pending", 1);
+            progress.put("completionPercentage", 0.0);
+            newVideo.setProgress(progress);
             
-            videoDocRef.set(videoData);
-            // Note: We don't update the original template's submittedVideos since we're using assignments now
+            submittedVideoDao.save(newVideo);
         }
     }
     
@@ -396,7 +396,7 @@ public class SceneSubmissionController {
             if (group == null) return false;
             
             Double aiThreshold = group.getAiApprovalThreshold();
-            Boolean aiAutoApprovalEnabled = group.getAiAutoApprovalEnabled();
+            Boolean aiAutoApprovalEnabled = group.isAiAutoApprovalEnabled();
             
             // Convert similarity score to percentage (0-100) for comparison
             double similarityPercentage = similarityScore * 100;
@@ -424,7 +424,7 @@ public class SceneSubmissionController {
             if (group == null) return null;
 
             Double aiThreshold = group.getAiApprovalThreshold();
-            Boolean aiAutoApprovalEnabled = group.getAiAutoApprovalEnabled();
+            Boolean aiAutoApprovalEnabled = group.isAiAutoApprovalEnabled();
             if (aiAutoApprovalEnabled == null || !aiAutoApprovalEnabled || aiThreshold == null) return null;
 
             double similarityPercentage = similarityScore * 100.0;

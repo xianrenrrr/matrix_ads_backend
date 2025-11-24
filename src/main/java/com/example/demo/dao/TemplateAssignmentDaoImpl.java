@@ -95,7 +95,7 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(100);
-            criteria.setIndexName(indexName);
+            // criteria.setIndexName(indexName); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn(columnName, PrimaryKeyValue.fromString(value));
@@ -160,6 +160,87 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
             } catch (Exception e) {
                 throw new RuntimeException("Failed to serialize column: " + name, e);
             }
+        }
+    }
+    
+    @Override
+    public void deleteAssignmentsByTemplate(String templateId) throws Exception {
+        List<com.example.demo.model.TemplateAssignment> assignments = getAssignmentsByTemplate(templateId);
+        for (com.example.demo.model.TemplateAssignment assignment : assignments) {
+            deleteAssignment(assignment.getId());
+        }
+    }
+    
+    @Override
+    public boolean hasActiveAssignment(String templateId, String groupId) throws Exception {
+        List<com.example.demo.model.TemplateAssignment> assignments = getAssignmentsByGroup(groupId);
+        for (com.example.demo.model.TemplateAssignment assignment : assignments) {
+            if (templateId.equals(assignment.getMasterTemplateId()) && !assignment.isExpired()) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    @Override
+    public void updateAssignment(com.example.demo.model.TemplateAssignment assignment) throws Exception {
+        // Reuse createAssignment which does upsert
+        createAssignment(assignment);
+    }
+    
+    @Override
+    public List<com.example.demo.model.TemplateAssignment> getExpiringSoonAssignments(int daysThreshold) throws Exception {
+        List<com.example.demo.model.TemplateAssignment> allAssignments = queryAllAssignments();
+        List<com.example.demo.model.TemplateAssignment> expiringSoon = new ArrayList<>();
+        
+        long thresholdTime = System.currentTimeMillis() + (daysThreshold * 24L * 60 * 60 * 1000);
+        
+        for (com.example.demo.model.TemplateAssignment assignment : allAssignments) {
+            if (assignment.getExpiresAt() != null && !assignment.isExpired()) {
+                if (assignment.getExpiresAt().getTime() <= thresholdTime) {
+                    expiringSoon.add(assignment);
+                }
+            }
+        }
+        return expiringSoon;
+    }
+    
+    @Override
+    public List<com.example.demo.model.TemplateAssignment> getExpiredAssignments() throws Exception {
+        List<com.example.demo.model.TemplateAssignment> allAssignments = queryAllAssignments();
+        List<com.example.demo.model.TemplateAssignment> expired = new ArrayList<>();
+        
+        for (com.example.demo.model.TemplateAssignment assignment : allAssignments) {
+            if (assignment.isExpired()) {
+                expired.add(assignment);
+            }
+        }
+        return expired;
+    }
+    
+    private List<com.example.demo.model.TemplateAssignment> queryAllAssignments() {
+        try {
+            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
+            criteria.setMaxVersions(1);
+            criteria.setLimit(1000);
+            
+            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            startKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MIN);
+            criteria.setInclusiveStartPrimaryKey(startKey.build());
+            
+            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            endKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MAX);
+            criteria.setExclusiveEndPrimaryKey(endKey.build());
+            
+            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
+            
+            List<com.example.demo.model.TemplateAssignment> results = new ArrayList<>();
+            for (Row row : response.getRows()) {
+                results.add(rowToAssignment(row));
+            }
+            return results;
+        } catch (Exception e) {
+            return new ArrayList<>();
         }
     }
 }

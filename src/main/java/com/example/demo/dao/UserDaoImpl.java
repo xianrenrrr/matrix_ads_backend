@@ -1,6 +1,7 @@
 package com.example.demo.dao;
 
 import com.example.demo.model.User;
+import com.example.demo.model.Notification;
 import com.alicloud.openservices.tablestore.SyncClient;
 import com.alicloud.openservices.tablestore.model.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,7 +24,7 @@ public class UserDaoImpl implements UserDao {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(1);
-            criteria.setIndexName("username_index");
+            // criteria.setIndexName("username_index"); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn("username", PrimaryKeyValue.fromString(username));
@@ -50,7 +51,7 @@ public class UserDaoImpl implements UserDao {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(1);
-            criteria.setIndexName("email_index");
+            // criteria.setIndexName("email_index"); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn("email", PrimaryKeyValue.fromString(email));
@@ -88,7 +89,7 @@ public class UserDaoImpl implements UserDao {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(1);
-            criteria.setIndexName("phone_index");
+            // criteria.setIndexName("phone_index"); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn("phone", PrimaryKeyValue.fromString(phone));
@@ -219,7 +220,7 @@ public class UserDaoImpl implements UserDao {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(100);
-            criteria.setIndexName("role_index");
+            // criteria.setIndexName("role_index"); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn("role", PrimaryKeyValue.fromString(role));
@@ -274,7 +275,7 @@ public class UserDaoImpl implements UserDao {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(100);
-            criteria.setIndexName("createdBy_index");
+            // criteria.setIndexName("createdBy_index"); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn("createdBy", PrimaryKeyValue.fromString(managerId));
@@ -369,11 +370,13 @@ public class UserDaoImpl implements UserDao {
             }
             
             // Add new notification to user's notifications map
-            java.util.Map<String, Object> notifications = user.getNotifications();
+            java.util.Map<String, Notification> notifications = user.getNotifications();
             if (notifications == null) {
                 notifications = new java.util.HashMap<>();
             }
-            notifications.put(notificationId, notification);
+            // Convert Map<String, Object> to Notification
+            Notification notificationObj = objectMapper.convertValue(notification, Notification.class);
+            notifications.put(notificationId, notificationObj);
             
             // Update user with new notifications
             PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();

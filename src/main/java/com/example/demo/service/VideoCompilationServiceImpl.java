@@ -73,21 +73,6 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
         }
     }
 
-    // TODO: Add subtitle burning to compiled video
-    // 
-    // Steps to implement:
-    // 1. Fetch template to get all scenes with subtitleSegments
-    // 2. Generate SRT file from subtitleSegments (use SubtitleSegment.toSrt())
-    // 3. Add FFmpeg subtitle filter: -vf "subtitles=subtitles.srt:force_style='FontSize=24,PrimaryColour=&HFFFFFF&'"
-    // 4. Consider: Make subtitle burning optional (manager toggle in UI?)
-    //
-    // Example FFmpeg command with subtitles:
-    // ffmpeg -f concat -i list.txt -vf "subtitles=subtitles.srt" -c:a copy output.mp4
-    //
-    // Benefits:
-    // - Final video has burned-in subtitles for social media
-    // - Viewers can read along with the video
-    // - Better accessibility
     private String ffmpegConcatAndUpload(List<String> sourceUrls, String destObject) throws Exception {
         // Generate signed URLs for OSS videos to avoid 403s
         List<String> signedUrls = new ArrayList<>();
@@ -355,13 +340,13 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
     public String compileVideoWithBGMAndSubtitles(String templateId, String userId, String compiledBy, List<String> bgmUrls, double bgmVolume, SubtitleBurningService.SubtitleOptions subtitleOptions) {
         try {
             String compositeVideoId = userId + "_" + templateId;
-            DocumentSnapshot videoSnap = db.collection("submittedVideos").document(compositeVideoId).get().get();
-            if (!videoSnap.exists()) {
+            com.example.demo.model.SubmittedVideo video = submittedVideoDao.findById(compositeVideoId);
+            if (video == null) {
                 throw new NoSuchElementException("submittedVideos not found: " + compositeVideoId);
             }
 
             // Gather sceneIds in numeric order from submittedVideos.scenes
-            Map<String, Object> scenesMap = (Map<String, Object>) videoSnap.get("scenes");
+            Map<String, Object> scenesMap = video.getScenes();
             if (scenesMap == null || scenesMap.isEmpty()) {
                 throw new IllegalStateException("No scenes to compile for: " + compositeVideoId);
             }

@@ -4,6 +4,7 @@ import com.example.demo.model.SubmittedVideo;
 import java.util.List;
 
 public interface SubmittedVideoDao {
+    String save(SubmittedVideo video);
     SubmittedVideo findById(String compositeVideoId);
     void update(SubmittedVideo video);
     List<SubmittedVideo> findByAssignmentIds(List<String> assignmentIds);

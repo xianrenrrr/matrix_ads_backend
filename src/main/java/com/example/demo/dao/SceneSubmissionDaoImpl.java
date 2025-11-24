@@ -136,7 +136,7 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(100);
-            criteria.setIndexName(indexName);
+            // criteria.setIndexName(indexName); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn(columnName, PrimaryKeyValue.fromString(value));
@@ -155,6 +155,32 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
             return results;
         } catch (Exception e) {
             throw new RuntimeException("Failed to query by index: " + indexName, e);
+        }
+    }
+    
+    private List<SceneSubmission> queryAllScenes() {
+        try {
+            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
+            criteria.setMaxVersions(1);
+            criteria.setLimit(1000); // Reasonable limit
+            
+            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            startKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MIN);
+            criteria.setInclusiveStartPrimaryKey(startKey.build());
+            
+            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            endKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MAX);
+            criteria.setExclusiveEndPrimaryKey(endKey.build());
+            
+            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
+            
+            List<SceneSubmission> results = new ArrayList<>();
+            for (Row row : response.getRows()) {
+                results.add(rowToSceneSubmission(row));
+            }
+            return results;
+        } catch (Exception e) {
+            return new ArrayList<>();
         }
     }
     
@@ -202,5 +228,223 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
                 throw new RuntimeException("Failed to serialize column: " + name, e);
             }
         }
+    }
+    
+    @Override
+    public void deleteScenesByUserId(String userId) {
+        List<SceneSubmission> scenes = findByUserId(userId);
+        for (SceneSubmission scene : scenes) {
+            delete(scene.getId());
+        }
+    }
+    
+    @Override
+    public void deleteScenesByTemplateId(String templateId) {
+        List<SceneSubmission> scenes = findByTemplateId(templateId);
+        for (SceneSubmission scene : scenes) {
+            delete(scene.getId());
+        }
+    }
+    
+    @Override
+    public List<SceneSubmission> findTopPerformingScenes(String templateId, int limit) {
+        List<SceneSubmission> scenes = findByTemplateId(templateId);
+        scenes.sort((a, b) -> {
+            Double scoreA = a.getSimilarityScore() != null ? a.getSimilarityScore() : 0.0;
+            Double scoreB = b.getSimilarityScore() != null ? b.getSimilarityScore() : 0.0;
+            return scoreB.compareTo(scoreA); // Descending order
+        });
+        return scenes.size() > limit ? scenes.subList(0, limit) : scenes;
+    }
+    
+    @Override
+    public double getAverageSimilarityScore(String templateId) {
+        List<SceneSubmission> scenes = findByTemplateId(templateId);
+        if (scenes.isEmpty()) return 0.0;
+        
+        double sum = 0.0;
+        int count = 0;
+        for (SceneSubmission scene : scenes) {
+            if (scene.getSimilarityScore() != null) {
+                sum += scene.getSimilarityScore();
+                count++;
+            }
+        }
+        return count > 0 ? sum / count : 0.0;
+    }
+    
+    @Override
+    public List<SceneSubmission> findSubmissionsByDateRange(java.util.Date startDate, java.util.Date endDate) {
+        // Query all and filter by date range
+        List<SceneSubmission> allScenes = queryAllScenes();
+        List<SceneSubmission> result = new ArrayList<>();
+        for (SceneSubmission scene : allScenes) {
+            if (scene.getSubmittedAt() != null) {
+                if ((startDate == null || !scene.getSubmittedAt().before(startDate)) &&
+                    (endDate == null || !scene.getSubmittedAt().after(endDate))) {
+                    result.add(scene);
+                }
+            }
+        }
+        return result;
+    }
+    
+    @Override
+    public List<SceneSubmission> getApprovedScenesInOrder(String templateId, String userId) {
+        List<SceneSubmission> scenes = findApprovedScenesByTemplateIdAndUserId(templateId, userId);
+        scenes.sort((a, b) -> Integer.compare(a.getSceneNumber(), b.getSceneNumber()));
+        return scenes;
+    }
+    
+    @Override
+    public boolean areAllScenesApproved(String templateId, String userId, int totalScenes) {
+        List<SceneSubmission> approved = findApprovedScenesByTemplateIdAndUserId(templateId, userId);
+        return approved.size() >= totalScenes;
+    }
+    
+    @Override
+    public SceneSubmission findLatestSubmissionForScene(String templateId, String userId, int sceneNumber) {
+        List<SceneSubmission> scenes = findByTemplateIdAndUserId(templateId, userId);
+        SceneSubmission latest = null;
+        for (SceneSubmission scene : scenes) {
+            if (scene.getSceneNumber() == sceneNumber) {
+                if (latest == null || (scene.getSubmittedAt() != null && 
+                    (latest.getSubmittedAt() == null || scene.getSubmittedAt().after(latest.getSubmittedAt())))) {
+                    latest = scene;
+                }
+            }
+        }
+        return latest;
+    }
+    
+    @Override
+    public List<SceneSubmission> findResubmissionHistory(String originalSceneId) {
+        SceneSubmission original = findById(originalSceneId);
+        if (original == null || original.getResubmissionHistory() == null) {
+            return new ArrayList<>();
+        }
+        
+        List<SceneSubmission> history = new ArrayList<>();
+        for (String sceneId : original.getResubmissionHistory()) {
+            SceneSubmission scene = findById(sceneId);
+            if (scene != null) {
+                history.add(scene);
+            }
+        }
+        return history;
+    }
+    
+    @Override
+    public List<SceneSubmission> findRecentSubmissions(int limit) {
+        List<SceneSubmission> allScenes = queryAllScenes();
+        allScenes.sort((a, b) -> {
+            if (a.getSubmittedAt() == null) return 1;
+            if (b.getSubmittedAt() == null) return -1;
+            return b.getSubmittedAt().compareTo(a.getSubmittedAt()); // Descending
+        });
+        return allScenes.size() > limit ? allScenes.subList(0, limit) : allScenes;
+    }
+    
+    @Override
+    public List<SceneSubmission> findSubmissionsByReviewer(String reviewerId) {
+        List<SceneSubmission> allScenes = queryAllScenes();
+        List<SceneSubmission> result = new ArrayList<>();
+        for (SceneSubmission scene : allScenes) {
+            if (reviewerId.equals(scene.getReviewedBy())) {
+                result.add(scene);
+            }
+        }
+        return result;
+    }
+    
+    @Override
+    public List<SceneSubmission> findPendingSubmissionsForReview() {
+        return findByStatus("pending");
+    }
+    
+    @Override
+    public int countRejectedScenesByTemplateIdAndUserId(String templateId, String userId) {
+        return findRejectedScenesByTemplateIdAndUserId(templateId, userId).size();
+    }
+    
+    @Override
+    public int countPendingScenesByTemplateIdAndUserId(String templateId, String userId) {
+        return findPendingScenesByTemplateIdAndUserId(templateId, userId).size();
+    }
+    
+    @Override
+    public int countApprovedScenesByTemplateIdAndUserId(String templateId, String userId) {
+        return findApprovedScenesByTemplateIdAndUserId(templateId, userId).size();
+    }
+    
+    @Override
+    public int countScenesByTemplateIdAndUserId(String templateId, String userId) {
+        return findByTemplateIdAndUserId(templateId, userId).size();
+    }
+    
+    @Override
+    public List<SceneSubmission> findRejectedScenesByTemplateIdAndUserId(String templateId, String userId) {
+        List<SceneSubmission> scenes = findByTemplateIdAndUserId(templateId, userId);
+        scenes.removeIf(s -> !"rejected".equals(s.getStatus()));
+        return scenes;
+    }
+    
+    @Override
+    public List<SceneSubmission> findPendingScenesByTemplateIdAndUserId(String templateId, String userId) {
+        List<SceneSubmission> scenes = findByTemplateIdAndUserId(templateId, userId);
+        scenes.removeIf(s -> !"pending".equals(s.getStatus()));
+        return scenes;
+    }
+    
+    @Override
+    public List<SceneSubmission> findApprovedScenesByTemplateIdAndUserId(String templateId, String userId) {
+        List<SceneSubmission> scenes = findByTemplateIdAndUserId(templateId, userId);
+        scenes.removeIf(s -> !"approved".equals(s.getStatus()));
+        return scenes;
+    }
+    
+    @Override
+    public SceneSubmission findByTemplateIdAndUserIdAndSceneNumber(String templateId, String userId, int sceneNumber) {
+        List<SceneSubmission> scenes = findByTemplateIdAndUserId(templateId, userId);
+        for (SceneSubmission scene : scenes) {
+            if (scene.getSceneNumber() == sceneNumber) {
+                return scene;
+            }
+        }
+        return null;
+    }
+    
+    @Override
+    public SceneSubmission uploadAndSaveScene(org.springframework.web.multipart.MultipartFile file, String assignmentId, String userId, int sceneNumber, String sceneTitle) throws Exception {
+        // Create scene submission object
+        SceneSubmission scene = new SceneSubmission();
+        scene.setId(UUID.randomUUID().toString());
+        scene.setTemplateId(assignmentId);  // templateId stores the assignment ID
+        scene.setUserId(userId);
+        scene.setSceneNumber(sceneNumber);
+        scene.setSceneTitle(sceneTitle);
+        scene.setStatus("pending");
+        scene.setSubmittedAt(new Date());
+        
+        // Upload video to OSS if storage service is available
+        if (ossStorageService != null) {
+            try {
+                String videoPath = "scenes/" + userId + "/" + assignmentId + "/scene_" + sceneNumber + "_" + scene.getId();
+                // Convert MultipartFile to InputStream and upload
+                String contentType = file.getContentType() != null ? file.getContentType() : "video/mp4";
+                String videoUrl = ossStorageService.uploadFile(file.getInputStream(), videoPath, contentType);
+                scene.setVideoUrl(videoUrl);
+                
+                // TODO: Extract thumbnail from video
+                // String thumbnailUrl = ossStorageService.extractThumbnail(videoUrl);
+                // scene.setThumbnailUrl(thumbnailUrl);
+            } catch (Exception e) {
+                throw new Exception("Failed to upload scene video: " + e.getMessage(), e);
+            }
+        }
+        
+        // Save to Tablestore
+        save(scene);
+        return scene;
     }
 }

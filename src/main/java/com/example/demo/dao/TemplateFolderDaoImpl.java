@@ -18,7 +18,7 @@ public class TemplateFolderDaoImpl implements TemplateFolderDao {
     private static final String TABLE_NAME = "templateFolders";
     
     @Override
-    public String create(TemplateFolder folder) {
+    public String createFolder(TemplateFolder folder) throws Exception {
         try {
             if (folder.getId() == null) {
                 folder.setId(UUID.randomUUID().toString());
@@ -47,7 +47,7 @@ public class TemplateFolderDaoImpl implements TemplateFolderDao {
     }
     
     @Override
-    public TemplateFolder findById(String id) {
+    public TemplateFolder getFolder(String id) throws Exception {
         try {
             PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(id));
@@ -68,12 +68,12 @@ public class TemplateFolderDaoImpl implements TemplateFolderDao {
     }
     
     @Override
-    public List<TemplateFolder> findByUserId(String userId) {
+    public List<TemplateFolder> getFoldersByUser(String userId) throws Exception {
         try {
             RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
             criteria.setMaxVersions(1);
             criteria.setLimit(100);
-            criteria.setIndexName("userId_index");
+            // criteria.setIndexName("userId_index"); // TODO: Tablestore SDK does not support setIndexName on RangeRowQueryCriteria
             
             PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
             startKey.addPrimaryKeyColumn("userId", PrimaryKeyValue.fromString(userId));
@@ -95,12 +95,36 @@ public class TemplateFolderDaoImpl implements TemplateFolderDao {
         }
     }
     
-    @Override
-    public void update(TemplateFolder folder) {
-        create(folder);
+    public List<TemplateFolder> getFoldersByParent(String parentId) throws Exception {
+        try {
+            // Query all folders and filter by parentId
+            RangeRowQueryCriteria criteria = new RangeRowQueryCriteria(TABLE_NAME);
+            criteria.setMaxVersions(1);
+            criteria.setLimit(1000);
+            
+            PrimaryKeyBuilder startKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            startKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MIN);
+            criteria.setInclusiveStartPrimaryKey(startKey.build());
+            
+            PrimaryKeyBuilder endKey = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            endKey.addPrimaryKeyColumn("id", PrimaryKeyValue.INF_MAX);
+            criteria.setExclusiveEndPrimaryKey(endKey.build());
+            
+            GetRangeResponse response = tablestoreClient.getRange(new GetRangeRequest(criteria));
+            
+            List<TemplateFolder> results = new ArrayList<>();
+            for (Row row : response.getRows()) {
+                TemplateFolder folder = rowToFolder(row);
+                if (folder != null && parentId.equals(folder.getParentId())) {
+                    results.add(folder);
+                }
+            }
+            return results;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to find folders by parent", e);
+        }
     }
     
-    @Override
     public void delete(String id) {
         try {
             PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
@@ -157,5 +181,24 @@ public class TemplateFolderDaoImpl implements TemplateFolderDao {
                 throw new RuntimeException("Failed to serialize column: " + name, e);
             }
         }
+    }
+    
+    @Override
+    public void deleteFolder(String folderId) throws Exception {
+        try {
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("id", PrimaryKeyValue.fromString(folderId));
+            
+            RowDeleteChange rowDeleteChange = new RowDeleteChange(TABLE_NAME, primaryKeyBuilder.build());
+            tablestoreClient.deleteRow(new DeleteRowRequest(rowDeleteChange));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to delete folder", e);
+        }
+    }
+    
+    @Override
+    public void updateFolder(com.example.demo.model.TemplateFolder folder) throws Exception {
+        // Reuse createFolder which does upsert
+        createFolder(folder);
     }
 }
