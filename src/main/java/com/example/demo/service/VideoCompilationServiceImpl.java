@@ -346,6 +346,9 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
     @Autowired
     private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
     
+    @Autowired(required = false)
+    private SubtitleAlignmentService subtitleAlignmentService;
+    
     @Override
     public String compileVideoWithSubtitles(String templateId, String userId, String compiledBy, SubtitleBurningService.SubtitleOptions subtitleOptions) {
         return compileVideoWithBGMAndSubtitles(templateId, userId, compiledBy, null, 0.0, subtitleOptions);
@@ -448,18 +451,68 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                 }
             }
             
-            // Generate SRT file from subtitleSegments
+            // Generate SRT file using ASR-aligned subtitles
             String srtPath = null;
             if (subtitleOptions != null && scenes != null && !scenes.isEmpty()) {
-                System.out.println("[Compile] 📋 Generating SRT from " + scenes.size() + " scenes");
-                for (int i = 0; i < scenes.size(); i++) {
+                System.out.println("[Compile] 📋 Generating ASR-aligned subtitles from " + scenes.size() + " scenes");
+                
+                // Use ASR alignment service to get accurate timing from user's recorded videos
+                List<com.example.demo.ai.subtitle.SubtitleSegment> allAlignedSegments = new ArrayList<>();
+                long cumulativeTimeMs = 0;
+                
+                for (int i = 0; i < scenes.size() && i < localVideoFiles.size(); i++) {
                     com.example.demo.model.Scene scene = scenes.get(i);
-                    int segmentCount = (scene.getSubtitleSegments() != null) ? scene.getSubtitleSegments().size() : 0;
-                    System.out.println("[Compile]   Scene " + (i+1) + ": " + segmentCount + " subtitle segments");
+                    java.io.File videoFile = localVideoFiles.get(i);
+                    
+                    System.out.println("[Compile]   Scene " + (i+1) + ": Running ASR alignment...");
+                    
+                    if (subtitleAlignmentService != null && scene.getScriptLine() != null && !scene.getScriptLine().isEmpty()) {
+                        try {
+                            // Run ASR alignment: combines template scriptLine (words) with ASR (timing)
+                            List<com.example.demo.ai.subtitle.SubtitleSegment> alignedSegments = 
+                                subtitleAlignmentService.generateAlignedSubtitles(scene, videoFile.getAbsolutePath(), cumulativeTimeMs);
+                            
+                            allAlignedSegments.addAll(alignedSegments);
+                            System.out.println("[Compile]     ✅ Got " + alignedSegments.size() + " aligned segments");
+                        } catch (Exception e) {
+                            System.err.println("[Compile]     ⚠️ ASR alignment failed, using template segments: " + e.getMessage());
+                            // Fallback to template subtitleSegments with time offset
+                            if (scene.getSubtitleSegments() != null) {
+                                for (com.example.demo.ai.subtitle.SubtitleSegment seg : scene.getSubtitleSegments()) {
+                                    allAlignedSegments.add(new com.example.demo.ai.subtitle.SubtitleSegment(
+                                        seg.getStartTimeMs() + cumulativeTimeMs,
+                                        seg.getEndTimeMs() + cumulativeTimeMs,
+                                        seg.getText(),
+                                        seg.getConfidence()
+                                    ));
+                                }
+                            }
+                        }
+                    } else {
+                        // No ASR service or no scriptLine, use template subtitleSegments
+                        System.out.println("[Compile]     Using template segments (no scriptLine or ASR unavailable)");
+                        if (scene.getSubtitleSegments() != null) {
+                            for (com.example.demo.ai.subtitle.SubtitleSegment seg : scene.getSubtitleSegments()) {
+                                allAlignedSegments.add(new com.example.demo.ai.subtitle.SubtitleSegment(
+                                    seg.getStartTimeMs() + cumulativeTimeMs,
+                                    seg.getEndTimeMs() + cumulativeTimeMs,
+                                    seg.getText(),
+                                    seg.getConfidence()
+                                ));
+                            }
+                        }
+                    }
+                    
+                    // Add this scene's duration to cumulative time
+                    cumulativeTimeMs += (long)(getVideoDurationFromFile(videoFile) * 1000);
                 }
-                srtPath = subtitleBurningService.generateSrtFile(scenes);
-                srtFile = new java.io.File(srtPath);
-                System.out.println("[Compile] ✅ Generated SRT file: " + srtPath);
+                
+                // Generate SRT from aligned segments
+                if (!allAlignedSegments.isEmpty()) {
+                    srtPath = generateSrtFromSegments(allAlignedSegments);
+                    srtFile = new java.io.File(srtPath);
+                    System.out.println("[Compile] ✅ Generated ASR-aligned SRT file: " + srtPath + " with " + allAlignedSegments.size() + " segments");
+                }
             } else {
                 System.out.println("[Compile] ⚠️ No SRT file generated:");
                 System.out.println("[Compile]   - subtitleOptions: " + (subtitleOptions != null ? "present" : "null"));
@@ -623,5 +676,26 @@ public class VideoCompilationServiceImpl implements VideoCompilationService {
                 try { videoFile.delete(); } catch (Exception ignored) {}
             }
         }
+    }
+    
+    /**
+     * Generate SRT file from a list of subtitle segments
+     * Used for ASR-aligned subtitles
+     */
+    private String generateSrtFromSegments(List<com.example.demo.ai.subtitle.SubtitleSegment> segments) throws Exception {
+        java.io.File srtFile = java.io.File.createTempFile("subtitles_aligned_", ".srt");
+        srtFile.deleteOnExit();
+        
+        try (java.io.FileWriter writer = new java.io.FileWriter(srtFile)) {
+            int sequenceNumber = 1;
+            for (com.example.demo.ai.subtitle.SubtitleSegment segment : segments) {
+                writer.write(segment.toSRT(sequenceNumber));
+                writer.write("\n");
+                sequenceNumber++;
+            }
+        }
+        
+        System.out.println("[Compile] Generated SRT with " + segments.size() + " segments: " + srtFile.getAbsolutePath());
+        return srtFile.getAbsolutePath();
     }
 }
