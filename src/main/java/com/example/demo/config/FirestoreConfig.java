@@ -18,6 +18,9 @@ public class FirestoreConfig {
     @Value("${firebase.service-account-key}")
     private String serviceAccountKeyPath;
     
+    @Value("${firestore.database-id:xpectra1}")
+    private String databaseId;
+    
     @Bean
     @DependsOn("firebaseApp")
     public Firestore getFirestore() throws IOException {
@@ -31,6 +34,17 @@ public class FirestoreConfig {
             throw new IllegalStateException("Firebase app not initialized. Check FirebaseConfig.");
         }
         
-        return FirestoreClient.getFirestore();
+        // Use specified database ID (default: xpectra1 in asia-southeast1)
+        // To use default database, set firestore.database-id=(default)
+        System.out.println("=== Connecting to Firestore ===");
+        System.out.println("Database ID: " + databaseId);
+        
+        if ("(default)".equals(databaseId) || databaseId == null || databaseId.isEmpty()) {
+            System.out.println("Using default Firestore database");
+            return FirestoreClient.getFirestore();
+        } else {
+            System.out.println("Using named Firestore database: " + databaseId);
+            return FirestoreClient.getFirestore(FirebaseApp.getInstance(), databaseId);
+        }
     }
 }
