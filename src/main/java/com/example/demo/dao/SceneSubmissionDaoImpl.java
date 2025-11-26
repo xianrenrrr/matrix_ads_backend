@@ -25,6 +25,9 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
     @Autowired(required = false)
     private com.example.demo.service.AlibabaOssStorageService ossStorageService;
     
+    @Autowired(required = false)
+    private com.example.demo.service.VideoTranscodingService videoTranscodingService;
+    
     @Override
     public String save(SceneSubmission sceneSubmission) throws ExecutionException, InterruptedException {
         CollectionReference collection = db.collection(COLLECTION_NAME);
@@ -305,10 +308,63 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
             throw new IllegalStateException("AlibabaOssStorageService not available");
         }
         
+        // Check if video needs transcoding for WeChat compatibility
+        java.io.File tempInputFile = null;
+        java.io.File transcodedFile = null;
+        org.springframework.web.multipart.MultipartFile fileToUpload = file;
+        
+        if (videoTranscodingService != null) {
+            try {
+                // Save to temp file for codec check
+                tempInputFile = java.io.File.createTempFile("scene_check_", ".mp4");
+                file.transferTo(tempInputFile);
+                
+                if (videoTranscodingService.needsTranscoding(tempInputFile)) {
+                    System.out.println("[SCENE-UPLOAD] Video needs transcoding for WeChat compatibility");
+                    transcodedFile = videoTranscodingService.transcodeIfNeeded(tempInputFile);
+                    
+                    if (transcodedFile != tempInputFile) {
+                        // Transcoding succeeded, use transcoded file
+                        System.out.println("[SCENE-UPLOAD] Using transcoded video: " + transcodedFile.length() + " bytes");
+                        final java.io.File finalTranscodedFile = transcodedFile;
+                        fileToUpload = new org.springframework.web.multipart.MultipartFile() {
+                            @Override public String getName() { return "file"; }
+                            @Override public String getOriginalFilename() { return file.getOriginalFilename(); }
+                            @Override public String getContentType() { return "video/mp4"; }
+                            @Override public boolean isEmpty() { return finalTranscodedFile.length() == 0; }
+                            @Override public long getSize() { return finalTranscodedFile.length(); }
+                            @Override public byte[] getBytes() throws java.io.IOException {
+                                return java.nio.file.Files.readAllBytes(finalTranscodedFile.toPath());
+                            }
+                            @Override public java.io.InputStream getInputStream() throws java.io.IOException {
+                                return new java.io.FileInputStream(finalTranscodedFile);
+                            }
+                            @Override public void transferTo(java.io.File dest) throws java.io.IOException {
+                                java.nio.file.Files.copy(finalTranscodedFile.toPath(), dest.toPath(), 
+                                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                            }
+                        };
+                    }
+                } else {
+                    System.out.println("[SCENE-UPLOAD] Video codec is WeChat compatible, no transcoding needed");
+                }
+            } catch (Exception e) {
+                System.err.println("[SCENE-UPLOAD] Transcoding check failed, using original: " + e.getMessage());
+            }
+        }
+        
         // Upload to OSS
         String sceneVideoId = UUID.randomUUID().toString();
         com.example.demo.service.AlibabaOssStorageService.UploadResult uploadResult = 
-            ossStorageService.uploadVideoWithThumbnail(file, userId, sceneVideoId);
+            ossStorageService.uploadVideoWithThumbnail(fileToUpload, userId, sceneVideoId);
+        
+        // Clean up temp files
+        if (tempInputFile != null && tempInputFile.exists()) {
+            tempInputFile.delete();
+        }
+        if (transcodedFile != null && transcodedFile != tempInputFile && transcodedFile.exists()) {
+            transcodedFile.delete();
+        }
         
         // Create scene submission
         SceneSubmission sceneSubmission = new SceneSubmission(assignmentId, userId, sceneNumber, sceneTitle);

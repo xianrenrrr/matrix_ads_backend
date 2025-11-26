@@ -106,6 +106,9 @@ public class VideoController {
     @Autowired
     private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
     
+    @Autowired
+    private com.example.demo.dao.ManagerSubmissionDao managerSubmissionDao;
+    
     @PostMapping("/{videoId}/publish")
     public ResponseEntity<ApiResponse<String>> publishVideo(
             @PathVariable String videoId, 
@@ -206,6 +209,17 @@ public class VideoController {
                        "publishedAt", com.google.cloud.firestore.FieldValue.serverTimestamp(), 
                        "publishedBy", publisherId,
                        "compiledVideoUrl", compiledVideoUrl);
+        
+        // Sync status to managerSubmissions
+        try {
+            com.example.demo.model.TemplateAssignment assignmentForSync = templateAssignmentDao.getAssignment(assignmentId);
+            if (assignmentForSync != null && assignmentForSync.getPushedBy() != null) {
+                managerSubmissionDao.updateSubmissionStatus(assignmentForSync.getPushedBy(), videoId, "published");
+                log.info("✅ Synced 'published' status to managerSubmissions for: {}", videoId);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to sync published status to managerSubmissions: {}", e.getMessage());
+        }
         
         // Send notification to creator
         com.google.cloud.firestore.DocumentReference userRef = db.collection("users").document(creatorId);

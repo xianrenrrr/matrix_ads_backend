@@ -33,6 +33,9 @@ public class ContentCreatorVideoController {
     @Autowired
     private com.example.demo.dao.SceneSubmissionDao sceneSubmissionDao;
     
+    @Autowired
+    private com.example.demo.dao.ManagerSubmissionDao managerSubmissionDao;
+    
     /**
      * Get user's pending assignments (待录制)
      * Returns templates that need recording:
@@ -337,6 +340,20 @@ public class ContentCreatorVideoController {
         updates.put("downloadedBy", userId);
         
         db.collection("submittedVideos").document(videoId).update(updates).get();
+        
+        // Sync status to managerSubmissions
+        try {
+            String assignmentId = videoDoc.getString("assignmentId");
+            if (assignmentId != null) {
+                com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
+                if (assignment != null && assignment.getPushedBy() != null) {
+                    managerSubmissionDao.updateSubmissionStatus(assignment.getPushedBy(), videoId, "downloaded");
+                    log.info("✅ Synced 'downloaded' status to managerSubmissions for: {}", videoId);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to sync downloaded status to managerSubmissions: {}", e.getMessage());
+        }
         
         log.info("✅ Video {} marked as downloaded", videoId);
         

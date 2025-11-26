@@ -1,6 +1,7 @@
 package com.example.demo.scheduler;
 
 import com.example.demo.dao.TemplateAssignmentDao;
+import com.example.demo.dao.ManagerSubmissionDao;
 import com.example.demo.model.TemplateAssignment;
 import com.example.demo.service.NotificationService;
 import org.slf4j.Logger;
@@ -23,6 +24,9 @@ public class TemplateAssignmentCleanupScheduler {
     @Autowired
     private TemplateAssignmentDao assignmentDao;
     
+    @Autowired
+    private ManagerSubmissionDao managerSubmissionDao;
+    
     @Autowired(required = false)
     private NotificationService notificationService;
     
@@ -41,20 +45,35 @@ public class TemplateAssignmentCleanupScheduler {
             
             for (TemplateAssignment assignment : expired) {
                 try {
+                    String managerId = assignment.getPushedBy();
+                    String assignmentId = assignment.getId();
+                    
+                    // Delete related submissions from managerSubmissions first
+                    if (managerId != null) {
+                        try {
+                            managerSubmissionDao.deleteByAssignmentId(managerId, assignmentId);
+                            logger.info("Deleted submissions for expired assignment: {} from manager: {}", 
+                                assignmentId, managerId);
+                        } catch (Exception e) {
+                            logger.warn("Failed to delete submissions for assignment: {} - {}", 
+                                assignmentId, e.getMessage());
+                        }
+                    }
+                    
                     // Delete expired assignment
-                    assignmentDao.deleteAssignment(assignment.getId());
+                    assignmentDao.deleteAssignment(assignmentId);
                     
                     // Notify manager if notification service is available
-                    if (notificationService != null && assignment.getPushedBy() != null) {
+                    if (notificationService != null && managerId != null) {
                         notificationService.notifyTemplateExpired(
-                            assignment.getPushedBy(),
+                            managerId,
                             assignment.getGroupId(),
                             assignment.getTemplateSnapshot().getTemplateTitle()
                         );
                     }
                     
                     logger.info("Deleted expired assignment: {} for group: {} (template: {})", 
-                        assignment.getId(), 
+                        assignmentId, 
                         assignment.getGroupId(),
                         assignment.getTemplateSnapshot().getTemplateTitle());
                         

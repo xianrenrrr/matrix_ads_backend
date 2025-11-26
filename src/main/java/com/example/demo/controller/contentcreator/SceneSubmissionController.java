@@ -49,6 +49,12 @@ public class SceneSubmissionController {
     
     @Autowired
     private com.example.demo.ai.services.KeyframeExtractionService keyframeExtractionService;
+    
+    @Autowired
+    private com.example.demo.dao.ManagerSubmissionDao managerSubmissionDao;
+    
+    @Autowired
+    private com.example.demo.dao.UserDao userDao;
 
     
     @PostMapping("/upload")
@@ -299,6 +305,9 @@ public class SceneSubmissionController {
         sceneData.put("sceneId", sceneSubmission.getId());
         sceneData.put("status", sceneSubmission.getStatus());
         
+        boolean isNewSubmission = !videoDoc.exists();
+        String publishStatus = "pending";
+        
         if (videoDoc.exists()) {
             Map<String, Object> currentScenes = (Map<String, Object>) videoDoc.get("scenes");
             if (currentScenes == null) currentScenes = new HashMap<>();
@@ -331,6 +340,7 @@ public class SceneSubmissionController {
             if (approvedScenes == templateTotalScenes && templateTotalScenes > 0) {
                 updates.put("publishStatus", "approved");
                 updates.put("approvedAt", FieldValue.serverTimestamp());
+                publishStatus = "approved";
             }
             
             videoDocRef.update(updates);
@@ -356,8 +366,77 @@ public class SceneSubmissionController {
             ));
             
             videoDocRef.set(videoData);
-            // Note: We don't update the original template's submittedVideos since we're using assignments now
         }
+        
+        // Save to managerSubmissions for fast manager page loading
+        try {
+            saveToManagerSubmissions(compositeVideoId, assignmentId, userId, sceneSubmission, publishStatus, isNewSubmission);
+        } catch (Exception e) {
+            log.error("Failed to save to managerSubmissions: {}", e.getMessage());
+            // Don't fail the main operation if this fails
+        }
+    }
+    
+    /**
+     * Save submission to managerSubmissions collection for fast manager page loading
+     */
+    private void saveToManagerSubmissions(String compositeVideoId, String assignmentId, String userId, 
+                                          SceneSubmission sceneSubmission, String publishStatus, boolean isNewSubmission) throws Exception {
+        // Get the assignment to find the manager (pushedBy)
+        com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
+        if (assignment == null || assignment.getPushedBy() == null) {
+            log.warn("Cannot save to managerSubmissions: assignment or pushedBy is null for assignmentId: {}", assignmentId);
+            return;
+        }
+        
+        String managerId = assignment.getPushedBy();
+        
+        // Get user info for enrichment
+        String uploaderName = null;
+        String uploaderCity = null;
+        try {
+            com.example.demo.model.User user = userDao.findById(userId);
+            if (user != null) {
+                uploaderName = user.getUsername();
+                uploaderCity = user.getCity();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get user info for submission: {}", e.getMessage());
+        }
+        
+        // Get template title from assignment snapshot
+        String templateTitle = null;
+        if (assignment.getTemplateSnapshot() != null) {
+            templateTitle = assignment.getTemplateSnapshot().getTemplateTitle();
+        }
+        
+        // Build submission data for manager view
+        Map<String, Object> submissionData = new HashMap<>();
+        submissionData.put("id", compositeVideoId);
+        submissionData.put("assignmentId", assignmentId);
+        submissionData.put("uploadedBy", userId);
+        submissionData.put("uploaderName", uploaderName);
+        submissionData.put("uploaderCity", uploaderCity);
+        submissionData.put("templateTitle", templateTitle);
+        submissionData.put("publishStatus", publishStatus);
+        submissionData.put("updatedAt", new Date());
+        
+        if (isNewSubmission) {
+            submissionData.put("createdAt", new Date());
+        }
+        
+        // Get thumbnail from scene submission
+        if (sceneSubmission.getThumbnailUrl() != null) {
+            try {
+                String signedThumbnail = sceneSubmissionDao.getSignedUrl(sceneSubmission.getThumbnailUrl());
+                submissionData.put("thumbnailUrl", signedThumbnail);
+            } catch (Exception e) {
+                submissionData.put("thumbnailUrl", sceneSubmission.getThumbnailUrl());
+            }
+        }
+        
+        managerSubmissionDao.saveSubmission(managerId, submissionData);
+        log.info("✅ Saved submission {} to managerSubmissions for manager {}", compositeVideoId, managerId);
     }
     
     private int getTemplateTotalScenes(String assignmentId) throws Exception {

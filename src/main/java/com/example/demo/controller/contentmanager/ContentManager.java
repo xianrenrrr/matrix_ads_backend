@@ -49,6 +49,9 @@ public class ContentManager {
     private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
     
     @Autowired
+    private com.example.demo.dao.ManagerSubmissionDao managerSubmissionDao;
+    
+    @Autowired
     private com.example.demo.ai.services.UnifiedSceneAnalysisService unifiedSceneAnalysisService;
     
     @Autowired
@@ -97,7 +100,7 @@ public class ContentManager {
         }
     }
     
-    // --- Submissions grouped by status ---
+    // --- Submissions grouped by status (OPTIMIZED using managerSubmissions) ---
     @GetMapping("/submissions")
     public ResponseEntity<ApiResponse<Map<String, List<Map<String, Object>>>>> getAllSubmissions(
             @RequestParam String managerId,
@@ -112,155 +115,27 @@ public class ContentManager {
             actualManagerId = user.getCreatedBy();
         }
         
-        // Get manager's groups and their assignment IDs
-        List<com.example.demo.model.Group> groups = groupDao.findByManagerId(actualManagerId);
-        Set<String> assignmentIds = new HashSet<>();
-        Set<String> memberIds = new HashSet<>();
+        // OPTIMIZED: Get pre-aggregated submissions from managerSubmissions collection
+        // This is a single query to managerSubmissions/{managerId}/submissions
+        // Data is already enriched with user info and template title at write time
+        List<Map<String, Object>> allSubmissions = managerSubmissionDao.getSubmissions(actualManagerId);
         
-        for (com.example.demo.model.Group group : groups) {
-            // Get active assignments for this group
-            try {
-                List<com.example.demo.model.TemplateAssignment> assignments = 
-                    templateAssignmentDao.getAssignmentsByGroup(group.getId());
-                for (com.example.demo.model.TemplateAssignment assignment : assignments) {
-                    if (!assignment.isExpired()) {
-                        assignmentIds.add(assignment.getId());
-                    }
-                }
-            } catch (Exception e) {
-                // Continue if assignment lookup fails
-            }
-            if (group.getMemberIds() != null) memberIds.addAll(group.getMemberIds());
-        }
-        
-        // Optimize: Query only relevant submissions using whereIn (Firestore limit: 10 items per whereIn)
-        // If more than 10 assignmentIds, we need to batch the queries
+        // Group submissions by status
         List<Map<String, Object>> pending = new ArrayList<>();
         List<Map<String, Object>> approved = new ArrayList<>();
         List<Map<String, Object>> published = new ArrayList<>();
         List<Map<String, Object>> rejected = new ArrayList<>();
         
-        if (assignmentIds.isEmpty()) {
-            // No assignments, return empty result
-            Map<String, List<Map<String, Object>>> result = new HashMap<>();
-            result.put("pending", pending);
-            result.put("approved", approved);
-            result.put("published", published);
-            result.put("rejected", rejected);
-            return ResponseEntity.ok(ApiResponse.ok(i18nService.getMessage("operation.success", language), result));
-        }
-        
-        // Firestore whereIn limit is 10, so batch if needed
-        List<String> assignmentIdList = new ArrayList<>(assignmentIds);
-        int batchSize = 10;
-        
-        for (int i = 0; i < assignmentIdList.size(); i += batchSize) {
-            List<String> batch = assignmentIdList.subList(i, Math.min(i + batchSize, assignmentIdList.size()));
-            
-            // Query with filter - MUCH faster than getting all submissions!
-            com.google.cloud.firestore.Query query = db.collection("submittedVideos")
-                .whereIn("assignmentId", batch);
-            
-            com.google.api.core.ApiFuture<com.google.cloud.firestore.QuerySnapshot> querySnapshot = query.get();
-            
-            for (com.google.cloud.firestore.DocumentSnapshot doc : querySnapshot.get().getDocuments()) {
-                Map<String, Object> data = doc.getData();
-                if (data == null) continue;
-                
-                String uploadedBy = (String) data.get("uploadedBy");
-                
-                // Filter by member (user must be in one of manager's groups)
-                if (!memberIds.contains(uploadedBy)) continue;
-                
-                // Add document ID for frontend use
-                data.put("id", doc.getId());
-                
-                // Enrich with user information
-                if (uploadedBy != null) {
-                    try {
-                        com.google.cloud.firestore.DocumentSnapshot userDoc = db.collection("users").document(uploadedBy).get().get();
-                        if (userDoc.exists()) {
-                            String username = userDoc.getString("username");
-                            String city = userDoc.getString("city");
-                            data.put("uploaderName", username);
-                            data.put("uploaderCity", city);
-                        }
-                    } catch (Exception e) {
-                        // Continue without user info if fetch fails
-                    }
-                }
-                
-                // Enrich with template information
-                String assignmentId = (String) data.get("assignmentId");
-                String templateId = (String) data.get("templateId");
-                ManualTemplate template = null;
-                if (assignmentId != null) {
-                    // NEW: Get template from assignment snapshot
-                    try {
-                        com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
-                        if (assignment != null) {
-                            template = assignment.getTemplateSnapshot();
-                        }
-                    } catch (Exception e) {
-                        // Continue without template info if fetch fails
-                    }
-                } else if (templateId != null) {
-                    // LEGACY: Get template directly
-                    try {
-                        template = templateDao.getTemplate(templateId);
-                    } catch (Exception e) {
-                        // Continue without template info if fetch fails
-                    }
-                }
-                
-                if (template != null) {
-                    data.put("templateTitle", template.getTemplateTitle());
-                }
-                
-                // Fetch thumbnail from first scene if not already present
-                if (!data.containsKey("thumbnailUrl") || data.get("thumbnailUrl") == null) {
-                    try {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> scenes = (Map<String, Object>) data.get("scenes");
-                        if (scenes != null && !scenes.isEmpty()) {
-                            // Get first scene's thumbnail
-                            Object firstSceneObj = scenes.values().iterator().next();
-                            if (firstSceneObj instanceof Map) {
-                                @SuppressWarnings("unchecked")
-                                Map<String, Object> firstScene = (Map<String, Object>) firstSceneObj;
-                                String sceneId = (String) firstScene.get("sceneId");
-                                if (sceneId != null) {
-                                    SceneSubmission sceneSubmission = sceneSubmissionDao.findById(sceneId);
-                                    if (sceneSubmission != null && sceneSubmission.getThumbnailUrl() != null) {
-                                        String thumbnailUrl = sceneSubmission.getThumbnailUrl();
-                                        // Generate signed URL for thumbnail
-                                        try {
-                                            String signedThumbnail = sceneSubmissionDao.getSignedUrl(thumbnailUrl);
-                                            data.put("thumbnailUrl", signedThumbnail);
-                                        } catch (Exception e) {
-                                            // Fallback to original URL if signing fails
-                                            data.put("thumbnailUrl", thumbnailUrl);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } catch (Exception e) {
-                        // Continue without thumbnail if fetch fails
-                    }
-                }
-                
-                String status = (String) data.getOrDefault("publishStatus", "pending");
-                if ("approved".equalsIgnoreCase(status)) {
-                    approved.add(data);
-                } else if ("published".equalsIgnoreCase(status) || "downloaded".equalsIgnoreCase(status)) {
-                    // Both published and downloaded go into published array
-                    published.add(data);
-                } else if ("rejected".equalsIgnoreCase(status)) {
-                    rejected.add(data);
-                } else {
-                    pending.add(data);
-                }
+        for (Map<String, Object> submission : allSubmissions) {
+            String status = (String) submission.getOrDefault("publishStatus", "pending");
+            if ("approved".equalsIgnoreCase(status)) {
+                approved.add(submission);
+            } else if ("published".equalsIgnoreCase(status) || "downloaded".equalsIgnoreCase(status)) {
+                published.add(submission);
+            } else if ("rejected".equalsIgnoreCase(status)) {
+                rejected.add(submission);
+            } else {
+                pending.add(submission);
             }
         }
         

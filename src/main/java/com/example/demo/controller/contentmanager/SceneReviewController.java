@@ -138,6 +138,9 @@ public class SceneReviewController {
                                 updates.put("publishStatus", "approved");
                                 updates.put("approvedAt", com.google.cloud.firestore.FieldValue.serverTimestamp());
                                 System.out.println("✅ All scenes approved! Updated publishStatus to 'approved' for video: " + compositeVideoId);
+                                
+                                // Sync status to managerSubmissions
+                                syncStatusToManagerSubmissions(assignmentId, compositeVideoId, "approved");
                             }
                         }
                         
@@ -150,8 +153,26 @@ public class SceneReviewController {
         }
     }
     
+    /**
+     * Sync submission status to managerSubmissions collection
+     */
+    private void syncStatusToManagerSubmissions(String assignmentId, String submissionId, String status) {
+        try {
+            com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
+            if (assignment != null && assignment.getPushedBy() != null) {
+                managerSubmissionDao.updateSubmissionStatus(assignment.getPushedBy(), submissionId, status);
+                System.out.println("✅ Synced status '" + status + "' to managerSubmissions for: " + submissionId);
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to sync status to managerSubmissions: " + e.getMessage());
+        }
+    }
+    
     @Autowired
     private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
+    
+    @Autowired
+    private com.example.demo.dao.ManagerSubmissionDao managerSubmissionDao;
     
     private int getTemplateTotalScenes(String assignmentId) throws Exception {
         // Get template from assignment snapshot

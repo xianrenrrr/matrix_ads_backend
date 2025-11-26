@@ -20,6 +20,9 @@ public class VideoDaoImpl implements VideoDao {
     @Autowired(required = false)
     private com.example.demo.service.AlibabaOssStorageService ossStorageService;
     
+    @Autowired(required = false)
+    private com.example.demo.service.VideoTranscodingService videoTranscodingService;
+    
     private void checkFirestore() {
         if (db == null) {
             throw new IllegalStateException("Firestore is not available in development mode. Please configure Firebase credentials or use a different data source.");
@@ -123,9 +126,63 @@ public class VideoDaoImpl implements VideoDao {
             System.out.println("[VIDEO-UPLOAD] Starting upload for videoId: " + videoId);
             System.out.println("[VIDEO-UPLOAD] File: " + file.getOriginalFilename() + ", Size: " + file.getSize() + " bytes");
             
+            // Check if video needs transcoding for WeChat compatibility
+            java.io.File tempInputFile = null;
+            java.io.File transcodedFile = null;
+            org.springframework.web.multipart.MultipartFile fileToUpload = file;
+            
+            if (videoTranscodingService != null) {
+                try {
+                    // Save to temp file for codec check
+                    tempInputFile = java.io.File.createTempFile("video_check_", ".mp4");
+                    file.transferTo(tempInputFile);
+                    
+                    if (videoTranscodingService.needsTranscoding(tempInputFile)) {
+                        System.out.println("[VIDEO-UPLOAD] Video needs transcoding for WeChat compatibility");
+                        transcodedFile = videoTranscodingService.transcodeIfNeeded(tempInputFile);
+                        
+                        if (transcodedFile != tempInputFile) {
+                            // Transcoding succeeded, use transcoded file
+                            System.out.println("[VIDEO-UPLOAD] Using transcoded video: " + transcodedFile.length() + " bytes");
+                            // Create a new MultipartFile from the transcoded file
+                            final java.io.File finalTranscodedFile = transcodedFile;
+                            fileToUpload = new org.springframework.web.multipart.MultipartFile() {
+                                @Override public String getName() { return "file"; }
+                                @Override public String getOriginalFilename() { return file.getOriginalFilename(); }
+                                @Override public String getContentType() { return "video/mp4"; }
+                                @Override public boolean isEmpty() { return finalTranscodedFile.length() == 0; }
+                                @Override public long getSize() { return finalTranscodedFile.length(); }
+                                @Override public byte[] getBytes() throws java.io.IOException {
+                                    return java.nio.file.Files.readAllBytes(finalTranscodedFile.toPath());
+                                }
+                                @Override public java.io.InputStream getInputStream() throws java.io.IOException {
+                                    return new java.io.FileInputStream(finalTranscodedFile);
+                                }
+                                @Override public void transferTo(java.io.File dest) throws java.io.IOException {
+                                    java.nio.file.Files.copy(finalTranscodedFile.toPath(), dest.toPath(), 
+                                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                                }
+                            };
+                        }
+                    } else {
+                        System.out.println("[VIDEO-UPLOAD] Video codec is WeChat compatible, no transcoding needed");
+                    }
+                } catch (Exception e) {
+                    System.err.println("[VIDEO-UPLOAD] Transcoding check failed, using original: " + e.getMessage());
+                }
+            }
+            
             com.example.demo.service.AlibabaOssStorageService.UploadResult uploadResult = 
-                ossStorageService.uploadVideoWithThumbnail(file, userId, videoId);
+                ossStorageService.uploadVideoWithThumbnail(fileToUpload, userId, videoId);
             System.out.println("[VIDEO-UPLOAD] ✅ Upload complete: " + uploadResult.videoUrl);
+            
+            // Clean up temp files
+            if (tempInputFile != null && tempInputFile.exists()) {
+                tempInputFile.delete();
+            }
+            if (transcodedFile != null && transcodedFile != tempInputFile && transcodedFile.exists()) {
+                transcodedFile.delete();
+            }
             
             // Now extract duration from the uploaded video using centralized OSS download
             long durationSeconds = 0;

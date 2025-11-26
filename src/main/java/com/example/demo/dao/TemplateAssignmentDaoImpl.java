@@ -21,6 +21,9 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
     @Autowired
     private Firestore db;
     
+    @Autowired
+    private ManagerSubmissionDao managerSubmissionDao;
+    
     private static final String COLLECTION_NAME = "templateAssignments";
     
     @Override
@@ -123,7 +126,21 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
     
     @Override
     public void deleteAssignment(String assignmentId) throws Exception {
+        // Get assignment first to find managerId for cleanup
+        TemplateAssignment assignment = getAssignment(assignmentId);
+        
+        // Delete the assignment
         db.collection(COLLECTION_NAME).document(assignmentId).delete().get();
+        
+        // Clean up related submissions from managerSubmissions
+        if (assignment != null && assignment.getPushedBy() != null) {
+            try {
+                managerSubmissionDao.deleteByAssignmentId(assignment.getPushedBy(), assignmentId);
+                System.out.println("[CASCADE] Deleted submissions for assignment: " + assignmentId + " from manager: " + assignment.getPushedBy());
+            } catch (Exception e) {
+                System.err.println("[CASCADE] Failed to delete submissions for assignment: " + assignmentId + " - " + e.getMessage());
+            }
+        }
     }
     
     @Override
@@ -146,9 +163,23 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
             .get()
             .get();
         
-        // Delete each assignment
+        // Delete each assignment and its related submissions
         for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
+            String assignmentId = doc.getId();
+            String managerId = doc.getString("pushedBy");
+            
+            // Delete the assignment
             doc.getReference().delete().get();
+            
+            // Clean up related submissions from managerSubmissions
+            if (managerId != null) {
+                try {
+                    managerSubmissionDao.deleteByAssignmentId(managerId, assignmentId);
+                    System.out.println("[CASCADE] Deleted submissions for assignment: " + assignmentId);
+                } catch (Exception e) {
+                    System.err.println("[CASCADE] Failed to delete submissions for assignment: " + assignmentId + " - " + e.getMessage());
+                }
+            }
         }
         
         System.out.println("[CASCADE] Deleted " + querySnapshot.size() + " assignments for template: " + templateId);
