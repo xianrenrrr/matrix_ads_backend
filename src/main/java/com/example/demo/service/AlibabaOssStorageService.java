@@ -113,6 +113,10 @@ public class AlibabaOssStorageService {
     
     /**
      * Upload video with thumbnail (matches Firebase interface)
+     * 
+     * NOTE: Uses getInputStream() instead of transferTo() to avoid Tomcat temp file issues
+     * on ephemeral filesystems like Render. The temp file can be cleaned up before
+     * transferTo() completes, causing FileNotFoundException.
      */
     public UploadResult uploadVideoWithThumbnail(MultipartFile file, String userId, String videoId) 
             throws IOException, InterruptedException {
@@ -121,11 +125,22 @@ public class AlibabaOssStorageService {
         java.io.File tempThumb = null;
         
         try {
-            // Save video to temp file FIRST (before consuming the stream)
+            // Save video to temp file using getInputStream() - more reliable than transferTo()
+            // transferTo() relies on Tomcat temp files which can be cleaned up on ephemeral filesystems
             tempVideo = java.io.File.createTempFile("upload-", ".mp4");
             System.out.println("[OSS] Saving video to temp file: " + tempVideo.getAbsolutePath());
-            file.transferTo(tempVideo);
-            System.out.println("[OSS] Video saved to temp file, size: " + tempVideo.length() + " bytes");
+            
+            try (java.io.InputStream inputStream = file.getInputStream();
+                 java.io.FileOutputStream outputStream = new java.io.FileOutputStream(tempVideo)) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                long totalBytes = 0;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                    totalBytes += bytesRead;
+                }
+                System.out.println("[OSS] Video saved to temp file, size: " + totalBytes + " bytes");
+            }
             
             // Upload video from temp file
             String videoObjectKey = String.format("videos/%s/%s/%s", userId, videoId, file.getOriginalFilename());
