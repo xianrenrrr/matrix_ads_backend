@@ -220,18 +220,12 @@ public class SubtitleAlignmentService {
         List<SubtitleSegment> segments = new ArrayList<>();
         
         try {
-            // Clean response
-            String cleanJson = response
-                .replaceAll("(?s)```json\\s*", "")
-                .replaceAll("(?s)```\\s*$", "")
-                .trim();
+            // Use centralized AI response fixer
+            String cleanJson = com.example.demo.ai.util.AIResponseFixer.cleanAndFixJson(response);
             
-            if (!cleanJson.startsWith("{")) {
-                int jsonStart = cleanJson.indexOf("{");
-                int jsonEnd = cleanJson.lastIndexOf("}");
-                if (jsonStart >= 0 && jsonEnd > jsonStart) {
-                    cleanJson = cleanJson.substring(jsonStart, jsonEnd + 1);
-                }
+            if (cleanJson == null) {
+                log.error("No JSON found in Qwen alignment response");
+                return segments;
             }
             
             Map<String, Object> result = objectMapper.readValue(cleanJson, new TypeReference<Map<String, Object>>() {});

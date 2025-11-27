@@ -242,8 +242,15 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                 return null;
             }
 
+            // Use centralized AI response fixer to clean JSON
+            String cleanJson = com.example.demo.ai.util.AIResponseFixer.cleanAndFixJson(contentStr);
+            if (cleanJson == null) {
+                System.err.println("[QWEN] cleanScriptLines: no valid JSON in response");
+                return null;
+            }
+
             // Parse JSON object
-            Map<String, Object> aiResult = objectMapper.readValue(contentStr, new TypeReference<Map<String,Object>>(){});
+            Map<String, Object> aiResult = objectMapper.readValue(cleanJson, new TypeReference<Map<String,Object>>(){});
             
             // Build scriptLines array with original ASR text as default
             List<String> scriptLines = new ArrayList<>();
@@ -367,8 +374,12 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             String contentStr = extractContent(bodyG);
             if (contentStr == null || contentStr.isBlank()) return null;
 
+            // Use centralized AI response fixer to clean JSON
+            String cleanJson = com.example.demo.ai.util.AIResponseFixer.cleanAndFixJson(contentStr);
+            if (cleanJson == null) return null;
+
             // Parse JSON object
-            return objectMapper.readValue(contentStr, new TypeReference<Map<String,Object>>(){});
+            return objectMapper.readValue(cleanJson, new TypeReference<Map<String,Object>>(){});
         } catch (Exception e) {
             return null;
         }
@@ -635,13 +646,17 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                 return out;
             }
 
-            // Parse enhanced JSON response
+            // Parse enhanced JSON response (use AI response fixer first)
             JsonNode root;
             String sceneAnalysis = null;
             boolean isValidJson = true;
             
+            // Try to fix common JSON issues before parsing
+            String cleanJson = com.example.demo.ai.util.AIResponseFixer.cleanAndFixJson(contentStr);
+            String jsonToParse = cleanJson != null ? cleanJson : contentStr;
+            
             try {
-                root = objectMapper.readTree(contentStr);
+                root = objectMapper.readTree(jsonToParse);
                 System.out.println("[QWEN] Parsed JSON - isObject: " + root.isObject() + ", isArray: " + root.isArray());
                 System.out.println("[QWEN] JSON structure: " + root.toString().substring(0, Math.min(300, root.toString().length())));
             } catch (Exception jsonEx) {
@@ -1208,15 +1223,15 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                 return null;
             }
             
-            // Strip markdown if present
-            if (contentStr.startsWith("```")) {
-                contentStr = contentStr.replaceFirst("^```(?:json)?\\s*", "");
-                contentStr = contentStr.replaceFirst("```\\s*$", "");
-                contentStr = contentStr.trim();
+            // Use centralized AI response fixer to clean JSON
+            String cleanJson = com.example.demo.ai.util.AIResponseFixer.cleanAndFixJson(contentStr);
+            if (cleanJson == null) {
+                System.err.println("[QWEN-SINGLE-BOX] Failed to extract valid JSON");
+                return null;
             }
             
             // Parse JSON
-            JsonNode root = objectMapper.readTree(contentStr);
+            JsonNode root = objectMapper.readTree(cleanJson);
             
             if (!root.has("found") || !root.get("found").asBoolean()) {
                 System.out.println("[QWEN-SINGLE-BOX] Object not found: " + objectName);

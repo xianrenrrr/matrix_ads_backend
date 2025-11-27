@@ -343,24 +343,12 @@ public class QwenSceneComparisonService {
      */
     private ComparisonResult parseDirectComparisonResult(String jsonResponse) {
         try {
-            // Clean JSON (remove code blocks if present)
-            String cleanJson = jsonResponse
-                .replaceAll("(?s)```json\\s*", "")
-                .replaceAll("(?s)```\\s*$", "")
-                .trim();
+            // Use centralized AI response fixer
+            String cleanJson = com.example.demo.ai.util.AIResponseFixer.cleanAndFixJson(jsonResponse);
             
-            // Try to extract JSON if it's embedded in text
-            if (!cleanJson.startsWith("{")) {
-                log.warn("[DIRECT-COMPARISON] Response doesn't start with JSON, attempting to extract...");
-                int jsonStart = cleanJson.indexOf("{");
-                int jsonEnd = cleanJson.lastIndexOf("}");
-                if (jsonStart >= 0 && jsonEnd > jsonStart) {
-                    cleanJson = cleanJson.substring(jsonStart, jsonEnd + 1);
-                    log.info("[DIRECT-COMPARISON] Extracted JSON from position {} to {}", jsonStart, jsonEnd);
-                } else {
-                    log.error("[DIRECT-COMPARISON] No JSON found in response, using fallback parsing");
-                    return parsePlainTextFallback(jsonResponse);
-                }
+            if (cleanJson == null) {
+                log.error("[DIRECT-COMPARISON] No JSON found in response, using fallback parsing");
+                return parsePlainTextFallback(jsonResponse);
             }
             
             com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(cleanJson);
