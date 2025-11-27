@@ -369,10 +369,12 @@ public class AlibabaOssStorageService {
     }
     
     /**
-     * Generate signed URL with default 15 minutes expiration
+     * Generate signed URL with default 7 days expiration
+     * Changed from 15 minutes to 7 days for better user experience
+     * (thumbnails and videos should remain accessible for reasonable time)
      */
     public String generateSignedUrl(String ossUrl) {
-        return generateSignedUrl(ossUrl, 15, TimeUnit.MINUTES);
+        return generateSignedUrl(ossUrl, 7, TimeUnit.DAYS);
     }
     
     /**

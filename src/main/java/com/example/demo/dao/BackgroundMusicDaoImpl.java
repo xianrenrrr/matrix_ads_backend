@@ -87,21 +87,38 @@ public class BackgroundMusicDaoImpl implements BackgroundMusicDao {
         // Generate BGM ID
         String bgmId = java.util.UUID.randomUUID().toString();
         
-        // Extract audio duration using FFprobe
-        long durationSeconds = extractAudioDuration(file);
+        // CRITICAL: Save multipart file to temp IMMEDIATELY using getInputStream()
+        // This avoids Tomcat temp file cleanup issues on ephemeral filesystems (Render)
+        String originalFilename = file.getOriginalFilename();
+        String suffix = originalFilename != null && originalFilename.contains(".") 
+            ? originalFilename.substring(originalFilename.lastIndexOf(".")) 
+            : ".mp3";
+        java.io.File tempFile = java.io.File.createTempFile("bgm-upload-", suffix);
         
-        // Upload to OSS
-        String objectName = String.format("bgm/%s/%s/%s", userId, bgmId, file.getOriginalFilename());
-        java.io.File tempFile = java.io.File.createTempFile("bgm-upload-", file.getOriginalFilename());
         try {
-            file.transferTo(tempFile);
-            String audioUrl = ossStorageService.uploadFile(tempFile, objectName, file.getContentType());
+            // Save to temp file first
+            try (java.io.InputStream inputStream = file.getInputStream();
+                 java.io.FileOutputStream outputStream = new java.io.FileOutputStream(tempFile)) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+            }
+            System.out.println("[BGM-UPLOAD] Saved multipart to temp: " + tempFile.length() + " bytes");
+            
+            // Extract audio duration using FFprobe (from temp file)
+            long durationSeconds = extractAudioDurationFromFile(tempFile);
+            
+            // Upload to OSS
+            String objectName = String.format("bgm/%s/%s/%s", userId, bgmId, originalFilename);
+            String audioUrl = ossStorageService.uploadFile(tempFile, objectName, contentType);
             
             // Create BGM record
             BackgroundMusic bgm = new BackgroundMusic();
             bgm.setId(bgmId);
             bgm.setUserId(userId);
-            bgm.setTitle(title != null && !title.isBlank() ? title : file.getOriginalFilename());
+            bgm.setTitle(title != null && !title.isBlank() ? title : originalFilename);
             bgm.setDescription(description);
             bgm.setAudioUrl(audioUrl);
             bgm.setDurationSeconds(durationSeconds);
@@ -110,44 +127,32 @@ public class BackgroundMusicDaoImpl implements BackgroundMusicDao {
             saveBackgroundMusic(bgm);
             return bgm;
         } finally {
-            tempFile.delete();
+            if (tempFile.exists()) {
+                tempFile.delete();
+            }
         }
     }
     
-    private long extractAudioDuration(org.springframework.web.multipart.MultipartFile file) throws Exception {
-        java.io.File tempAudio = java.io.File.createTempFile("bgm-", ".mp3");
+    /**
+     * Extract audio duration from a File using FFprobe
+     */
+    private long extractAudioDurationFromFile(java.io.File audioFile) throws Exception {
+        // Use FFprobe to get duration
+        ProcessBuilder pb = new ProcessBuilder(
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", audioFile.getAbsolutePath()
+        );
         
-        try {
-            // Copy file to temp location
-            try (java.io.InputStream is = file.getInputStream();
-                 java.io.FileOutputStream fos = new java.io.FileOutputStream(tempAudio)) {
-                byte[] buffer = new byte[8192];
-                int bytesRead;
-                while ((bytesRead = is.read(buffer)) != -1) {
-                    fos.write(buffer, 0, bytesRead);
-                }
-            }
-            
-            // Use FFprobe to get duration
-            ProcessBuilder pb = new ProcessBuilder(
-                "ffprobe", "-v", "error", "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1", tempAudio.getAbsolutePath()
-            );
-            
-            Process proc = pb.start();
-            java.io.BufferedReader reader = new java.io.BufferedReader(
-                new java.io.InputStreamReader(proc.getInputStream())
-            );
-            String durationStr = reader.readLine();
-            proc.waitFor();
-            
-            if (durationStr != null && !durationStr.isEmpty()) {
-                return (long) Double.parseDouble(durationStr);
-            }
-            return 0;
-            
-        } finally {
-            tempAudio.delete();
+        Process proc = pb.start();
+        java.io.BufferedReader reader = new java.io.BufferedReader(
+            new java.io.InputStreamReader(proc.getInputStream())
+        );
+        String durationStr = reader.readLine();
+        proc.waitFor();
+        
+        if (durationStr != null && !durationStr.isEmpty()) {
+            return (long) Double.parseDouble(durationStr);
         }
+        return 0;
     }
 }

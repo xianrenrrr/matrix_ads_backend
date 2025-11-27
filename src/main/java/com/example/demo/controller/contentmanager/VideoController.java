@@ -109,6 +109,9 @@ public class VideoController {
     @Autowired
     private com.example.demo.dao.ManagerSubmissionDao managerSubmissionDao;
     
+    @Autowired(required = false)
+    private com.example.demo.service.AlibabaOssStorageService ossStorageService;
+    
     @PostMapping("/{videoId}/publish")
     public ResponseEntity<ApiResponse<String>> publishVideo(
             @PathVariable String videoId, 
@@ -230,6 +233,21 @@ public class VideoController {
         notif.put("timestamp", System.currentTimeMillis());
         notif.put("read", false);
         userRef.update("notifications." + notifId, notif);
+        
+        // BGM DELETION: Clean up uploaded BGM files from OSS after compilation
+        // NOTE: Comment out this block if you want to reuse BGM files in the future
+        // Currently deleting to save storage costs since BGM is embedded in compiled video
+        if (bgmUrls != null && !bgmUrls.isEmpty() && ossStorageService != null) {
+            for (String bgmUrl : bgmUrls) {
+                try {
+                    boolean deleted = ossStorageService.deleteObjectByUrl(bgmUrl);
+                    log.info("[BGM-CLEANUP] Deleted BGM from OSS: {} (success: {})", bgmUrl, deleted);
+                } catch (Exception e) {
+                    log.warn("[BGM-CLEANUP] Failed to delete BGM: {} - {}", bgmUrl, e.getMessage());
+                }
+            }
+        }
+        
         String message = i18nService.getMessage("operation.success", language);
         return ResponseEntity.ok(ApiResponse.ok(message, "Video compiled and published successfully."));
     }

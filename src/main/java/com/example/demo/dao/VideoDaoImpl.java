@@ -126,29 +126,61 @@ public class VideoDaoImpl implements VideoDao {
             System.out.println("[VIDEO-UPLOAD] Starting upload for videoId: " + videoId);
             System.out.println("[VIDEO-UPLOAD] File: " + file.getOriginalFilename() + ", Size: " + file.getSize() + " bytes");
             
+            // CRITICAL: Save multipart file to temp IMMEDIATELY using getInputStream()
+            // This avoids Tomcat temp file cleanup issues on ephemeral filesystems (Render)
+            java.io.File tempInputFile = java.io.File.createTempFile("video_upload_", ".mp4");
+            try (java.io.InputStream inputStream = file.getInputStream();
+                 java.io.FileOutputStream outputStream = new java.io.FileOutputStream(tempInputFile)) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+            }
+            System.out.println("[VIDEO-UPLOAD] Saved multipart to temp: " + tempInputFile.length() + " bytes");
+            
             // Check if video needs transcoding for WeChat compatibility
-            java.io.File tempInputFile = null;
             java.io.File transcodedFile = null;
-            org.springframework.web.multipart.MultipartFile fileToUpload = file;
+            org.springframework.web.multipart.MultipartFile fileToUpload = null;
+            
+            // Create a MultipartFile wrapper for the temp file (used if no transcoding needed)
+            final java.io.File savedTempFile = tempInputFile;
+            final String originalFilename = file.getOriginalFilename();
+            final String contentType = file.getContentType();
+            org.springframework.web.multipart.MultipartFile tempFileWrapper = new org.springframework.web.multipart.MultipartFile() {
+                @Override public String getName() { return "file"; }
+                @Override public String getOriginalFilename() { return originalFilename; }
+                @Override public String getContentType() { return contentType != null ? contentType : "video/mp4"; }
+                @Override public boolean isEmpty() { return savedTempFile.length() == 0; }
+                @Override public long getSize() { return savedTempFile.length(); }
+                @Override public byte[] getBytes() throws java.io.IOException {
+                    return java.nio.file.Files.readAllBytes(savedTempFile.toPath());
+                }
+                @Override public java.io.InputStream getInputStream() throws java.io.IOException {
+                    return new java.io.FileInputStream(savedTempFile);
+                }
+                @Override public void transferTo(java.io.File dest) throws java.io.IOException {
+                    java.nio.file.Files.copy(savedTempFile.toPath(), dest.toPath(), 
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+            };
+            fileToUpload = tempFileWrapper;
             
             if (videoTranscodingService != null) {
                 try {
-                    // Save to temp file for codec check
-                    tempInputFile = java.io.File.createTempFile("video_check_", ".mp4");
-                    file.transferTo(tempInputFile);
                     
                     if (videoTranscodingService.needsTranscoding(tempInputFile)) {
                         System.out.println("[VIDEO-UPLOAD] Video needs transcoding for WeChat compatibility");
                         transcodedFile = videoTranscodingService.transcodeIfNeeded(tempInputFile);
                         
-                        if (transcodedFile != tempInputFile) {
+                        if (transcodedFile != null && !transcodedFile.equals(tempInputFile)) {
                             // Transcoding succeeded, use transcoded file
                             System.out.println("[VIDEO-UPLOAD] Using transcoded video: " + transcodedFile.length() + " bytes");
                             // Create a new MultipartFile from the transcoded file
                             final java.io.File finalTranscodedFile = transcodedFile;
                             fileToUpload = new org.springframework.web.multipart.MultipartFile() {
                                 @Override public String getName() { return "file"; }
-                                @Override public String getOriginalFilename() { return file.getOriginalFilename(); }
+                                @Override public String getOriginalFilename() { return originalFilename; }
                                 @Override public String getContentType() { return "video/mp4"; }
                                 @Override public boolean isEmpty() { return finalTranscodedFile.length() == 0; }
                                 @Override public long getSize() { return finalTranscodedFile.length(); }
