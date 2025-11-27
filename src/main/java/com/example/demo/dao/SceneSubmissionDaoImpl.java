@@ -386,6 +386,41 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
             }
         }
         
+        // Check for existing submission (resubmission case)
+        SceneSubmission existingSubmission = null;
+        try {
+            existingSubmission = findByTemplateIdAndUserIdAndSceneNumber(assignmentId, userId, sceneNumber);
+        } catch (Exception e) {
+            System.err.println("[SCENE-UPLOAD] Error checking for existing submission: " + e.getMessage());
+        }
+        
+        // If resubmitting, delete old video and thumbnail from OSS
+        if (existingSubmission != null) {
+            System.out.println("[SCENE-UPLOAD] Found existing submission, handling resubmission...");
+            System.out.println("[SCENE-UPLOAD] Previous submission ID: " + existingSubmission.getId());
+            System.out.println("[SCENE-UPLOAD] Previous resubmission count: " + existingSubmission.getResubmissionCount());
+            
+            // Delete old video from OSS
+            if (existingSubmission.getVideoUrl() != null) {
+                try {
+                    boolean deleted = ossStorageService.deleteObjectByUrl(existingSubmission.getVideoUrl());
+                    System.out.println("[SCENE-UPLOAD] Deleted old video from OSS: " + deleted);
+                } catch (Exception e) {
+                    System.err.println("[SCENE-UPLOAD] Failed to delete old video: " + e.getMessage());
+                }
+            }
+            
+            // Delete old thumbnail from OSS
+            if (existingSubmission.getThumbnailUrl() != null) {
+                try {
+                    boolean deleted = ossStorageService.deleteObjectByUrl(existingSubmission.getThumbnailUrl());
+                    System.out.println("[SCENE-UPLOAD] Deleted old thumbnail from OSS: " + deleted);
+                } catch (Exception e) {
+                    System.err.println("[SCENE-UPLOAD] Failed to delete old thumbnail: " + e.getMessage());
+                }
+            }
+        }
+        
         // Upload to OSS
         String sceneVideoId = UUID.randomUUID().toString();
         com.example.demo.service.AlibabaOssStorageService.UploadResult uploadResult = 
@@ -399,20 +434,42 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
             transcodedFile.delete();
         }
         
-        // Create scene submission
-        SceneSubmission sceneSubmission = new SceneSubmission(assignmentId, userId, sceneNumber, sceneTitle);
-        sceneSubmission.setVideoUrl(uploadResult.videoUrl);
-        sceneSubmission.setThumbnailUrl(uploadResult.thumbnailUrl);
-        sceneSubmission.setOriginalFileName(file.getOriginalFilename());
-        sceneSubmission.setFileSize(file.getSize());
-        sceneSubmission.setFormat(getFileExtension(file.getOriginalFilename()));
-        sceneSubmission.setSimilarityScore(-1.0);
-        sceneSubmission.setAiSuggestions(Arrays.asList("AI分析进行中...", "请稍后查看结果"));
-        sceneSubmission.setStatus("pending");
-        
-        // Save to database
-        String sceneId = save(sceneSubmission);
-        sceneSubmission.setId(sceneId);
+        // Create or update scene submission
+        SceneSubmission sceneSubmission;
+        if (existingSubmission != null) {
+            // Resubmission: update existing record
+            sceneSubmission = existingSubmission;
+            sceneSubmission.incrementResubmissionCount();
+            sceneSubmission.setVideoUrl(uploadResult.videoUrl);
+            sceneSubmission.setThumbnailUrl(uploadResult.thumbnailUrl);
+            sceneSubmission.setOriginalFileName(file.getOriginalFilename());
+            sceneSubmission.setFileSize(file.getSize());
+            sceneSubmission.setFormat(getFileExtension(file.getOriginalFilename()));
+            sceneSubmission.setSimilarityScore(-1.0);  // Reset for new AI analysis
+            sceneSubmission.setAiSuggestions(Arrays.asList("AI分析进行中...", "请稍后查看结果"));
+            sceneSubmission.setStatus("pending");  // Reset to pending
+            sceneSubmission.setSubmittedAt(new Date());  // Update submission time
+            
+            // Update in database
+            update(sceneSubmission);
+            System.out.println("[SCENE-UPLOAD] ✅ Updated existing submission (resubmission #" + sceneSubmission.getResubmissionCount() + ")");
+        } else {
+            // New submission
+            sceneSubmission = new SceneSubmission(assignmentId, userId, sceneNumber, sceneTitle);
+            sceneSubmission.setVideoUrl(uploadResult.videoUrl);
+            sceneSubmission.setThumbnailUrl(uploadResult.thumbnailUrl);
+            sceneSubmission.setOriginalFileName(file.getOriginalFilename());
+            sceneSubmission.setFileSize(file.getSize());
+            sceneSubmission.setFormat(getFileExtension(file.getOriginalFilename()));
+            sceneSubmission.setSimilarityScore(-1.0);
+            sceneSubmission.setAiSuggestions(Arrays.asList("AI分析进行中...", "请稍后查看结果"));
+            sceneSubmission.setStatus("pending");
+            
+            // Save to database
+            String sceneId = save(sceneSubmission);
+            sceneSubmission.setId(sceneId);
+            System.out.println("[SCENE-UPLOAD] ✅ Created new submission: " + sceneId);
+        }
         
         return sceneSubmission;
     }
