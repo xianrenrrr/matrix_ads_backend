@@ -24,11 +24,14 @@ public class VideoTranscodingService {
     
     /**
      * Check if video needs transcoding for WeChat compatibility
-     * Returns true if video uses unsupported codec
+     * Returns true if video uses unsupported codec or non-baseline H.264
+     * 
+     * IMPORTANT: Android WeChat is very strict - it requires H.264 baseline profile.
+     * Even H.264 main/high profiles can fail on some Android devices.
      */
     public boolean needsTranscoding(File videoFile) {
         try {
-            // Use ffprobe to check video codec
+            // Use ffprobe to check video codec AND profile
             ProcessBuilder pb = new ProcessBuilder(
                 "ffprobe", "-v", "error",
                 "-select_streams", "v:0",
@@ -49,26 +52,31 @@ public class VideoTranscodingService {
             
             log.info("Video codec info: {}", codecInfo);
             
-            // Check if codec is WeChat compatible
-            // WeChat supports: h264 (baseline, main, high profiles)
-            // WeChat does NOT fully support: hevc/h265, vp9, av1
             String lowerCodec = codecInfo.toLowerCase();
             
+            // Always transcode non-H.264 codecs
             if (lowerCodec.contains("hevc") || lowerCodec.contains("h265") || 
                 lowerCodec.contains("vp9") || lowerCodec.contains("av1")) {
                 log.info("Video uses unsupported codec ({}), needs transcoding", codecInfo);
                 return true;
             }
             
-            // H.264 high profile can sometimes cause issues on older devices
-            if (lowerCodec.contains("h264") && lowerCodec.contains("high")) {
-                log.info("Video uses H.264 High profile, may need transcoding for compatibility");
-                // For now, don't transcode high profile - most devices support it
-                return false;
+            // For H.264, check if it's baseline profile
+            // Android WeChat requires baseline profile for reliable playback
+            if (lowerCodec.contains("h264")) {
+                // If profile info is available, check if it's baseline
+                if (lowerCodec.contains("baseline") || lowerCodec.contains("constrained baseline")) {
+                    log.info("Video is H.264 baseline profile, no transcoding needed");
+                    return false;
+                }
+                // Main, High, or unknown profile - transcode to baseline for Android compatibility
+                log.info("Video is H.264 but not baseline profile ({}), transcoding for Android compatibility", codecInfo);
+                return true;
             }
             
-            log.info("Video codec is WeChat compatible: {}", codecInfo);
-            return false;
+            // Unknown codec - transcode to be safe
+            log.info("Unknown video codec ({}), transcoding to be safe", codecInfo);
+            return true;
             
         } catch (Exception e) {
             log.error("Error checking video codec: {}", e.getMessage());
