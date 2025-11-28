@@ -183,8 +183,8 @@ public class VideoDaoImpl implements VideoDao {
                     String jobId = cloudTranscodingService.submitTranscodeJob(ossPath, transcodedPath);
                     
                     if (jobId != null) {
-                        // Wait for transcoding to complete (max 60 seconds for short videos)
-                        boolean success = cloudTranscodingService.waitForJob(jobId, 60);
+                        // Wait for transcoding to complete (max 180 seconds - MPS typically takes 60-90s)
+                        boolean success = cloudTranscodingService.waitForJob(jobId, 180);
                         if (success) {
                             // Update URL to transcoded version
                             String transcodedUrl = uploadResult.videoUrl.replace(".mp4", "_transcoded.mp4");
