@@ -25,9 +25,6 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
     @Autowired(required = false)
     private com.example.demo.service.AlibabaOssStorageService ossStorageService;
     
-    @Autowired(required = false)
-    private com.example.demo.service.VideoTranscodingService videoTranscodingService;
-    
     @Override
     public String save(SceneSubmission sceneSubmission) throws ExecutionException, InterruptedException {
         CollectionReference collection = db.collection(COLLECTION_NAME);
@@ -322,15 +319,13 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
         }
         System.out.println("[SCENE-UPLOAD] Saved multipart to temp: " + tempInputFile.length() + " bytes");
         
-        // Check if video needs transcoding for WeChat compatibility
-        java.io.File transcodedFile = null;
-        org.springframework.web.multipart.MultipartFile fileToUpload = null;
-        
-        // Create a MultipartFile wrapper for the temp file (used if no transcoding needed)
+        // Create a MultipartFile wrapper for the temp file
+        // NOTE: FFmpeg transcoding removed to avoid OOM on Render (512MB limit)
+        // Android/HarmonyOS mini-app uses wx.downloadFile() workaround for playback
         final java.io.File savedTempFile = tempInputFile;
         final String originalFilename = file.getOriginalFilename();
         final String contentType = file.getContentType();
-        org.springframework.web.multipart.MultipartFile tempFileWrapper = new org.springframework.web.multipart.MultipartFile() {
+        org.springframework.web.multipart.MultipartFile fileToUpload = new org.springframework.web.multipart.MultipartFile() {
             @Override public String getName() { return "file"; }
             @Override public String getOriginalFilename() { return originalFilename; }
             @Override public String getContentType() { return contentType != null ? contentType : "video/mp4"; }
@@ -347,44 +342,6 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
                     java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
         };
-        fileToUpload = tempFileWrapper;
-        
-        if (videoTranscodingService != null) {
-            try {
-                
-                if (videoTranscodingService.needsTranscoding(tempInputFile)) {
-                    System.out.println("[SCENE-UPLOAD] Video needs transcoding for WeChat compatibility");
-                    transcodedFile = videoTranscodingService.transcodeIfNeeded(tempInputFile);
-                    
-                    if (transcodedFile != null && !transcodedFile.equals(tempInputFile)) {
-                        // Transcoding succeeded, use transcoded file
-                        System.out.println("[SCENE-UPLOAD] Using transcoded video: " + transcodedFile.length() + " bytes");
-                        final java.io.File finalTranscodedFile = transcodedFile;
-                        fileToUpload = new org.springframework.web.multipart.MultipartFile() {
-                            @Override public String getName() { return "file"; }
-                            @Override public String getOriginalFilename() { return originalFilename; }
-                            @Override public String getContentType() { return "video/mp4"; }
-                            @Override public boolean isEmpty() { return finalTranscodedFile.length() == 0; }
-                            @Override public long getSize() { return finalTranscodedFile.length(); }
-                            @Override public byte[] getBytes() throws java.io.IOException {
-                                return java.nio.file.Files.readAllBytes(finalTranscodedFile.toPath());
-                            }
-                            @Override public java.io.InputStream getInputStream() throws java.io.IOException {
-                                return new java.io.FileInputStream(finalTranscodedFile);
-                            }
-                            @Override public void transferTo(java.io.File dest) throws java.io.IOException {
-                                java.nio.file.Files.copy(finalTranscodedFile.toPath(), dest.toPath(), 
-                                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                            }
-                        };
-                    }
-                } else {
-                    System.out.println("[SCENE-UPLOAD] Video codec is WeChat compatible, no transcoding needed");
-                }
-            } catch (Exception e) {
-                System.err.println("[SCENE-UPLOAD] Transcoding check failed, using original: " + e.getMessage());
-            }
-        }
         
         // Check for existing submission (resubmission case)
         SceneSubmission existingSubmission = null;
@@ -426,12 +383,9 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
         com.example.demo.service.AlibabaOssStorageService.UploadResult uploadResult = 
             ossStorageService.uploadVideoWithThumbnail(fileToUpload, userId, sceneVideoId);
         
-        // Clean up temp files
+        // Clean up temp file
         if (tempInputFile != null && tempInputFile.exists()) {
             tempInputFile.delete();
-        }
-        if (transcodedFile != null && transcodedFile != tempInputFile && transcodedFile.exists()) {
-            transcodedFile.delete();
         }
         
         // Create or update scene submission

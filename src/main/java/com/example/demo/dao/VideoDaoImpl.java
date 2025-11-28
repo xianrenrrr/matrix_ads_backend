@@ -20,9 +20,6 @@ public class VideoDaoImpl implements VideoDao {
     @Autowired(required = false)
     private com.example.demo.service.AlibabaOssStorageService ossStorageService;
     
-    @Autowired(required = false)
-    private com.example.demo.service.VideoTranscodingService videoTranscodingService;
-    
     private void checkFirestore() {
         if (db == null) {
             throw new IllegalStateException("Firestore is not available in development mode. Please configure Firebase credentials or use a different data source.");
@@ -139,15 +136,13 @@ public class VideoDaoImpl implements VideoDao {
             }
             System.out.println("[VIDEO-UPLOAD] Saved multipart to temp: " + tempInputFile.length() + " bytes");
             
-            // Check if video needs transcoding for WeChat compatibility
-            java.io.File transcodedFile = null;
-            org.springframework.web.multipart.MultipartFile fileToUpload = null;
-            
-            // Create a MultipartFile wrapper for the temp file (used if no transcoding needed)
+            // Create a MultipartFile wrapper for the temp file
+            // NOTE: FFmpeg transcoding removed to avoid OOM on Render (512MB limit)
+            // Android/HarmonyOS mini-app uses wx.downloadFile() workaround for playback
             final java.io.File savedTempFile = tempInputFile;
             final String originalFilename = file.getOriginalFilename();
             final String contentType = file.getContentType();
-            org.springframework.web.multipart.MultipartFile tempFileWrapper = new org.springframework.web.multipart.MultipartFile() {
+            org.springframework.web.multipart.MultipartFile fileToUpload = new org.springframework.web.multipart.MultipartFile() {
                 @Override public String getName() { return "file"; }
                 @Override public String getOriginalFilename() { return originalFilename; }
                 @Override public String getContentType() { return contentType != null ? contentType : "video/mp4"; }
@@ -164,56 +159,14 @@ public class VideoDaoImpl implements VideoDao {
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 }
             };
-            fileToUpload = tempFileWrapper;
-            
-            if (videoTranscodingService != null) {
-                try {
-                    
-                    if (videoTranscodingService.needsTranscoding(tempInputFile)) {
-                        System.out.println("[VIDEO-UPLOAD] Video needs transcoding for WeChat compatibility");
-                        transcodedFile = videoTranscodingService.transcodeIfNeeded(tempInputFile);
-                        
-                        if (transcodedFile != null && !transcodedFile.equals(tempInputFile)) {
-                            // Transcoding succeeded, use transcoded file
-                            System.out.println("[VIDEO-UPLOAD] Using transcoded video: " + transcodedFile.length() + " bytes");
-                            // Create a new MultipartFile from the transcoded file
-                            final java.io.File finalTranscodedFile = transcodedFile;
-                            fileToUpload = new org.springframework.web.multipart.MultipartFile() {
-                                @Override public String getName() { return "file"; }
-                                @Override public String getOriginalFilename() { return originalFilename; }
-                                @Override public String getContentType() { return "video/mp4"; }
-                                @Override public boolean isEmpty() { return finalTranscodedFile.length() == 0; }
-                                @Override public long getSize() { return finalTranscodedFile.length(); }
-                                @Override public byte[] getBytes() throws java.io.IOException {
-                                    return java.nio.file.Files.readAllBytes(finalTranscodedFile.toPath());
-                                }
-                                @Override public java.io.InputStream getInputStream() throws java.io.IOException {
-                                    return new java.io.FileInputStream(finalTranscodedFile);
-                                }
-                                @Override public void transferTo(java.io.File dest) throws java.io.IOException {
-                                    java.nio.file.Files.copy(finalTranscodedFile.toPath(), dest.toPath(), 
-                                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                                }
-                            };
-                        }
-                    } else {
-                        System.out.println("[VIDEO-UPLOAD] Video codec is WeChat compatible, no transcoding needed");
-                    }
-                } catch (Exception e) {
-                    System.err.println("[VIDEO-UPLOAD] Transcoding check failed, using original: " + e.getMessage());
-                }
-            }
             
             com.example.demo.service.AlibabaOssStorageService.UploadResult uploadResult = 
                 ossStorageService.uploadVideoWithThumbnail(fileToUpload, userId, videoId);
             System.out.println("[VIDEO-UPLOAD] ✅ Upload complete: " + uploadResult.videoUrl);
             
-            // Clean up temp files
+            // Clean up temp file
             if (tempInputFile != null && tempInputFile.exists()) {
                 tempInputFile.delete();
-            }
-            if (transcodedFile != null && transcodedFile != tempInputFile && transcodedFile.exists()) {
-                transcodedFile.delete();
             }
             
             // Now extract duration from the uploaded video using centralized OSS download

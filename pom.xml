@@ -79,6 +79,8 @@
     <version>1.12.1</version>
   </dependency>
   
+
+    
   <!-- Alibaba Cloud Video Recognition SDK (Tea SDK) for shot detection -->
        <dependency>
     <groupId>com.aliyun</groupId>
