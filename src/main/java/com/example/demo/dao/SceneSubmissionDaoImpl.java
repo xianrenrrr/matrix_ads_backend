@@ -388,6 +388,24 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
             tempInputFile.delete();
         }
         
+        // NOTE: Cloud transcoding for user scene uploads is DISABLED
+        // Reasons:
+        // 1. User uploads are frequent and transcoding adds latency + cost
+        // 2. The Android mini-app download workaround handles playback issues
+        // 3. Scene videos are short clips, less likely to have codec issues
+        //
+        // To enable in the future, uncomment and inject CloudTranscodingService:
+        // if (cloudTranscodingService != null && cloudTranscodingService.isEnabled()) {
+        //     String ossPath = extractOssPath(uploadResult.videoUrl);
+        //     String transcodedPath = ossPath.replace(".mp4", "_transcoded.mp4");
+        //     String jobId = cloudTranscodingService.submitTranscodeJob(ossPath, transcodedPath);
+        //     if (jobId != null && cloudTranscodingService.waitForJob(jobId, 60)) {
+        //         uploadResult = new UploadResult(
+        //             uploadResult.videoUrl.replace(".mp4", "_transcoded.mp4"),
+        //             uploadResult.thumbnailUrl);
+        //     }
+        // }
+        
         // Create or update scene submission
         SceneSubmission sceneSubmission;
         if (existingSubmission != null) {

@@ -20,6 +20,9 @@ public class VideoDaoImpl implements VideoDao {
     @Autowired(required = false)
     private com.example.demo.service.AlibabaOssStorageService ossStorageService;
     
+    @Autowired(required = false)
+    private com.example.demo.service.CloudTranscodingService cloudTranscodingService;
+    
     private void checkFirestore() {
         if (db == null) {
             throw new IllegalStateException("Firestore is not available in development mode. Please configure Firebase credentials or use a different data source.");
@@ -169,6 +172,35 @@ public class VideoDaoImpl implements VideoDao {
                 tempInputFile.delete();
             }
             
+            // Cloud transcoding for WeChat Android compatibility (template videos)
+            // This transcodes to H.264 baseline profile asynchronously in Alibaba Cloud
+            if (cloudTranscodingService != null && cloudTranscodingService.isEnabled()) {
+                try {
+                    String ossPath = extractOssPath(uploadResult.videoUrl);
+                    String transcodedPath = ossPath.replace(".mp4", "_transcoded.mp4");
+                    
+                    System.out.println("[VIDEO-UPLOAD] Submitting cloud transcode job...");
+                    String jobId = cloudTranscodingService.submitTranscodeJob(ossPath, transcodedPath);
+                    
+                    if (jobId != null) {
+                        // Wait for transcoding to complete (max 60 seconds for short videos)
+                        boolean success = cloudTranscodingService.waitForJob(jobId, 60);
+                        if (success) {
+                            // Update URL to transcoded version
+                            String transcodedUrl = uploadResult.videoUrl.replace(".mp4", "_transcoded.mp4");
+                            uploadResult = new com.example.demo.service.AlibabaOssStorageService.UploadResult(
+                                transcodedUrl, uploadResult.thumbnailUrl);
+                            System.out.println("[VIDEO-UPLOAD] ✅ Using transcoded video: " + transcodedUrl);
+                        } else {
+                            System.out.println("[VIDEO-UPLOAD] ⚠️ Transcoding failed/timeout, using original");
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("[VIDEO-UPLOAD] Cloud transcoding error: " + e.getMessage());
+                    // Continue with original video
+                }
+            }
+            
             // Now extract duration from the uploaded video using centralized OSS download
             long durationSeconds = 0;
             java.io.File tempFile = null;
@@ -233,5 +265,29 @@ public class VideoDaoImpl implements VideoDao {
             return videoUrl;
         }
         return ossStorageService.generateSignedUrl(videoUrl);
+    }
+    
+    /**
+     * Extract OSS object path from full URL.
+     * E.g., "https://bucket.oss-region.aliyuncs.com/videos/user/video.mp4" -> "videos/user/video.mp4"
+     */
+    private String extractOssPath(String url) {
+        if (url == null) return null;
+        try {
+            java.net.URI uri = new java.net.URI(url);
+            String path = uri.getPath();
+            // Remove leading slash
+            if (path.startsWith("/")) {
+                path = path.substring(1);
+            }
+            return path;
+        } catch (Exception e) {
+            // Fallback: try to extract after .com/
+            int idx = url.indexOf(".aliyuncs.com/");
+            if (idx > 0) {
+                return url.substring(idx + 14);
+            }
+            return url;
+        }
     }
 }
