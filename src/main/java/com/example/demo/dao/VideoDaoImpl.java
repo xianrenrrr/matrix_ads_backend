@@ -173,27 +173,20 @@ public class VideoDaoImpl implements VideoDao {
             }
             
             // Cloud transcoding for WeChat Android compatibility (template videos)
-            // This transcodes to H.264 baseline profile asynchronously in Alibaba Cloud
+            // Submit job async - don't wait. Transcoded file REPLACES original (same path)
+            // MPS will overwrite the original file with H.264 baseline profile version
             if (cloudTranscodingService != null && cloudTranscodingService.isEnabled()) {
                 try {
                     String ossPath = extractOssPath(uploadResult.videoUrl);
-                    String transcodedPath = ossPath.replace(".mp4", "_transcoded.mp4");
+                    // Output to SAME path - MPS will overwrite the original file
+                    String transcodedPath = ossPath;
                     
-                    System.out.println("[VIDEO-UPLOAD] Submitting cloud transcode job...");
+                    System.out.println("[VIDEO-UPLOAD] Submitting cloud transcode job (async, replaces original)...");
                     String jobId = cloudTranscodingService.submitTranscodeJob(ossPath, transcodedPath);
                     
                     if (jobId != null) {
-                        // Wait for transcoding to complete (max 180 seconds - MPS typically takes 60-90s)
-                        boolean success = cloudTranscodingService.waitForJob(jobId, 180);
-                        if (success) {
-                            // Update URL to transcoded version
-                            String transcodedUrl = uploadResult.videoUrl.replace(".mp4", "_transcoded.mp4");
-                            uploadResult = new com.example.demo.service.AlibabaOssStorageService.UploadResult(
-                                transcodedUrl, uploadResult.thumbnailUrl);
-                            System.out.println("[VIDEO-UPLOAD] ✅ Using transcoded video: " + transcodedUrl);
-                        } else {
-                            System.out.println("[VIDEO-UPLOAD] ⚠️ Transcoding failed/timeout, using original");
-                        }
+                        System.out.println("[VIDEO-UPLOAD] ✅ Transcode job submitted: " + jobId);
+                        System.out.println("[VIDEO-UPLOAD] Original file will be replaced after transcoding completes (~1-2 min)");
                     }
                 } catch (Exception e) {
                     System.err.println("[VIDEO-UPLOAD] Cloud transcoding error: " + e.getMessage());
