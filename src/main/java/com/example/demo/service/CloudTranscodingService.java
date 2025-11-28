@@ -37,25 +37,25 @@ public class CloudTranscodingService {
     private static final Logger log = LoggerFactory.getLogger(CloudTranscodingService.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
     
-    @Value("${aliyun.mps.enabled:false}")
+    @Value("${ALIYUN_MPS_ENABLED:false}")
     private boolean enabled;
     
-    @Value("${aliyun.oss.access-key-id:}")
+    @Value("${ALIBABA_CLOUD_ACCESS_KEY_ID:}")
     private String accessKeyId;
     
-    @Value("${aliyun.oss.access-key-secret:}")
+    @Value("${ALIBABA_CLOUD_ACCESS_KEY_SECRET:}")
     private String accessKeySecret;
     
-    @Value("${aliyun.oss.region:ap-southeast-1}")
+    @Value("${ALIYUN_OSS_REGION:ap-southeast-1}")
     private String region;
     
-    @Value("${aliyun.oss.bucket:xpectra1}")
+    @Value("${ALIYUN_OSS_BUCKET:xpectra1}")
     private String bucket;
     
-    @Value("${aliyun.mps.pipeline-id:}")
+    @Value("${ALIYUN_MPS_PIPELINE_ID:}")
     private String pipelineId;
     
-    @Value("${aliyun.mps.template-id:}")
+    @Value("${ALIYUN_MPS_TEMPLATE_ID:}")
     private String templateId;
     
     private final HttpClient httpClient = HttpClient.newHttpClient();
