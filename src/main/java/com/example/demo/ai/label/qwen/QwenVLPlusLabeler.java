@@ -406,7 +406,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         System.out.println("[QWEN] ========================================");
         
         // Call the internal implementation with scriptLine context
-        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, null, null, null);
+        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, null, null);
     }
     
     /**
@@ -426,7 +426,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         System.out.println("[QWEN] ========================================");
         
         // Call the internal implementation with both scriptLine and Azure hints (no combined scriptLines)
-        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, azureObjectHints, null, null);
+        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, azureObjectHints, null);
     }
     
     /**
@@ -446,31 +446,8 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         System.out.println("[QWEN] azureObjectHints: " + (azureObjectHints != null ? azureObjectHints : "null"));
         System.out.println("[QWEN] ========================================");
         
-        // Call the internal implementation with all context (no target dimensions)
-        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, azureObjectHints, combinedScriptLines, null);
-    }
-    
-    /**
-     * Enhanced 7-parameter version with target display dimensions for accurate bounding boxes
-     * This is the most complete version - bounding boxes are returned in pixel coordinates for the target display
-     */
-    @Override
-    public Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale, String scriptLineContext, List<String> azureObjectHints, String combinedScriptLines, TargetDimensions targetDimensions) {
-        System.out.println("[QWEN] ========================================");
-        System.out.println("[QWEN] labelRegions called (7-param WITH TARGET DIMENSIONS)");
-        System.out.println("[QWEN] keyframeUrl: " + (keyframeUrl != null ? keyframeUrl.substring(0, Math.min(100, keyframeUrl.length())) + "..." : "null"));
-        System.out.println("[QWEN] regions count: " + (regions != null ? regions.size() : 0));
-        System.out.println("[QWEN] locale: " + locale);
-        System.out.println("[QWEN] scriptLineContext (this scene): " + (scriptLineContext != null && !scriptLineContext.isEmpty() ? 
-            "\"" + scriptLineContext.substring(0, Math.min(50, scriptLineContext.length())) + (scriptLineContext.length() > 50 ? "...\"" : "\"") : "null"));
-        System.out.println("[QWEN] combinedScriptLines (all scenes): " + (combinedScriptLines != null && !combinedScriptLines.isEmpty() ? 
-            "\"" + combinedScriptLines.substring(0, Math.min(100, combinedScriptLines.length())) + (combinedScriptLines.length() > 100 ? "...\"" : "\"") : "null"));
-        System.out.println("[QWEN] azureObjectHints: " + (azureObjectHints != null ? azureObjectHints : "null"));
-        System.out.println("[QWEN] targetDimensions: " + (targetDimensions != null ? targetDimensions.toString() : "null (will use 0-1 normalized)"));
-        System.out.println("[QWEN] ========================================");
-        
-        // Call the internal implementation with all context including target dimensions
-        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, azureObjectHints, combinedScriptLines, targetDimensions);
+        // Call the internal implementation with all context
+        return labelRegionsInternal(keyframeUrl, regions, locale, scriptLineContext, azureObjectHints, combinedScriptLines);
     }
     
     /**
@@ -486,23 +463,19 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
         System.out.println("[QWEN] ========================================");
         
         // Call the internal implementation without scriptLine context or Azure hints
-        return labelRegionsInternal(keyframeUrl, regions, locale, null, null, null, null);
+        return labelRegionsInternal(keyframeUrl, regions, locale, null, null, null);
     }
     
     /**
-     * Internal implementation that handles scriptLine context, Azure object hints, combined scriptLines, and target dimensions
-     * 
-     * @param targetDimensions When provided, bounding boxes are returned in pixel coordinates for the target display.
-     *                         When null, bounding boxes are returned in normalized 0-1 range.
+     * Internal implementation that handles scriptLine context, Azure object hints, and combined scriptLines
      */
-    private Map<String, LabelResult> labelRegionsInternal(String keyframeUrl, List<RegionBox> regions, String locale, String scriptLineContext, List<String> azureObjectHints, String combinedScriptLines, TargetDimensions targetDimensions) {
+    private Map<String, LabelResult> labelRegionsInternal(String keyframeUrl, List<RegionBox> regions, String locale, String scriptLineContext, List<String> azureObjectHints, String combinedScriptLines) {
         
         System.out.println("[QWEN-KEYELEMENTS] 🎯 Starting Qwen VL call for keyElements extraction");
         System.out.println("[QWEN-KEYELEMENTS]    Keyframe: " + (keyframeUrl != null ? keyframeUrl.substring(0, Math.min(80, keyframeUrl.length())) + "..." : "null"));
         System.out.println("[QWEN-KEYELEMENTS]    Regions: " + (regions != null ? regions.size() : 0));
         System.out.println("[QWEN-KEYELEMENTS]    Locale: " + locale);
         System.out.println("[QWEN-KEYELEMENTS]    ScriptLine provided: " + (scriptLineContext != null && !scriptLineContext.isEmpty() ? "YES" : "NO"));
-        System.out.println("[QWEN-KEYELEMENTS]    TargetDimensions: " + (targetDimensions != null ? targetDimensions.toString() : "null (0-1 normalized)"));
         
         Map<String, LabelResult> out = new HashMap<>();
         if (regions == null || regions.isEmpty() || keyframeUrl == null || keyframeUrl.isBlank()) {
@@ -585,90 +558,34 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             .append("3. 色调氛围（主要颜色、情绪）\n")
             .append("4. 主要物体（类型、位置、状态）\n")
             .append("5. 动作活动（如有）\n")
-            .append("6. 拍摄角度（俯视/平视/仰视等）\n\n");
+            .append("6. 拍摄角度（俯视/平视/仰视等）\n\n")
             
-            // Add target dimensions info to prompt if provided
-            if (targetDimensions != null) {
-                sb.append("【目标显示尺寸】\n")
-                  .append("小程序显示区域: ").append(targetDimensions.width).append("x").append(targetDimensions.height)
-                  .append(" 像素 (").append(targetDimensions.aspectRatio).append(")\n")
-                  .append("**重要**: 请直接返回像素坐标，范围 x: 0-").append(targetDimensions.width)
-                  .append(", y: 0-").append(targetDimensions.height).append("\n\n");
-                
-                sb.append("返回JSON格式：\n")
-                .append("{\n")
-                .append("  \"keyElements\": [\n")
-                .append("    {\"name\":\"小米汽车\",\"box\":[").append((int)(targetDimensions.width * 0.1)).append(",")
-                    .append((int)(targetDimensions.height * 0.15)).append(",")
-                    .append((int)(targetDimensions.width * 0.3)).append(",")
-                    .append((int)(targetDimensions.height * 0.2)).append("],\"conf\":0.95},\n")
-                .append("    {\"name\":\"飞利浦剃须刀\",\"box\":[").append((int)(targetDimensions.width * 0.4)).append(",")
-                    .append((int)(targetDimensions.height * 0.2)).append(",")
-                    .append((int)(targetDimensions.width * 0.2)).append(",")
-                    .append((int)(targetDimensions.height * 0.15)).append("],\"conf\":0.90},\n")
-                .append("    {\"name\":\"销售场景\",\"box\":null,\"conf\":0.85}\n")
-                .append("  ],\n")
-                .append("  \"sceneAnalysis\": \"详细的场景分析文字...\"\n")
-                .append("}\n\n")
-                .append("box坐标示例（像素坐标，范围 0-").append(targetDimensions.width).append(" x 0-").append(targetDimensions.height).append("）：\n")
-                .append("- 左上角小物体: [").append((int)(targetDimensions.width * 0.05)).append(", ")
-                    .append((int)(targetDimensions.height * 0.05)).append(", ")
-                    .append((int)(targetDimensions.width * 0.15)).append(", ")
-                    .append((int)(targetDimensions.height * 0.1)).append("] (x, y, 宽, 高)\n")
-                .append("- 画面中央: [").append((int)(targetDimensions.width * 0.3)).append(", ")
-                    .append((int)(targetDimensions.height * 0.3)).append(", ")
-                    .append((int)(targetDimensions.width * 0.4)).append(", ")
-                    .append((int)(targetDimensions.height * 0.4)).append("]\n")
-                .append("- 右下角: [").append((int)(targetDimensions.width * 0.7)).append(", ")
-                    .append((int)(targetDimensions.height * 0.7)).append(", ")
-                    .append((int)(targetDimensions.width * 0.25)).append(", ")
-                    .append((int)(targetDimensions.height * 0.25)).append("]\n\n");
-            } else {
-                // Original 0-1000 normalized coordinate system
-                sb.append("返回JSON格式：\n")
-                .append("{\n")
-                .append("  \"keyElements\": [\n")
-                .append("    {\"name\":\"小米汽车\",\"box\":[100,150,300,200],\"conf\":0.95},\n")
-                .append("    {\"name\":\"飞利浦剃须刀\",\"box\":[400,200,200,150],\"conf\":0.90},\n")
-                .append("    {\"name\":\"产品演示者\",\"box\":[50,100,180,400],\"conf\":0.88},\n")
-                .append("    {\"name\":\"销售场景\",\"box\":null,\"conf\":0.85}\n")
-                .append("  ],\n")
-                .append("  \"sceneAnalysis\": \"详细的场景分析文字...\"\n")
-                .append("}\n\n")
-                .append("box坐标示例（范围0-1000）：\n")
-                .append("- 左上角小物体: [50, 50, 150, 100] (x=50, y=50, 宽=150, 高=100)\n")
-                .append("- 中间偏下偏右: [550, 650, 200, 150] (x=550, y=650, 宽=200, 高=150)\n")
-                .append("- 右下角: [750, 800, 200, 150] (x=750, y=800, 宽=200, 高=150)\n")
-                .append("- 画面中央大物体: [300, 300, 400, 400] (x=300, y=300, 宽=400, 高=400)\n\n");
-            }
-            
-            sb.append("说明：\n")
+            .append("返回JSON格式：\n")
+            .append("{\n")
+            .append("  \"keyElements\": [\n")
+            .append("    {\"name\":\"小米汽车\",\"box\":[100,150,300,200],\"conf\":0.95},\n")
+            .append("    {\"name\":\"飞利浦剃须刀\",\"box\":[400,200,200,150],\"conf\":0.90},\n")
+            .append("    {\"name\":\"产品演示者\",\"box\":[50,100,180,400],\"conf\":0.88},\n")
+            .append("    {\"name\":\"销售场景\",\"box\":null,\"conf\":0.85}\n")
+            .append("  ],\n")
+            .append("  \"sceneAnalysis\": \"详细的场景分析文字...\"\n")
+            .append("}\n\n")
+            .append("box坐标示例（范围0-1000）：\n")
+            .append("- 左上角小物体: [50, 50, 150, 100] (x=50, y=50, 宽=150, 高=100)\n")
+            .append("- 中间偏下偏右: [550, 650, 200, 150] (x=550, y=650, 宽=200, 高=150)\n")
+            .append("- 右下角: [750, 800, 200, 150] (x=750, y=800, 宽=200, 高=150)\n")
+            .append("- 画面中央大物体: [300, 300, 400, 400] (x=300, y=300, 宽=400, 高=400)\n\n")
+            .append("说明：\n")
             .append("- keyElements: 场景的关键要素（必须结合字幕内容，使用具体名称）\n")
             .append("- name: 关键要素名称（简体中文，2-8字，必须具体描述，包含品牌/型号/特征）\n")
             .append("- box: 边界框 [x, y, width, height]，如果是抽象概念则为 null\n")
-            .append("- conf: 置信度（0~1）\n");
-            
-            if (targetDimensions != null) {
-                sb.append("- box格式: [x, y, width, height]，左上角为原点，像素坐标\n")
-                  .append("- **重要**: x范围 0-").append(targetDimensions.width)
-                  .append(", y范围 0-").append(targetDimensions.height)
-                  .append(", 确保 x+width <= ").append(targetDimensions.width)
-                  .append(" 且 y+height <= ").append(targetDimensions.height).append("\n\n");
-            } else {
-                sb.append("- box格式: [x, y, width, height]，左上角为原点，范围0-1000\n\n");
-            }
-            
-            sb.append("注意：\n")
+            .append("- conf: 置信度（0~1）\n")
+            .append("- box格式: [x, y, width, height]，左上角为原点，范围0-1000\n\n")
+            .append("注意：\n")
             .append("1. 具体物体（如汽车、人物）应提供边界框\n")
-            .append("2. 抽象概念（如销售场景、宣传氛围）box设为null\n");
-            
-            if (targetDimensions != null) {
-                sb.append("3. box坐标系统：左上角为原点，x向右，y向下，像素坐标（").append(targetDimensions.width).append("x").append(targetDimensions.height).append("）\n");
-            } else {
-                sb.append("3. box坐标系统：左上角为原点，x向右，y向下，范围0-1000\n");
-            }
-            
-            sb.append("4. **禁止通用名称**（车、人、刀、屏），必须具体化（小米汽车、销售人员、飞利浦剃须刀、LED显示屏）\n")
+            .append("2. 抽象概念（如销售场景、宣传氛围）box设为null\n")
+            .append("3. box坐标系统：左上角为原点，x向右，y向下，范围0-1000\n")
+            .append("4. **禁止通用名称**（车、人、刀、屏），必须具体化（小米汽车、销售人员、飞利浦剃须刀、LED显示屏）\n")
             .append("5. **每个要素只出现一次**，不要重复\n")
             .append("6. **优先使用字幕中的品牌名、产品名**，如果没有则根据视觉特征添加修饰词");
 
@@ -823,39 +740,18 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                         
                         if (!name.isEmpty()) {
                             // Build KeyElement (with or without box)
-                            List<Float> finalBox = null;
+                            List<Float> normalizedBox = null;
                             if (box != null && box.length == 4) {
-                                if (targetDimensions != null) {
-                                    // Pixel coordinates mode - store as pixel values directly
-                                    // Clamp to ensure within bounds
-                                    int x = Math.max(0, Math.min(box[0], targetDimensions.width));
-                                    int y = Math.max(0, Math.min(box[1], targetDimensions.height));
-                                    int w = Math.max(1, Math.min(box[2], targetDimensions.width - x));
-                                    int h = Math.max(1, Math.min(box[3], targetDimensions.height - y));
-                                    
-                                    finalBox = java.util.Arrays.asList(
-                                        (float) x,   // x in pixels
-                                        (float) y,   // y in pixels
-                                        (float) w,   // width in pixels
-                                        (float) h    // height in pixels
-                                    );
-                                    
-                                    System.out.println("[QWEN-BOX-PIXEL] ✅ Pixel coordinates mode: [" + x + ", " + y + ", " + w + ", " + h + "] for " + targetDimensions);
-                                } else {
-                                    // Normalized mode (0-1000 -> 0-1)
-                                    finalBox = java.util.Arrays.asList(
-                                        box[0] / 1000.0f,  // x
-                                        box[1] / 1000.0f,  // y
-                                        box[2] / 1000.0f,  // width
-                                        box[3] / 1000.0f   // height
-                                    );
-                                    
-                                    System.out.println("[QWEN-BOX-NORM] Normalized coordinates: [" + finalBox.get(0) + ", " + finalBox.get(1) + ", " + finalBox.get(2) + ", " + finalBox.get(3) + "]");
-                                }
+                                normalizedBox = java.util.Arrays.asList(
+                                    box[0] / 1000.0f,  // x
+                                    box[1] / 1000.0f,  // y
+                                    box[2] / 1000.0f,  // width
+                                    box[3] / 1000.0f   // height
+                                );
                             }
                             
                             com.example.demo.model.Scene.KeyElement keyElement = 
-                                new com.example.demo.model.Scene.KeyElement(name, finalBox, (float) conf);
+                                new com.example.demo.model.Scene.KeyElement(name, normalizedBox, (float) conf);
                             keyElementsWithBoxes.add(keyElement);
                             
                             // Also create LabelResult for backward compatibility
@@ -868,8 +764,7 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                             out.put(id, result);
                             
                             System.out.println("[QWEN] Added keyElement: " + name + " with box: " + 
-                                (finalBox != null ? "[" + finalBox.get(0) + "," + finalBox.get(1) + "," + finalBox.get(2) + "," + finalBox.get(3) + "]" + 
-                                    (targetDimensions != null ? " (pixels)" : " (normalized)") : "null (abstract concept)"));
+                                (normalizedBox != null ? "[" + normalizedBox.get(0) + "," + normalizedBox.get(1) + "," + normalizedBox.get(2) + "," + normalizedBox.get(3) + "]" : "null (abstract concept)"));
                         }
                     }
                     

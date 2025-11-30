@@ -114,47 +114,13 @@ public class UnifiedSceneAnalysisService {
         List<String> azureObjectHints,
         String combinedScriptLines
     ) {
-        return analyzeScene(videoUrl, language, startTime, endTime, subtitleText, azureObjectHints, combinedScriptLines, null);
-    }
-    
-    /**
-     * Analyze a scene video with full context including target display dimensions
-     * 
-     * @param videoUrl Video URL to analyze
-     * @param language Language for analysis (zh-CN, en, etc.)
-     * @param startTime Optional start time for keyframe extraction
-     * @param endTime Optional end time for keyframe extraction
-     * @param subtitleText Optional subtitle text for this scene (enhances VL analysis)
-     * @param azureObjectHints Optional list of object names detected by Azure (for targeted grounding)
-     * @param combinedScriptLines Optional combined scriptLines from all scenes (for full template context)
-     * @param targetDimensions Optional target display dimensions for pixel-accurate bounding boxes
-     * @return SceneAnalysisResult with VL data
-     */
-    public SceneAnalysisResult analyzeScene(
-        String videoUrl,
-        String language,
-        Duration startTime,
-        Duration endTime,
-        String subtitleText,
-        List<String> azureObjectHints,
-        String combinedScriptLines,
-        ObjectLabelService.TargetDimensions targetDimensions
-    ) {
-        log.info("[UNIFIED] Analyzing scene: videoUrl={}, language={}, hasSubtitles={}, azureHints={}, targetDimensions={}", 
+        log.info("[UNIFIED] Analyzing scene: videoUrl={}, language={}, hasSubtitles={}, azureHints={}", 
             videoUrl != null ? videoUrl.substring(0, Math.min(50, videoUrl.length())) + "..." : "null",
             language,
             subtitleText != null && !subtitleText.isEmpty(),
-            azureObjectHints != null ? azureObjectHints : "none",
-            targetDimensions != null ? targetDimensions.toString() : "null (normalized)");
+            azureObjectHints != null ? azureObjectHints : "none");
         
         SceneAnalysisResult result = new SceneAnalysisResult();
-        
-        // Set pixel coordinate info if targetDimensions provided
-        if (targetDimensions != null) {
-            result.setPixelCoordinates(true);
-            result.setTargetWidth(targetDimensions.width);
-            result.setTargetHeight(targetDimensions.height);
-        }
         
         try {
             // Step 1: Extract keyframe
@@ -207,15 +173,13 @@ public class UnifiedSceneAnalysisService {
             try {
                 // Call Qwen VL - it will detect objects and return bounding boxes
                 // Pass Azure object hints for targeted grounding and combined scriptLines for full context
-                // Pass targetDimensions for pixel-accurate bounding boxes (if provided)
                 vlResults = objectLabelService.labelRegions(
                     keyframeUrl, 
                     dummyRegion,
                     language != null ? language : "zh-CN",
                     subtitleText,  // Pass subtitle context to VL
                     azureObjectHints,  // Pass Azure detected objects as hints
-                    combinedScriptLines,  // Pass combined scriptLines from all scenes
-                    targetDimensions  // Pass target display dimensions for pixel coordinates
+                    combinedScriptLines  // Pass combined scriptLines from all scenes
                 );
                 
                 // Step 4: Extract VL data
