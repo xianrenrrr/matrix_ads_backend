@@ -242,15 +242,12 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                 return null;
             }
 
-            // Use centralized AI response fixer to clean JSON
-            String cleanJson = com.example.demo.ai.util.AIResponseFixer.cleanAndFixJson(contentStr);
-            if (cleanJson == null) {
-                System.err.println("[QWEN] cleanScriptLines: no valid JSON in response");
+            // Use centralized AI response fixer with multiple parsing strategies
+            Map<String, Object> aiResult = com.example.demo.ai.util.AIResponseFixer.parseToMap(contentStr, objectMapper);
+            if (aiResult == null) {
+                System.err.println("[QWEN] cleanScriptLines: All parsing strategies failed");
                 return null;
             }
-
-            // Parse JSON object
-            Map<String, Object> aiResult = objectMapper.readValue(cleanJson, new TypeReference<Map<String,Object>>(){});
             
             // Build scriptLines array with original ASR text as default
             List<String> scriptLines = new ArrayList<>();
@@ -374,13 +371,20 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
             String contentStr = extractContent(bodyG);
             if (contentStr == null || contentStr.isBlank()) return null;
 
-            // Use centralized AI response fixer to clean JSON
-            String cleanJson = com.example.demo.ai.util.AIResponseFixer.cleanAndFixJson(contentStr);
-            if (cleanJson == null) return null;
-
-            // Parse JSON object
-            return objectMapper.readValue(cleanJson, new TypeReference<Map<String,Object>>(){});
+            // Use centralized AI response fixer with multiple parsing strategies
+            Map<String, Object> result = com.example.demo.ai.util.AIResponseFixer.parseToMap(contentStr, objectMapper);
+            if (result == null) {
+                System.err.println("[QWEN] generateTemplateGuidance: All parsing strategies failed");
+                System.err.println("[QWEN] Original content (first 500 chars): " + 
+                    (contentStr.length() > 500 ? contentStr.substring(0, 500) + "..." : contentStr));
+                return null;
+            }
+            
+            System.out.println("[QWEN] generateTemplateGuidance: ✅ Successfully parsed guidance with " + result.size() + " keys");
+            return result;
         } catch (Exception e) {
+            System.err.println("[QWEN] generateTemplateGuidance error: " + e.getClass().getName() + ": " + e.getMessage());
+            e.printStackTrace();
             return null;
         }
     }
@@ -1223,15 +1227,24 @@ public class QwenVLPlusLabeler implements ObjectLabelService {
                 return null;
             }
             
-            // Use centralized AI response fixer to clean JSON
+            // Use centralized AI response fixer with multiple strategies
             String cleanJson = com.example.demo.ai.util.AIResponseFixer.cleanAndFixJson(contentStr);
             if (cleanJson == null) {
-                System.err.println("[QWEN-SINGLE-BOX] Failed to extract valid JSON");
+                cleanJson = com.example.demo.ai.util.AIResponseFixer.aggressiveFix(contentStr);
+            }
+            if (cleanJson == null) {
+                System.err.println("[QWEN-SINGLE-BOX] All parsing strategies failed");
                 return null;
             }
             
             // Parse JSON
-            JsonNode root = objectMapper.readTree(cleanJson);
+            JsonNode root;
+            try {
+                root = objectMapper.readTree(cleanJson);
+            } catch (Exception parseEx) {
+                System.err.println("[QWEN-SINGLE-BOX] JSON parse failed: " + parseEx.getMessage());
+                return null;
+            }
             
             if (!root.has("found") || !root.get("found").asBoolean()) {
                 System.out.println("[QWEN-SINGLE-BOX] Object not found: " + objectName);

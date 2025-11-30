@@ -743,12 +743,11 @@ public class ContentManager {
         responseData.put("templateId", templateId);
         responseData.put("template", template);
         responseData.put("scenesAnalyzed", aiAnalyzedScenes.size());
-        responseData.put("transcodingInProgress", true);
         
-        // Custom success message with transcoding notice
+        // Simple success message (transcoding happens async in background)
         String message = "zh".equals(language) 
-            ? "模版创建成功！视频正在转码中，请等待1-2分钟后再推送给用户。"
-            : "Template created successfully! Video transcoding in progress, please wait 1-2 minutes before publishing.";
+            ? "模版创建成功！"
+            : "Template created successfully!";
         
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }

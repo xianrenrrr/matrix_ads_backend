@@ -220,15 +220,13 @@ public class SubtitleAlignmentService {
         List<SubtitleSegment> segments = new ArrayList<>();
         
         try {
-            // Use centralized AI response fixer
-            String cleanJson = com.example.demo.ai.util.AIResponseFixer.cleanAndFixJson(response);
+            // Use centralized AI response fixer with multiple strategies
+            Map<String, Object> result = com.example.demo.ai.util.AIResponseFixer.parseToMap(response, objectMapper);
             
-            if (cleanJson == null) {
-                log.error("No JSON found in Qwen alignment response");
+            if (result == null) {
+                log.error("All parsing strategies failed for Qwen alignment response");
                 return segments;
             }
-            
-            Map<String, Object> result = objectMapper.readValue(cleanJson, new TypeReference<Map<String, Object>>() {});
             
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> segmentList = (List<Map<String, Object>>) result.get("segments");

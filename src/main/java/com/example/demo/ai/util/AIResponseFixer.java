@@ -14,6 +14,11 @@ import java.util.regex.Pattern;
  * - Missing quotes around Chinese text
  * - Extra text before/after JSON
  * - Markdown code blocks around JSON
+ * - Trailing commas in objects/arrays
+ * - Single quotes instead of double quotes
+ * - Unescaped special characters in strings
+ * - Comments in JSON
+ * - Truncated JSON (missing closing brackets)
  * 
  * This class provides methods to clean and fix these issues.
  */
@@ -30,39 +35,85 @@ public class AIResponseFixer {
      */
     public static String cleanAndFixJson(String response) {
         if (response == null || response.isEmpty()) {
+            log.debug("[AIResponseFixer] Input is null or empty");
             return null;
         }
+        
+        log.debug("[AIResponseFixer] Input length: {}, preview: {}", 
+            response.length(), 
+            response.substring(0, Math.min(200, response.length())).replaceAll("\\s+", " "));
         
         String cleaned = response;
         
-        // Step 1: Remove markdown code blocks
+        // Step 1: Remove markdown code blocks (multiple patterns)
         cleaned = removeMarkdownCodeBlocks(cleaned);
         
-        // Step 2: Extract JSON from surrounding text
+        // Step 2: Remove comments
+        cleaned = removeJsonComments(cleaned);
+        
+        // Step 3: Extract JSON from surrounding text
         cleaned = extractJsonObject(cleaned);
         
         if (cleaned == null) {
-            log.warn("[AIResponseFixer] No JSON object found in response");
-            return null;
+            // Try extracting array if object not found
+            cleaned = extractJsonArray(response);
+            if (cleaned == null) {
+                log.warn("[AIResponseFixer] No JSON object or array found in response");
+                return null;
+            }
         }
         
-        // Step 3: Fix unquoted strings in arrays
+        // Step 4: Fix common JSON issues
+        cleaned = fixTrailingCommas(cleaned);
+        cleaned = fixSingleQuotes(cleaned);
         cleaned = fixUnquotedArrayStrings(cleaned);
+        cleaned = fixUnescapedNewlines(cleaned);
+        cleaned = fixTruncatedJson(cleaned);
+        
+        log.debug("[AIResponseFixer] Output length: {}", cleaned.length());
         
         return cleaned;
     }
     
     /**
      * Remove markdown code blocks (```json ... ```)
+     * Handles multiple variations:
+     * - ```json ... ```
+     * - ``` ... ```
+     * - ```JSON ... ```
+     * - With or without newlines
      */
     public static String removeMarkdownCodeBlocks(String text) {
         if (text == null) return null;
         
-        return text
-            .replaceAll("(?s)```json\\s*", "")
-            .replaceAll("(?s)```\\s*$", "")
-            .replaceAll("(?s)^```\\s*", "")
-            .trim();
+        String result = text;
+        
+        // Pattern 1: ```json\n...\n``` (with language specifier)
+        result = result.replaceAll("(?s)```(?:json|JSON)?\\s*\\n?", "");
+        
+        // Pattern 2: Remaining ``` at end
+        result = result.replaceAll("(?s)\\n?```\\s*$", "");
+        
+        // Pattern 3: ``` at start (without language)
+        result = result.replaceAll("(?s)^\\s*```\\s*\\n?", "");
+        
+        return result.trim();
+    }
+    
+    /**
+     * Remove JSON comments (// and /* */)
+     */
+    public static String removeJsonComments(String text) {
+        if (text == null) return null;
+        
+        // Remove single-line comments (but not inside strings)
+        // This is a simplified version - may not handle all edge cases
+        String result = text.replaceAll("(?m)^\\s*//.*$", "");
+        
+        // Remove multi-line comments
+        result = result.replaceAll("(?s)/\\*.*?\\*/", "");
+        
+        return result;
     }
     
     /**
@@ -217,8 +268,8 @@ public class AIResponseFixer {
             return true;
         }
         
-        // Number (integer or decimal)
-        if (trimmed.matches("-?\\d+(\\.\\d+)?")) {
+        // Number (integer or decimal, including scientific notation)
+        if (trimmed.matches("-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?")) {
             return true;
         }
         
@@ -234,6 +285,134 @@ public class AIResponseFixer {
         }
         
         return false;
+    }
+    
+    /**
+     * Fix trailing commas in JSON objects and arrays.
+     * Example: {"a": 1,} -> {"a": 1}
+     * Example: [1, 2,] -> [1, 2]
+     */
+    public static String fixTrailingCommas(String json) {
+        if (json == null) return null;
+        
+        // Remove trailing commas before } or ]
+        String result = json.replaceAll(",\\s*}", "}");
+        result = result.replaceAll(",\\s*]", "]");
+        
+        return result;
+    }
+    
+    /**
+     * Fix single quotes to double quotes in JSON.
+     * Example: {'key': 'value'} -> {"key": "value"}
+     * Be careful not to replace single quotes inside double-quoted strings.
+     */
+    public static String fixSingleQuotes(String json) {
+        if (json == null) return null;
+        
+        // Simple approach: replace single quotes that look like JSON delimiters
+        // This pattern matches: 'key': or : 'value' or ['item']
+        StringBuilder result = new StringBuilder();
+        boolean inDoubleQuote = false;
+        boolean inSingleQuote = false;
+        
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+            char prev = i > 0 ? json.charAt(i - 1) : 0;
+            
+            if (c == '"' && prev != '\\') {
+                inDoubleQuote = !inDoubleQuote;
+                result.append(c);
+            } else if (c == '\'' && !inDoubleQuote) {
+                // Replace single quote with double quote when not inside a double-quoted string
+                result.append('"');
+                inSingleQuote = !inSingleQuote;
+            } else {
+                result.append(c);
+            }
+        }
+        
+        return result.toString();
+    }
+    
+    /**
+     * Fix unescaped newlines inside JSON strings.
+     * Newlines inside string values must be escaped as \n
+     */
+    public static String fixUnescapedNewlines(String json) {
+        if (json == null) return null;
+        
+        StringBuilder result = new StringBuilder();
+        boolean inString = false;
+        
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+            char prev = i > 0 ? json.charAt(i - 1) : 0;
+            
+            if (c == '"' && prev != '\\') {
+                inString = !inString;
+                result.append(c);
+            } else if (inString && c == '\n') {
+                result.append("\\n");
+            } else if (inString && c == '\r') {
+                result.append("\\r");
+            } else if (inString && c == '\t') {
+                result.append("\\t");
+            } else {
+                result.append(c);
+            }
+        }
+        
+        return result.toString();
+    }
+    
+    /**
+     * Fix truncated JSON by adding missing closing brackets.
+     * This is a best-effort fix for when AI response is cut off.
+     */
+    public static String fixTruncatedJson(String json) {
+        if (json == null) return null;
+        
+        int openBraces = 0;
+        int openBrackets = 0;
+        boolean inString = false;
+        
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+            char prev = i > 0 ? json.charAt(i - 1) : 0;
+            
+            if (c == '"' && prev != '\\') {
+                inString = !inString;
+            } else if (!inString) {
+                if (c == '{') openBraces++;
+                else if (c == '}') openBraces--;
+                else if (c == '[') openBrackets++;
+                else if (c == ']') openBrackets--;
+            }
+        }
+        
+        // Add missing closing brackets
+        StringBuilder result = new StringBuilder(json);
+        
+        // If we're in the middle of a string, close it
+        if (inString) {
+            result.append("\"");
+            log.info("[AIResponseFixer] Added missing closing quote");
+        }
+        
+        // Add missing brackets
+        for (int i = 0; i < openBrackets; i++) {
+            result.append("]");
+        }
+        for (int i = 0; i < openBraces; i++) {
+            result.append("}");
+        }
+        
+        if (openBraces > 0 || openBrackets > 0) {
+            log.info("[AIResponseFixer] Added {} closing braces and {} closing brackets", openBraces, openBrackets);
+        }
+        
+        return result.toString();
     }
     
     /**
@@ -271,5 +450,111 @@ public class AIResponseFixer {
             log.warn("[AIResponseFixer] Could not fix JSON: {}", e.getMessage());
             return null;
         }
+    }
+    
+    /**
+     * Parse AI response to Map with multiple fallback strategies.
+     * This is the recommended method for parsing AI JSON responses.
+     * 
+     * @param response Raw AI response
+     * @param objectMapper Jackson ObjectMapper
+     * @return Parsed Map, or null if all strategies fail
+     */
+    public static java.util.Map<String, Object> parseToMap(String response, com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+        if (response == null || response.isEmpty()) {
+            log.warn("[AIResponseFixer] parseToMap: input is null or empty");
+            return null;
+        }
+        
+        // Strategy 1: Try parsing as-is
+        try {
+            java.util.Map<String, Object> result = objectMapper.readValue(response, 
+                new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+            log.debug("[AIResponseFixer] parseToMap: Strategy 1 (as-is) succeeded");
+            return result;
+        } catch (Exception e) {
+            log.debug("[AIResponseFixer] parseToMap: Strategy 1 failed: {}", e.getMessage());
+        }
+        
+        // Strategy 2: Clean and fix JSON
+        String fixed = cleanAndFixJson(response);
+        if (fixed != null) {
+            try {
+                java.util.Map<String, Object> result = objectMapper.readValue(fixed, 
+                    new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+                log.info("[AIResponseFixer] parseToMap: Strategy 2 (cleanAndFixJson) succeeded");
+                return result;
+            } catch (Exception e) {
+                log.debug("[AIResponseFixer] parseToMap: Strategy 2 failed: {}", e.getMessage());
+            }
+        }
+        
+        // Strategy 3: Try extracting just the JSON object part
+        String extracted = extractJsonObject(response);
+        if (extracted != null && !extracted.equals(fixed)) {
+            try {
+                java.util.Map<String, Object> result = objectMapper.readValue(extracted, 
+                    new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+                log.info("[AIResponseFixer] parseToMap: Strategy 3 (extractJsonObject) succeeded");
+                return result;
+            } catch (Exception e) {
+                log.debug("[AIResponseFixer] parseToMap: Strategy 3 failed: {}", e.getMessage());
+            }
+        }
+        
+        // Strategy 4: Try with aggressive fixes
+        String aggressive = aggressiveFix(response);
+        if (aggressive != null) {
+            try {
+                java.util.Map<String, Object> result = objectMapper.readValue(aggressive, 
+                    new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+                log.info("[AIResponseFixer] parseToMap: Strategy 4 (aggressiveFix) succeeded");
+                return result;
+            } catch (Exception e) {
+                log.debug("[AIResponseFixer] parseToMap: Strategy 4 failed: {}", e.getMessage());
+            }
+        }
+        
+        log.warn("[AIResponseFixer] parseToMap: All strategies failed for response (first 200 chars): {}", 
+            response.substring(0, Math.min(200, response.length())).replaceAll("\\s+", " "));
+        return null;
+    }
+    
+    /**
+     * Aggressive JSON fix - tries harder to extract valid JSON.
+     * Use when standard fixes fail.
+     */
+    public static String aggressiveFix(String response) {
+        if (response == null) return null;
+        
+        String result = response;
+        
+        // Remove all markdown formatting
+        result = result.replaceAll("```[a-zA-Z]*\\s*", "");
+        result = result.replaceAll("```", "");
+        
+        // Remove common AI prefixes
+        result = result.replaceAll("(?i)^\\s*(here'?s?|the|my|this is|output:?|result:?|json:?)\\s*(the\\s+)?(json|response|output)?:?\\s*", "");
+        
+        // Remove trailing explanations after JSON
+        int lastBrace = result.lastIndexOf("}");
+        if (lastBrace > 0 && lastBrace < result.length() - 1) {
+            result = result.substring(0, lastBrace + 1);
+        }
+        
+        // Extract JSON object
+        result = extractJsonObject(result);
+        if (result == null) return null;
+        
+        // Apply all fixes
+        result = fixTrailingCommas(result);
+        result = fixSingleQuotes(result);
+        result = fixUnescapedNewlines(result);
+        result = fixTruncatedJson(result);
+        
+        // Remove any remaining control characters
+        result = result.replaceAll("[\\x00-\\x1F\\x7F]", " ");
+        
+        return result;
     }
 }

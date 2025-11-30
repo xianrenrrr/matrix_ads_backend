@@ -343,15 +343,26 @@ public class QwenSceneComparisonService {
      */
     private ComparisonResult parseDirectComparisonResult(String jsonResponse) {
         try {
-            // Use centralized AI response fixer
+            // Use centralized AI response fixer with multiple strategies
             String cleanJson = com.example.demo.ai.util.AIResponseFixer.cleanAndFixJson(jsonResponse);
+            
+            if (cleanJson == null) {
+                // Try aggressive fix
+                cleanJson = com.example.demo.ai.util.AIResponseFixer.aggressiveFix(jsonResponse);
+            }
             
             if (cleanJson == null) {
                 log.error("[DIRECT-COMPARISON] No JSON found in response, using fallback parsing");
                 return parsePlainTextFallback(jsonResponse);
             }
             
-            com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(cleanJson);
+            com.fasterxml.jackson.databind.JsonNode root;
+            try {
+                root = objectMapper.readTree(cleanJson);
+            } catch (Exception parseEx) {
+                log.warn("[DIRECT-COMPARISON] JSON parse failed after fix, trying fallback: {}", parseEx.getMessage());
+                return parsePlainTextFallback(jsonResponse);
+            }
             
             ComparisonResult result = new ComparisonResult();
             
