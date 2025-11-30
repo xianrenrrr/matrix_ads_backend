@@ -101,7 +101,7 @@ public class AIResponseFixer {
     }
     
     /**
-     * Remove JSON comments (// and /* */)
+     * Remove JSON comments (single-line // and multi-line block comments)
      */
     public static String removeJsonComments(String text) {
         if (text == null) return null;
