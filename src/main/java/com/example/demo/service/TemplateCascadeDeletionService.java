@@ -6,7 +6,6 @@ import com.example.demo.dao.VideoDao;
 import com.example.demo.model.ManualTemplate;
 import com.example.demo.model.Scene;
 import com.example.demo.model.SceneSubmission;
-import com.google.cloud.firestore.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -23,7 +22,6 @@ public class TemplateCascadeDeletionService {
     @Autowired private VideoDao videoDao;
     @Autowired(required = false) private com.example.demo.service.AlibabaOssStorageService storageService;
     @Autowired(required = false) private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;
-    @Autowired private Firestore db;
 
 
     @Value("${deletion.cascade.enabled:true}")
@@ -121,19 +119,9 @@ public class TemplateCascadeDeletionService {
             throw e;
         }
 
-        // 2b) submittedVideos docs
+        // 2b) remove template assignments (this also deletes managerSubmissions via TemplateAssignmentDaoImpl)
+        // NOTE: submittedVideos are NOT deleted so content creators can still download their compiled work
         try {
-            Query q = db.collection("submittedVideos").whereEqualTo("templateId", templateId);
-            for (DocumentSnapshot snap : q.get().get().getDocuments()) {
-                snap.getReference().delete();
-            }
-        } catch (Exception e) {
-            System.err.println("[CASCADE] submittedVideos delete warn: " + e);
-        }
-
-        // 2c) remove template assignments (new system)
-        try {
-            // Delete all assignments for this template
             if (templateAssignmentDao != null) {
                 templateAssignmentDao.deleteAssignmentsByTemplate(templateId);
             }

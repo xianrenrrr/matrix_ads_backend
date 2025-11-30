@@ -31,6 +31,12 @@ public class FolderController {
     @Autowired
     private com.example.demo.dao.UserDao userDao;
     
+    @Autowired
+    private com.example.demo.service.PermissionService permissionService;
+    
+    @Autowired
+    private com.example.demo.service.TemplateCascadeDeletionService templateCascadeDeletionService;
+    
     // Create folder
     @PostMapping
     public ResponseEntity<ApiResponse<TemplateFolder>> createFolder(
@@ -132,14 +138,22 @@ public class FolderController {
     }
     
     // Delete folder (CASCADE DELETE - deletes all contents)
+    // Only managers can delete folders - employees cannot
     @DeleteMapping("/{folderId}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> deleteFolder(
             @PathVariable String folderId,
+            @RequestParam String userId,
             @RequestHeader(value = "Accept-Language", required = false) String lang) throws Exception {
         
-        // Recursively delete all subfolders and templates
+        // Permission check: only managers can delete folders
+        if (!permissionService.canDeleteFolder(userId)) {
+            return ResponseEntity.status(403).body(ApiResponse.fail("只有管理员可以删除文件夹"));
+        }
+        
+        // Delete templates FIRST (with full cascade), then delete folders
+        // Order matters: templates reference folders, so delete templates before folders
+        int deletedTemplates = deleteTemplatesInFolderWithCascade(folderId);
         int deletedFolders = deleteFolderRecursive(folderId);
-        int deletedTemplates = deleteTemplatesInFolder(folderId);
         
         Map<String, Object> result = new HashMap<>();
         result.put("deletedFolders", deletedFolders);
@@ -167,23 +181,30 @@ public class FolderController {
         return count;
     }
     
-    // Helper: Delete all templates in folder (and subfolders)
-    private int deleteTemplatesInFolder(String folderId) throws Exception {
+    // Helper: Delete all templates in folder (and subfolders) with full cascade deletion
+    private int deleteTemplatesInFolderWithCascade(String folderId) throws Exception {
         int count = 0;
         
         // Get all templates in this folder
         List<ManualTemplate> templates = templateDao.getTemplatesByFolder(folderId);
         
-        // Delete each template
+        // Delete each template with full cascade (storage + Firestore docs)
         for (ManualTemplate template : templates) {
-            templateDao.deleteTemplate(template.getId());
+            try {
+                templateCascadeDeletionService.deleteTemplateAssetsAndDocs(template.getId());
+                log.info("Cascade deleted template: {}", template.getId());
+            } catch (Exception e) {
+                log.error("Failed to cascade delete template {}: {}", template.getId(), e.getMessage());
+                // Fallback to simple delete
+                templateDao.deleteTemplate(template.getId());
+            }
             count++;
         }
         
         // Recursively delete templates in subfolders
         List<TemplateFolder> subfolders = folderDao.getFoldersByParent(folderId);
         for (TemplateFolder subfolder : subfolders) {
-            count += deleteTemplatesInFolder(subfolder.getId());
+            count += deleteTemplatesInFolderWithCascade(subfolder.getId());
         }
         
         return count;

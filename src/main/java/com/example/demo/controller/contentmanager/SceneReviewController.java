@@ -160,13 +160,26 @@ public class SceneReviewController {
         try {
             com.example.demo.model.TemplateAssignment assignment = templateAssignmentDao.getAssignment(assignmentId);
             if (assignment != null && assignment.getPushedBy() != null) {
-                managerSubmissionDao.updateSubmissionStatus(assignment.getPushedBy(), submissionId, status);
+                // Resolve actual manager ID (if pushedBy is an employee, use their manager)
+                String managerId = assignment.getPushedBy();
+                try {
+                    com.example.demo.model.User pusher = userDao.findById(managerId);
+                    if (pusher != null && "employee".equals(pusher.getRole()) && pusher.getCreatedBy() != null) {
+                        managerId = pusher.getCreatedBy();
+                    }
+                } catch (Exception e) {
+                    System.err.println("Failed to resolve manager ID: " + e.getMessage());
+                }
+                managerSubmissionDao.updateSubmissionStatus(managerId, submissionId, status);
                 System.out.println("✅ Synced status '" + status + "' to managerSubmissions for: " + submissionId);
             }
         } catch (Exception e) {
             System.err.println("Failed to sync status to managerSubmissions: " + e.getMessage());
         }
     }
+    
+    @Autowired
+    private com.example.demo.dao.UserDao userDao;
     
     @Autowired
     private com.example.demo.dao.TemplateAssignmentDao templateAssignmentDao;

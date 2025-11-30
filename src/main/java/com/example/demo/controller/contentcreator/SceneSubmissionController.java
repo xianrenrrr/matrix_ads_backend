@@ -389,7 +389,18 @@ public class SceneSubmissionController {
             return;
         }
         
+        // Determine the actual manager ID
+        // If pushedBy is an employee, use their manager's ID (createdBy)
         String managerId = assignment.getPushedBy();
+        try {
+            com.example.demo.model.User pusher = userDao.findById(managerId);
+            if (pusher != null && "employee".equals(pusher.getRole()) && pusher.getCreatedBy() != null) {
+                managerId = pusher.getCreatedBy();
+                log.info("Resolved employee {} to manager {} for managerSubmissions", assignment.getPushedBy(), managerId);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resolve manager ID, using pushedBy: {}", e.getMessage());
+        }
         
         // Get user info for enrichment
         String uploaderName = null;

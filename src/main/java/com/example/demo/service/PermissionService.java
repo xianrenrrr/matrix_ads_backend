@@ -107,6 +107,29 @@ public class PermissionService {
     }
     
     /**
+     * Check if user can delete a folder
+     * 
+     * Rules:
+     * - Only content managers can delete folders
+     * - Employees cannot delete folders
+     */
+    public boolean canDeleteFolder(String userId) {
+        User user = userDao.findById(userId);
+        if (user == null) {
+            log.warn("User not found: {}", userId);
+            return false;
+        }
+        
+        String role = user.getRole();
+        boolean canDelete = UserRole.isContentManager(role);
+        
+        log.info("User {} {} delete folders (role: {})", 
+            userId, canDelete ? "can" : "cannot", role);
+        
+        return canDelete;
+    }
+    
+    /**
      * Check if user can manage groups
      * 
      * Rules:

@@ -60,4 +60,12 @@ public interface SceneSubmissionDao {
     // Bulk Operations
     void deleteScenesByTemplateId(String templateId) throws ExecutionException, InterruptedException;
     void deleteScenesByUserId(String userId) throws ExecutionException, InterruptedException;
+    
+    /**
+     * Delete all scene submissions for an assignment with OSS cleanup
+     * Used after video compilation to clean up individual scene videos
+     * @param assignmentId The assignment ID (stored in templateId field)
+     * @param userId The user ID who submitted the scenes
+     */
+    void deleteScenesByAssignmentIdAndUserIdWithOssCleanup(String assignmentId, String userId) throws Exception;
 }

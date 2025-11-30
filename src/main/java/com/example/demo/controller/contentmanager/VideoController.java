@@ -112,6 +112,9 @@ public class VideoController {
     @Autowired(required = false)
     private com.example.demo.service.AlibabaOssStorageService ossStorageService;
     
+    @Autowired
+    private com.example.demo.dao.SceneSubmissionDao sceneSubmissionDao;
+    
     @PostMapping("/{videoId}/publish")
     public ResponseEntity<ApiResponse<String>> publishVideo(
             @PathVariable String videoId, 
@@ -217,7 +220,17 @@ public class VideoController {
         try {
             com.example.demo.model.TemplateAssignment assignmentForSync = templateAssignmentDao.getAssignment(assignmentId);
             if (assignmentForSync != null && assignmentForSync.getPushedBy() != null) {
-                managerSubmissionDao.updateSubmissionStatus(assignmentForSync.getPushedBy(), videoId, "published");
+                // Resolve actual manager ID (if pushedBy is an employee, use their manager)
+                String managerId = assignmentForSync.getPushedBy();
+                try {
+                    com.example.demo.model.User pusher = userDao.findById(managerId);
+                    if (pusher != null && "employee".equals(pusher.getRole()) && pusher.getCreatedBy() != null) {
+                        managerId = pusher.getCreatedBy();
+                    }
+                } catch (Exception ex) {
+                    log.warn("Failed to resolve manager ID: {}", ex.getMessage());
+                }
+                managerSubmissionDao.updateSubmissionStatus(managerId, videoId, "published");
                 log.info("✅ Synced 'published' status to managerSubmissions for: {}", videoId);
             }
         } catch (Exception e) {
@@ -246,6 +259,17 @@ public class VideoController {
                     log.warn("[BGM-CLEANUP] Failed to delete BGM: {} - {}", bgmUrl, e.getMessage());
                 }
             }
+        }
+        
+        // SCENE VIDEO CLEANUP: Delete individual scene videos after compilation
+        // The compiled video is now the final product, individual scenes are no longer needed
+        // This saves storage costs and keeps the system clean
+        try {
+            sceneSubmissionDao.deleteScenesByAssignmentIdAndUserIdWithOssCleanup(assignmentId, creatorId);
+            log.info("[SCENE-CLEANUP] ✅ Cleaned up scene videos after compilation for assignment: {}", assignmentId);
+        } catch (Exception e) {
+            log.warn("[SCENE-CLEANUP] Failed to cleanup scene videos: {} - continuing anyway", e.getMessage());
+            // Don't fail the publish operation if cleanup fails
         }
         
         String message = i18nService.getMessage("operation.success", language);

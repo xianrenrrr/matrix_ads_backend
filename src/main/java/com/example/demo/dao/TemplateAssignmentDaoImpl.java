@@ -134,9 +134,11 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
         
         // Clean up related submissions from managerSubmissions
         if (assignment != null && assignment.getPushedBy() != null) {
+            // Resolve actual manager ID (if pushedBy is an employee, use their manager)
+            String managerId = resolveManagerId(assignment.getPushedBy());
             try {
-                managerSubmissionDao.deleteByAssignmentId(assignment.getPushedBy(), assignmentId);
-                System.out.println("[CASCADE] Deleted submissions for assignment: " + assignmentId + " from manager: " + assignment.getPushedBy());
+                managerSubmissionDao.deleteByAssignmentId(managerId, assignmentId);
+                System.out.println("[CASCADE] Deleted submissions for assignment: " + assignmentId + " from manager: " + managerId);
             } catch (Exception e) {
                 System.err.println("[CASCADE] Failed to delete submissions for assignment: " + assignmentId + " - " + e.getMessage());
             }
@@ -155,6 +157,9 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
         return !querySnapshot.isEmpty();
     }
     
+    @Autowired
+    private UserDao userDao;
+    
     @Override
     public void deleteAssignmentsByTemplate(String templateId) throws Exception {
         // Get all assignments for this template
@@ -166,7 +171,10 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
         // Delete each assignment and its related submissions
         for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
             String assignmentId = doc.getId();
-            String managerId = doc.getString("pushedBy");
+            String pushedBy = doc.getString("pushedBy");
+            
+            // Resolve actual manager ID (if pushedBy is an employee, use their manager)
+            String managerId = resolveManagerId(pushedBy);
             
             // Delete the assignment
             doc.getReference().delete().get();
@@ -183,6 +191,22 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
         }
         
         System.out.println("[CASCADE] Deleted " + querySnapshot.size() + " assignments for template: " + templateId);
+    }
+    
+    /**
+     * Resolve the actual manager ID. If userId is an employee, return their manager's ID.
+     */
+    private String resolveManagerId(String userId) {
+        if (userId == null) return null;
+        try {
+            com.example.demo.model.User user = userDao.findById(userId);
+            if (user != null && "employee".equals(user.getRole()) && user.getCreatedBy() != null) {
+                return user.getCreatedBy();
+            }
+        } catch (Exception e) {
+            System.err.println("[CASCADE] Failed to resolve manager ID for " + userId + ": " + e.getMessage());
+        }
+        return userId;
     }
     
     // Helper methods

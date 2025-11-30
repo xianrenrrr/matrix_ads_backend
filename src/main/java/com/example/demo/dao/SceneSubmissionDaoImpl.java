@@ -442,4 +442,45 @@ public class SceneSubmissionDaoImpl implements SceneSubmissionDao {
         }
         return "mp4";
     }
+    
+    @Override
+    public void deleteScenesByAssignmentIdAndUserIdWithOssCleanup(String assignmentId, String userId) throws Exception {
+        // Find all scenes for this assignment and user
+        // Note: assignmentId is stored in templateId field
+        List<SceneSubmission> scenes = findByTemplateIdAndUserId(assignmentId, userId);
+        
+        System.out.println("[SCENE-CLEANUP] Found " + scenes.size() + " scenes to delete for assignment: " + assignmentId + ", user: " + userId);
+        
+        for (SceneSubmission scene : scenes) {
+            // Delete video from OSS
+            if (scene.getVideoUrl() != null && ossStorageService != null) {
+                try {
+                    boolean deleted = ossStorageService.deleteObjectByUrl(scene.getVideoUrl());
+                    System.out.println("[SCENE-CLEANUP] Deleted scene video from OSS: " + scene.getVideoUrl() + " (success: " + deleted + ")");
+                } catch (Exception e) {
+                    System.err.println("[SCENE-CLEANUP] Failed to delete scene video: " + e.getMessage());
+                }
+            }
+            
+            // Delete thumbnail from OSS
+            if (scene.getThumbnailUrl() != null && ossStorageService != null) {
+                try {
+                    boolean deleted = ossStorageService.deleteObjectByUrl(scene.getThumbnailUrl());
+                    System.out.println("[SCENE-CLEANUP] Deleted scene thumbnail from OSS: " + scene.getThumbnailUrl() + " (success: " + deleted + ")");
+                } catch (Exception e) {
+                    System.err.println("[SCENE-CLEANUP] Failed to delete scene thumbnail: " + e.getMessage());
+                }
+            }
+            
+            // Delete Firestore document
+            try {
+                delete(scene.getId());
+                System.out.println("[SCENE-CLEANUP] Deleted scene submission doc: " + scene.getId());
+            } catch (Exception e) {
+                System.err.println("[SCENE-CLEANUP] Failed to delete scene doc: " + e.getMessage());
+            }
+        }
+        
+        System.out.println("[SCENE-CLEANUP] ✅ Completed cleanup for assignment: " + assignmentId);
+    }
 }
