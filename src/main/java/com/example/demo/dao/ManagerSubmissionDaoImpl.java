@@ -101,6 +101,8 @@ public class ManagerSubmissionDaoImpl implements ManagerSubmissionDao {
     @Override
     public void deleteByAssignmentId(String managerId, String assignmentId) {
         try {
+            System.out.println("[MANAGER-SUBMISSION] Deleting submissions for manager: " + managerId + ", assignment: " + assignmentId);
+            
             List<QueryDocumentSnapshot> documents = db.collection(COLLECTION)
                     .document(managerId)
                     .collection(SUBCOLLECTION)
@@ -109,12 +111,17 @@ public class ManagerSubmissionDaoImpl implements ManagerSubmissionDao {
                     .get()
                     .getDocuments();
 
+            System.out.println("[MANAGER-SUBMISSION] Found " + documents.size() + " submissions to delete");
+            
             for (QueryDocumentSnapshot doc : documents) {
                 doc.getReference().delete().get();
+                System.out.println("[MANAGER-SUBMISSION] Deleted submission: " + doc.getId());
             }
 
         } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException("Failed to delete submissions by assignment", e);
+            System.err.println("[MANAGER-SUBMISSION] Error deleting submissions: " + e.getMessage());
+            // Don't throw - just log the error and continue
+            // This prevents cascade deletion from failing if managerSubmissions has issues
         }
     }
 

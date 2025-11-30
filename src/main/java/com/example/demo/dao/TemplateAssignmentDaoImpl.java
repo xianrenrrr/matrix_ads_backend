@@ -24,6 +24,15 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
     @Autowired
     private ManagerSubmissionDao managerSubmissionDao;
     
+    @Autowired
+    private UserDao userDao;
+    
+    @Autowired
+    private SceneSubmissionDao sceneSubmissionDao;
+    
+    @Autowired(required = false)
+    private com.example.demo.service.AlibabaOssStorageService ossStorageService;
+    
     private static final String COLLECTION_NAME = "templateAssignments";
     
     @Override
@@ -126,23 +135,63 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
     
     @Override
     public void deleteAssignment(String assignmentId) throws Exception {
+        System.out.println("[CASCADE] Starting deletion of assignment: " + assignmentId);
+        
         // Get assignment first to find managerId for cleanup
         TemplateAssignment assignment = getAssignment(assignmentId);
+        if (assignment == null) {
+            System.out.println("[CASCADE] Assignment not found: " + assignmentId);
+            return;
+        }
         
-        // Delete the assignment
-        db.collection(COLLECTION_NAME).document(assignmentId).delete().get();
+        // 1) Delete scene submission videos from OSS and sceneSubmissions docs
+        // Scene submissions use assignmentId in the templateId field
+        try {
+            List<com.example.demo.model.SceneSubmission> sceneSubmissions = 
+                sceneSubmissionDao.findByTemplateId(assignmentId);
+            System.out.println("[CASCADE] Found " + sceneSubmissions.size() + " scene submissions to delete");
+            
+            for (com.example.demo.model.SceneSubmission sub : sceneSubmissions) {
+                // Delete video from OSS
+                if (sub.getVideoUrl() != null && ossStorageService != null) {
+                    try {
+                        ossStorageService.deleteObjectByUrl(sub.getVideoUrl());
+                        System.out.println("[CASCADE] Deleted scene video: " + sub.getVideoUrl());
+                    } catch (Exception e) {
+                        System.err.println("[CASCADE] Failed to delete scene video: " + e.getMessage());
+                    }
+                }
+                // Delete thumbnail from OSS
+                if (sub.getThumbnailUrl() != null && ossStorageService != null) {
+                    try {
+                        ossStorageService.deleteObjectByUrl(sub.getThumbnailUrl());
+                    } catch (Exception e) {
+                        System.err.println("[CASCADE] Failed to delete scene thumbnail: " + e.getMessage());
+                    }
+                }
+            }
+            
+            // Delete sceneSubmissions docs
+            sceneSubmissionDao.deleteScenesByTemplateId(assignmentId);
+            System.out.println("[CASCADE] Deleted scene submissions for assignment: " + assignmentId);
+        } catch (Exception e) {
+            System.err.println("[CASCADE] Failed to delete scene submissions: " + e.getMessage());
+        }
         
-        // Clean up related submissions from managerSubmissions
-        if (assignment != null && assignment.getPushedBy() != null) {
-            // Resolve actual manager ID (if pushedBy is an employee, use their manager)
+        // 2) Delete from managerSubmissions
+        if (assignment.getPushedBy() != null) {
             String managerId = resolveManagerId(assignment.getPushedBy());
             try {
                 managerSubmissionDao.deleteByAssignmentId(managerId, assignmentId);
-                System.out.println("[CASCADE] Deleted submissions for assignment: " + assignmentId + " from manager: " + managerId);
+                System.out.println("[CASCADE] Deleted managerSubmissions for assignment: " + assignmentId);
             } catch (Exception e) {
-                System.err.println("[CASCADE] Failed to delete submissions for assignment: " + assignmentId + " - " + e.getMessage());
+                System.err.println("[CASCADE] Failed to delete managerSubmissions: " + e.getMessage());
             }
         }
+        
+        // 3) Delete the assignment document
+        db.collection(COLLECTION_NAME).document(assignmentId).delete().get();
+        System.out.println("[CASCADE] Deleted assignment: " + assignmentId);
     }
     
     @Override
@@ -156,9 +205,6 @@ public class TemplateAssignmentDaoImpl implements TemplateAssignmentDao {
         
         return !querySnapshot.isEmpty();
     }
-    
-    @Autowired
-    private UserDao userDao;
     
     @Override
     public void deleteAssignmentsByTemplate(String templateId) throws Exception {
