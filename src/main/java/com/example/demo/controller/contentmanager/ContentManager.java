@@ -744,10 +744,8 @@ public class ContentManager {
         responseData.put("template", template);
         responseData.put("scenesAnalyzed", aiAnalyzedScenes.size());
         
-        // Simple success message (transcoding happens async in background)
-        String message = "zh".equals(language) 
-            ? "模版创建成功！"
-            : "Template created successfully!";
+        // Use i18n service for success message
+        String message = i18nService.getMessage("template.created", language);
         
         return ResponseEntity.ok(ApiResponse.ok(message, responseData));
     }

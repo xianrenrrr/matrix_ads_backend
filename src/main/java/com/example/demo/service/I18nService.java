@@ -45,6 +45,9 @@ public class I18nService {
         zhMessages.put("video.rejected", "视频审核拒绝");
         zhMessages.put("operation.success", "操作成功");
         zhMessages.put("operation.failed", "操作失败");
+        zhMessages.put("assignment.deleted", "推送已删除");
+        zhMessages.put("groups.fetch.success", "获取分组成功");
+        zhMessages.put("groups.fetch.error", "获取分组失败");
         
         // Auth and Invite messages
         zhMessages.put("token.required", "令牌是必需的");
@@ -91,6 +94,9 @@ public class I18nService {
         enMessages.put("video.rejected", "Video rejected");
         enMessages.put("operation.success", "Operation successful");
         enMessages.put("operation.failed", "Operation failed");
+        enMessages.put("assignment.deleted", "Assignment deleted");
+        enMessages.put("groups.fetch.success", "Groups fetched successfully");
+        enMessages.put("groups.fetch.error", "Failed to fetch groups");
         
         // Auth and Invite messages  
         enMessages.put("token.required", "Token is required");
