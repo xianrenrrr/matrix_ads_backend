@@ -18,6 +18,13 @@ public class SceneAnalysisResult {
     // Key elements with optional bounding boxes (unified system)
     private List<Scene.KeyElement> keyElementsWithBoxes;
     
+    // Whether bounding boxes are in pixel coordinates (true) or normalized 0-1 (false)
+    private boolean pixelCoordinates = false;
+    
+    // Target dimensions used for pixel coordinates (null if normalized)
+    private int targetWidth;
+    private int targetHeight;
+    
     public SceneAnalysisResult() {}
     
     // Getters and Setters
@@ -71,6 +78,30 @@ public class SceneAnalysisResult {
         this.sourceAspect = sourceAspect;
     }
     
+    public boolean isPixelCoordinates() {
+        return pixelCoordinates;
+    }
+    
+    public void setPixelCoordinates(boolean pixelCoordinates) {
+        this.pixelCoordinates = pixelCoordinates;
+    }
+    
+    public int getTargetWidth() {
+        return targetWidth;
+    }
+    
+    public void setTargetWidth(int targetWidth) {
+        this.targetWidth = targetWidth;
+    }
+    
+    public int getTargetHeight() {
+        return targetHeight;
+    }
+    
+    public void setTargetHeight(int targetHeight) {
+        this.targetHeight = targetHeight;
+    }
+    
     /**
      * Apply this result to a Scene object
      */
@@ -93,6 +124,12 @@ public class SceneAnalysisResult {
         // Apply keyElementsWithBoxes
         if (keyElementsWithBoxes != null) {
             scene.setKeyElementsWithBoxes(keyElementsWithBoxes);
+        }
+        // Apply pixel coordinate info
+        if (pixelCoordinates) {
+            scene.setPixelCoordinates(true);
+            scene.setTargetWidth(targetWidth);
+            scene.setTargetHeight(targetHeight);
         }
     }
     

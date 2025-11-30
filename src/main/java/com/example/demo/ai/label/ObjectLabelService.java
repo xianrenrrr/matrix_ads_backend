@@ -43,7 +43,52 @@ public interface ObjectLabelService {
     
     // Enhanced API with combined scriptLines from all scenes for full context
     default Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale, String subtitleText, List<String> azureObjectHints, String combinedScriptLines) {
+        return labelRegions(keyframeUrl, regions, locale, subtitleText, azureObjectHints, combinedScriptLines, null);
+    }
+    
+    // Enhanced API with target display dimensions for accurate bounding boxes
+    // targetDimensions: the actual pixel dimensions of the mini app display (e.g., 750x1334 for 9:16 iPhone)
+    // When provided, bounding boxes are returned in pixel coordinates for the target display
+    default Map<String, LabelResult> labelRegions(String keyframeUrl, List<RegionBox> regions, String locale, String subtitleText, List<String> azureObjectHints, String combinedScriptLines, TargetDimensions targetDimensions) {
         return Collections.emptyMap();
+    }
+    
+    /**
+     * Target display dimensions for bounding box calculation
+     * Used to return pixel coordinates directly for the mini app display
+     */
+    public static class TargetDimensions {
+        public int width;   // Display width in pixels (e.g., 750)
+        public int height;  // Display height in pixels (e.g., 1334)
+        public String aspectRatio;  // "16:9" or "9:16"
+        
+        public TargetDimensions() {}
+        
+        public TargetDimensions(int width, int height) {
+            this.width = width;
+            this.height = height;
+            this.aspectRatio = width > height ? "16:9" : "9:16";
+        }
+        
+        public TargetDimensions(int width, int height, String aspectRatio) {
+            this.width = width;
+            this.height = height;
+            this.aspectRatio = aspectRatio;
+        }
+        
+        // Common presets for mini app displays
+        public static TargetDimensions PORTRAIT_IPHONE() {
+            return new TargetDimensions(750, 1334, "9:16");
+        }
+        
+        public static TargetDimensions LANDSCAPE_IPHONE() {
+            return new TargetDimensions(1334, 750, "16:9");
+        }
+        
+        @Override
+        public String toString() {
+            return width + "x" + height + " (" + aspectRatio + ")";
+        }
     }
     
     /**

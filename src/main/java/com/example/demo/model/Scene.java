@@ -40,6 +40,11 @@ public class Scene {
     // Key elements with optional bounding boxes (unified system)
     private List<KeyElement> keyElementsWithBoxes;
     
+    // Bounding box coordinate mode (for mini app display)
+    private Boolean pixelCoordinates;  // true = pixel coords, false/null = normalized 0-1
+    private Integer targetWidth;   // Target display width in pixels (e.g., 750)
+    private Integer targetHeight;  // Target display height in pixels (e.g., 1334)
+    
     // Subtitle segments for KTV-style display and video compilation
     private List<SubtitleSegment> subtitleSegments;
     
@@ -281,6 +286,30 @@ public class Scene {
         this.keyElementsWithBoxes = keyElementsWithBoxes;
     }
     
+    public Boolean getPixelCoordinates() {
+        return pixelCoordinates;
+    }
+    
+    public void setPixelCoordinates(Boolean pixelCoordinates) {
+        this.pixelCoordinates = pixelCoordinates;
+    }
+    
+    public Integer getTargetWidth() {
+        return targetWidth;
+    }
+    
+    public void setTargetWidth(Integer targetWidth) {
+        this.targetWidth = targetWidth;
+    }
+    
+    public Integer getTargetHeight() {
+        return targetHeight;
+    }
+    
+    public void setTargetHeight(Integer targetHeight) {
+        this.targetHeight = targetHeight;
+    }
+    
     public List<SubtitleSegment> getSubtitleSegments() {
         return subtitleSegments;
     }
@@ -291,3 +320,4 @@ public class Scene {
     
 }
 // Change Log: Unified keyElements system - removed ObjectOverlay in favor of KeyElement with optional box
+// Change Log: Added pixelCoordinates, targetWidth, targetHeight for mini app bounding box display
