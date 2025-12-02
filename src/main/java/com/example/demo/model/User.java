@@ -19,6 +19,10 @@ public class User {
     private String createdBy; // User ID of the content manager who created this employee account
     private String organizationId; // Organization/company ID
     private java.util.Date createdAt; // Account creation timestamp
+    
+    // Billing fields (only for CONTENT_MANAGER role)
+    private String subscriptionId; // Reference to active subscription
+    private String subscriptionTier; // Cached tier for quick access (FREE, STARTER, PRO, ENTERPRISE)
 
     // New fields for db.md compatibility
     private java.util.Map<String, Boolean> created_Templates;
@@ -92,4 +96,21 @@ public class User {
     
     public java.util.Date getCreatedAt() { return createdAt; }
     public void setCreatedAt(java.util.Date createdAt) { this.createdAt = createdAt; }
+    
+    // Billing getters and setters
+    public String getSubscriptionId() { return subscriptionId; }
+    public void setSubscriptionId(String subscriptionId) { this.subscriptionId = subscriptionId; }
+    
+    public String getSubscriptionTier() { return subscriptionTier; }
+    public void setSubscriptionTier(String subscriptionTier) { this.subscriptionTier = subscriptionTier; }
+    
+    // Helper: Check if user is a paying manager
+    public boolean isManager() {
+        return "CONTENT_MANAGER".equalsIgnoreCase(role) || "content_manager".equals(role);
+    }
+    
+    // Helper: Check if user is a content creator
+    public boolean isCreator() {
+        return "content_creator".equals(role) || "EMPLOYEE".equals(role);
+    }
 }
